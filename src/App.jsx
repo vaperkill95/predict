@@ -11,6 +11,7 @@ const SPORTS = [
   { key: "la_liga", label: "La Liga", icon: "⚽", color: "#EE8707" },
   { key: "ncaamb", label: "NCAAM", icon: "🏀", color: "#0A2240" },
   { key: "ncaafb", label: "NCAAF", icon: "🏈", color: "#1B5E20" },
+  { key: "cdl", label: "CDL", icon: "🎮", color: "#92C951" },
 ];
 
 const TABS = [
@@ -499,19 +500,81 @@ export default function App() {
     if (tab === "live" || tab === "predict") {
       setLoading(true);
       setScores(null);
-      api.getScores(sport)
-        .then(setScores)
-        .catch((err) => setError(err.message))
-        .finally(() => setLoading(false));
+      if (sport === "cdl") {
+        api.getCDLMatches()
+          .then((data) => {
+            if (!data.available) {
+              setError(data.message);
+              return;
+            }
+            // Transform CDL matches into the same shape as ESPN scores
+            const games = data.matches.map((m) => ({
+              id: String(m.id),
+              name: m.name,
+              shortName: m.team1 && m.team2 ? `${m.team1.acronym || m.team1.name} vs ${m.team2.acronym || m.team2.name}` : m.name,
+              date: m.scheduledAt,
+              status: {
+                type: m.status === "live" ? "STATUS_IN_PROGRESS" : m.status === "completed" ? "STATUS_FINAL" : "STATUS_SCHEDULED",
+                detail: m.status,
+                displayClock: m.status === "live" ? "LIVE" : "",
+                completed: m.status === "completed",
+              },
+              home: m.team2 ? {
+                id: m.team2.id, name: m.team2.name, abbreviation: m.team2.acronym,
+                logo: m.team2.logo, score: m.team2.score, record: null, winner: m.winner === m.team2.name,
+              } : { name: "TBD", score: null },
+              away: m.team1 ? {
+                id: m.team1.id, name: m.team1.name, abbreviation: m.team1.acronym,
+                logo: m.team1.logo, score: m.team1.score, record: null, winner: m.winner === m.team1.name,
+              } : { name: "TBD", score: null },
+              odds: null,
+              venue: m.tournament,
+              broadcast: m.streams?.[0]?.url ? "Watch Live" : m.league,
+            }));
+            setScores({ sport: "cdl", games, count: games.length });
+          })
+          .catch((err) => setError(err.message))
+          .finally(() => setLoading(false));
+      } else {
+        api.getScores(sport)
+          .then(setScores)
+          .catch((err) => setError(err.message))
+          .finally(() => setLoading(false));
+      }
     }
 
     if (tab === "standings") {
       setLoading(true);
       setStandings(null);
-      api.getStandings(sport)
-        .then(setStandings)
-        .catch((err) => setError(err.message))
-        .finally(() => setLoading(false));
+      if (sport === "cdl") {
+        api.getCDLStandings()
+          .then((data) => {
+            if (!data.available) {
+              setError(data.message);
+              return;
+            }
+            setStandings({
+              sport: "cdl",
+              groups: [{
+                name: "CDL 2026 Standings",
+                teams: data.standings.map((s) => ({
+                  id: s.team?.id,
+                  name: s.team?.name,
+                  abbreviation: s.team?.acronym,
+                  logo: s.team?.logo,
+                  stats: { W: String(s.wins || 0), L: String(s.losses || 0) },
+                })),
+              }],
+            });
+          })
+          .catch((err) => setError(err.message))
+          .finally(() => setLoading(false));
+      } else {
+        api.getStandings(sport)
+          .then(setStandings)
+          .catch((err) => setError(err.message))
+          .finally(() => setLoading(false));
+      }
     }
   }, [sport, tab]);
 

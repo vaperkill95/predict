@@ -9,6 +9,7 @@ const path = require("path");
 const sportsRoutes = require("./routes/sports");
 const predictionsRoutes = require("./routes/predictions");
 const oddsRoutes = require("./routes/odds");
+const cdlRoutes = require("./routes/cdl");
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -30,6 +31,7 @@ app.use("/api/", limiter);
 app.use("/api/sports", sportsRoutes);
 app.use("/api/predictions", predictionsRoutes);
 app.use("/api/odds", oddsRoutes);
+app.use("/api/cdl", cdlRoutes);
 
 // Health check
 app.get("/api/health", (req, res) => {
@@ -41,6 +43,7 @@ app.get("/api/health", (req, res) => {
       espn: "active",
       anthropic: process.env.ANTHROPIC_API_KEY ? "configured" : "missing",
       odds_api: process.env.ODDS_API_KEY ? "configured" : "missing",
+      pandascore: process.env.PANDASCORE_API_KEY ? "configured" : "missing",
     },
   });
 });

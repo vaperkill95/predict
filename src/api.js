@@ -37,6 +37,11 @@ export const api = {
       body: JSON.stringify({ playerName, sport, opponent }),
     }),
 
+  // CDL Esports
+  getCDLMatches: () => apiFetch("/cdl/matches"),
+  getCDLStandings: () => apiFetch("/cdl/standings"),
+  getCDLPlayers: (query) => apiFetch(`/cdl/players?q=${encodeURIComponent(query)}`),
+
   // Health
   health: () => apiFetch("/health"),
 };
