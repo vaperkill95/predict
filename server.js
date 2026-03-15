@@ -11,6 +11,7 @@ const predictionsRoutes = require("./routes/predictions");
 const oddsRoutes = require("./routes/odds");
 const cdlRoutes = require("./routes/cdl");
 const propsRoutes = require("./routes/props");
+const liveRoutes = require("./routes/live");
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -19,15 +20,14 @@ app.use(helmet({ contentSecurityPolicy: false }));
 app.use(compression());
 app.use(express.json());
 app.use(cors({ origin: process.env.CLIENT_URL || "*", credentials: true }));
+app.use("/api/", rateLimit({ windowMs: 15 * 60 * 1000, max: 500, message: { error: "Rate limited" } }));
 
-app.use("/api/", rateLimit({ windowMs: 15 * 60 * 1000, max: 300, message: { error: "Rate limited" } }));
-
-// API Routes
 app.use("/api/sports", sportsRoutes);
 app.use("/api/predictions", predictionsRoutes);
 app.use("/api/odds", oddsRoutes);
 app.use("/api/cdl", cdlRoutes);
 app.use("/api/props", propsRoutes);
+app.use("/api/live", liveRoutes);
 
 app.get("/api/health", (req, res) => {
   res.json({
@@ -41,7 +41,6 @@ app.get("/api/health", (req, res) => {
   });
 });
 
-// Serve frontend
 app.use(express.static(path.join(__dirname, "dist")));
 app.get("*", (req, res) => { res.sendFile(path.join(__dirname, "dist", "index.html")); });
 

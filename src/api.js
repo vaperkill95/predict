@@ -14,16 +14,20 @@ export const api = {
   getScores: (sport) => apiFetch(`/sports/scores/${sport}`),
   getStandings: (sport) => apiFetch(`/sports/standings/${sport}`),
   getGame: (sport, gameId) => apiFetch(`/sports/game/${sport}/${gameId}`),
-  searchPlayer: (query) => apiFetch(`/sports/search/player?q=${encodeURIComponent(query)}`),
   getOdds: (sport) => apiFetch(`/odds/${sport}`),
   predictGame: (sport, gameId) => apiFetch("/predictions/game", { method: "POST", body: JSON.stringify({ sport, gameId }) }),
   predictPlayer: (playerName, sport, opponent) => apiFetch("/predictions/player", { method: "POST", body: JSON.stringify({ playerName, sport, opponent }) }),
   getProps: (sport, market) => apiFetch(`/props/${sport}${market ? `?market=${market}` : ""}`),
   getDailyPicks: (sport) => apiFetch(`/props/${sport}/picks`),
-  getPropMarkets: (sport) => apiFetch(`/props/${sport}/markets`),
   getPickHistory: () => apiFetch("/props/history/all"),
   getCDLMatches: () => apiFetch("/cdl/matches"),
   getCDLStandings: () => apiFetch("/cdl/standings"),
-  getCDLPlayers: (query) => apiFetch(`/cdl/players?q=${encodeURIComponent(query)}`),
+
+  // Live
+  getLiveGames: (sport) => apiFetch(`/live/${sport}/games`),
+  getLiveBox: (sport, eventId) => apiFetch(`/live/${sport}/box/${eventId}`),
+  getLivePlayer: (sport, name, market) => apiFetch(`/live/${sport}/player?name=${encodeURIComponent(name)}&market=${market || ""}`),
+  gradePicks: (sport, picks) => apiFetch(`/live/${sport}/grade`, { method: "POST", body: JSON.stringify({ picks }) }),
+
   health: () => apiFetch("/health"),
 };

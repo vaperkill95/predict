@@ -113,23 +113,78 @@ function PropRow({ prop, accent }) {
   );
 }
 
-// ─── Pick Card ───
-function PickCard({ pick }) {
+// ─── Pick Card with Live Tracking ───
+function PickCard({ pick, liveData }) {
   const isOver = pick.pick === "OVER";
   const c = isOver ? "var(--green)" : "var(--red)";
   const cc = pick.confidence >= 75 ? "var(--green)" : pick.confidence >= 55 ? "var(--amber)" : "var(--red)";
+
+  // Live tracking state
+  const live = liveData?.[pick.player];
+  const hasLive = live?.found;
+  const currentVal = live?.relevantStat?.value;
+  const line = pick.line;
+  const pct = hasLive && currentVal != null && line ? Math.min(Math.round((currentVal / line) * 100), 200) : null;
+  const onPace = hasLive && currentVal != null;
+  const isTracking = hasLive && live.gameStatus?.isLive;
+  const isFinalGame = hasLive && live.gameStatus?.isFinal;
+
+  // Determine result color
+  let resultColor = null;
+  let resultLabel = null;
+  if (isFinalGame && currentVal != null) {
+    const hit = isOver ? currentVal > line : currentVal < line;
+    resultColor = hit ? "var(--green)" : "var(--red)";
+    resultLabel = hit ? "HIT ✓" : "MISS ✗";
+  }
+
   return (
-    <Card glow={`${c}20`}>
+    <Card glow={resultColor ? `${resultColor}25` : `${c}20`}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 8 }}>
-        <div><div style={{ fontSize: 14, fontWeight: 700, fontFamily: "var(--font-display)" }}>{pick.player}</div><div style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 1 }}>{pick.market}</div></div>
-        <Badge color={cc}>{pick.confidence}%</Badge>
+        <div>
+          <div style={{ fontSize: 14, fontWeight: 700, fontFamily: "var(--font-display)" }}>{pick.player}</div>
+          <div style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 1 }}>{pick.market}</div>
+        </div>
+        <div style={{ display: "flex", gap: 4, alignItems: "center" }}>
+          {isTracking && <span style={{ width: 6, height: 6, borderRadius: "50%", background: "var(--red)", animation: "pulse 2s infinite" }} />}
+          {resultLabel ? <Badge color={resultColor}>{resultLabel}</Badge> : <Badge color={cc}>{pick.confidence}%</Badge>}
+        </div>
       </div>
+
+      {/* Line + current stat */}
       <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 10px", background: "var(--bg-deep)", borderRadius: 6, marginBottom: 8 }}>
         <span style={{ padding: "3px 10px", borderRadius: 5, fontWeight: 700, fontSize: 12, fontFamily: "var(--font-mono)", background: `${c}18`, color: c, border: `1px solid ${c}35` }}>{pick.pick}</span>
         <span style={{ fontSize: 18, fontWeight: 700, fontFamily: "var(--font-mono)" }}>{pick.line}</span>
-        {pick.bestOdds && <span style={{ fontSize: 12, fontFamily: "var(--font-mono)", color: "var(--text-secondary)" }}>{pick.bestOdds}</span>}
+        {onPace && (
+          <>
+            <span style={{ fontSize: 11, color: "var(--text-dim)" }}>│</span>
+            <span style={{ fontSize: 16, fontWeight: 700, fontFamily: "var(--font-mono)", color: (isOver ? currentVal > line : currentVal < line) ? "var(--green)" : (isOver ? currentVal < line * 0.6 : currentVal > line * 0.8) ? "var(--red)" : "var(--amber)" }}>
+              {currentVal}
+            </span>
+            <span style={{ fontSize: 10, color: "var(--text-dim)" }}>current</span>
+          </>
+        )}
+        {!onPace && pick.bestOdds && <span style={{ fontSize: 12, fontFamily: "var(--font-mono)", color: "var(--text-secondary)" }}>{pick.bestOdds}</span>}
         {pick.bestBook && <span style={{ fontSize: 10, color: "var(--text-dim)", marginLeft: "auto" }}>@ {pick.bestBook}</span>}
       </div>
+
+      {/* Progress bar for live picks */}
+      {onPace && pct != null && (
+        <div style={{ marginBottom: 8 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", fontSize: 9, fontFamily: "var(--font-mono)", color: "var(--text-dim)", marginBottom: 3 }}>
+            <span>{currentVal} / {line}</span>
+            <span>{isTracking ? `${live.gameStatus?.clock || ""} ${live.gameStatus?.period ? `Q${live.gameStatus.period}` : ""}` : isFinalGame ? "FINAL" : ""}</span>
+          </div>
+          <div style={{ height: 4, borderRadius: 2, background: "var(--border)", overflow: "hidden" }}>
+            <div style={{
+              width: `${Math.min(pct, 100)}%`, height: "100%", borderRadius: 2,
+              background: pct >= 100 ? "var(--green)" : pct >= 70 ? "var(--amber)" : "var(--red)",
+              transition: "width 0.5s ease",
+            }} />
+          </div>
+        </div>
+      )}
+
       <p style={{ fontSize: 11, color: "var(--text-secondary)", lineHeight: 1.5 }}>{pick.reasoning}</p>
       {pick.keyStats && (
         <div style={{ display: "flex", flexWrap: "wrap", gap: 4, marginTop: 6 }}>
@@ -220,6 +275,8 @@ export default function App() {
   const [marketFilter, setMarketFilter] = useState(null);
   const [searchFilter, setSearchFilter] = useState("");
   const [time, setTime] = useState(new Date());
+  const [liveData, setLiveData] = useState({});
+  const [grading, setGrading] = useState(false);
 
   const meta = SPORTS.find((s) => s.key === sport);
   const accent = meta?.color || "#38bdf8";
@@ -227,6 +284,53 @@ export default function App() {
   const markets = MARKET_OPTIONS[sport] || [];
 
   useEffect(() => { const i = setInterval(() => setTime(new Date()), 30000); return () => clearInterval(i); }, []);
+
+  // Live polling: fetch in-game stats for active picks every 30s
+  useEffect(() => {
+    if (tab !== "picks" || !picks?.picks?.length || isCDL) return;
+
+    const pollLive = async () => {
+      const updates = {};
+      for (const pick of picks.picks.slice(0, 8)) {
+        try {
+          const data = await api.getLivePlayer(sport, pick.player, pick.market ? marketLabelToKey(pick.market) : "");
+          if (data?.found) updates[pick.player] = data;
+        } catch {} // Silently skip if player not in live game
+      }
+      if (Object.keys(updates).length) setLiveData(prev => ({ ...prev, ...updates }));
+    };
+
+    pollLive(); // Initial fetch
+    const interval = setInterval(pollLive, 30000); // Poll every 30s
+    return () => clearInterval(interval);
+  }, [tab, picks, sport]);
+
+  // Helper: convert market label back to key for API
+  function marketLabelToKey(label) {
+    const map = { "Points": "player_points", "Rebounds": "player_rebounds", "Assists": "player_assists", "3-Pointers": "player_threes", "Pts+Reb+Ast": "player_points_rebounds_assists", "Pass Yards": "player_pass_yds", "Rush Yards": "player_rush_yds", "Receptions": "player_receptions", "Rec Yards": "player_reception_yds", "Hits": "batter_hits", "Strikeouts": "pitcher_strikeouts", "Goals": "player_goals", "SOG": "player_shots_on_goal" };
+    return map[label] || label;
+  }
+
+  // Grade picks against final scores
+  const handleGrade = async () => {
+    if (!picks?.picks?.length) return;
+    setGrading(true);
+    try {
+      const formatted = picks.picks.map(p => ({ player: p.player, market: marketLabelToKey(p.market), line: p.line, pick: p.pick, confidence: p.confidence }));
+      const result = await api.gradePicks(sport, formatted);
+      if (result?.results?.length) {
+        // Update liveData with final results
+        const updates = {};
+        for (const r of result.results) {
+          updates[r.player] = { found: true, relevantStat: { value: r.actual }, gameStatus: { isFinal: true } };
+        }
+        setLiveData(prev => ({ ...prev, ...updates }));
+      }
+      // Refresh history
+      api.getPickHistory().then(setHistory).catch(() => {});
+    } catch (e) { setError(e.message); }
+    finally { setGrading(false); }
+  };
 
   useEffect(() => {
     setError(null); setPrediction(null);
@@ -345,15 +449,30 @@ export default function App() {
         {/* ═══ TOP PICKS ═══ */}
         {tab === "picks" && (
           <div className="fade-up">
-            <h2 style={{ fontFamily: "var(--font-display)", fontWeight: 700, fontSize: 16, marginBottom: 4 }}>🔥 AI Top Picks</h2>
-            <p style={{ fontSize: 10, color: "var(--text-dim)", marginBottom: 14 }}>AI-curated best bets from today's props board</p>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: 8, marginBottom: 14 }}>
+              <div>
+                <h2 style={{ fontFamily: "var(--font-display)", fontWeight: 700, fontSize: 16, display: "flex", alignItems: "center", gap: 6 }}>
+                  🔥 AI Top Picks
+                  {Object.keys(liveData).length > 0 && <Badge color="var(--red)"><span style={{ width: 5, height: 5, borderRadius: "50%", background: "var(--red)", display: "inline-block", animation: "pulse 2s infinite", marginRight: 3 }} />LIVE</Badge>}
+                </h2>
+                <p style={{ fontSize: 10, color: "var(--text-dim)", marginTop: 2 }}>
+                  {Object.keys(liveData).length > 0 ? "Tracking live stats · Refreshing every 30s" : "AI-curated best bets from today's props board"}
+                </p>
+              </div>
+              {picks?.picks?.length > 0 && (
+                <button onClick={handleGrade} disabled={grading}
+                  style={{ padding: "6px 14px", borderRadius: 6, fontSize: 11, fontWeight: 700, background: "var(--bg-card)", border: "1px solid var(--border)", color: "var(--text-secondary)", display: "flex", alignItems: "center", gap: 5, opacity: grading ? 0.5 : 1 }}>
+                  {grading ? <Spinner size={12} /> : "📊"} Grade Picks
+                </button>
+              )}
+            </div>
             {isCDL ? <Empty icon="🎮" title="CDL Picks Coming Soon" sub="AI picks aren't available for esports." />
               : picksLoading ? <Card><div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 14 }}><Spinner color={accent} /><span style={{ fontSize: 12, color: "var(--text-secondary)" }}>AI analyzing today's board...</span></div><div style={{ display: "flex", flexDirection: "column", gap: 6 }}><Shimmer h={70} /><Shimmer h={70} /><Shimmer h={70} /></div></Card>
               : picks?.picks?.length > 0 ? (
                 <>
                   {picks.summary && <Card style={{ marginBottom: 12, border: `1px solid ${accent}18` }}><p style={{ fontSize: 12, color: "var(--text-secondary)" }}>📊 {picks.summary}</p></Card>}
                   <div className="picks-grid" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(320px, 1fr))", gap: 10 }}>
-                    {picks.picks.map((p, i) => <PickCard key={i} pick={p} />)}
+                    {picks.picks.map((p, i) => <PickCard key={i} pick={p} liveData={liveData} />)}
                   </div>
                 </>
               ) : picks?.available === false ? <Empty icon="🔑" title="Setup Required" sub={picks.message} />
