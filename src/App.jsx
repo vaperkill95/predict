@@ -131,6 +131,15 @@ function PickCard({ pick }) {
         {pick.bestBook && <span style={{ fontSize: 10, color: "var(--text-dim)", marginLeft: "auto" }}>@ {pick.bestBook}</span>}
       </div>
       <p style={{ fontSize: 11, color: "var(--text-secondary)", lineHeight: 1.5 }}>{pick.reasoning}</p>
+      {pick.keyStats && (
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 4, marginTop: 6 }}>
+          {Object.entries(pick.keyStats).filter(([,v]) => v).map(([k, v]) => (
+            <span key={k} style={{ fontSize: 9, fontFamily: "var(--font-mono)", padding: "2px 6px", borderRadius: 4, background: "var(--bg-deep)", color: "var(--text-muted)", border: "1px solid var(--border)" }}>
+              {k.replace(/([A-Z])/g, " $1").trim()}: <span style={{ color: "var(--text-secondary)", fontWeight: 700 }}>{v}</span>
+            </span>
+          ))}
+        </div>
+      )}
       {pick.edge && <div style={{ fontSize: 10, color: "var(--green)", marginTop: 5, fontFamily: "var(--font-mono)" }}>💡 {pick.edge}</div>}
     </Card>
   );

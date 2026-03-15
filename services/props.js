@@ -6,12 +6,8 @@ const cache = new NodeCache({ stdTTL: 180 });
 const ODDS_BASE = "https://api.the-odds-api.com/v4";
 
 const PROP_SPORTS = {
-  nba: "basketball_nba",
-  nfl: "americanfootball_nfl",
-  mlb: "baseball_mlb",
-  nhl: "icehockey_nhl",
-  ncaamb: "basketball_ncaab",
-  ncaafb: "americanfootball_ncaaf",
+  nba: "basketball_nba", nfl: "americanfootball_nfl", mlb: "baseball_mlb",
+  nhl: "icehockey_nhl", ncaamb: "basketball_ncaab", ncaafb: "americanfootball_ncaaf",
 };
 
 const PROP_MARKETS = {
@@ -23,69 +19,40 @@ const PROP_MARKETS = {
   ncaafb: ["player_pass_yds", "player_rush_yds", "player_reception_yds"],
 };
 
-// ─── getPlayerProps (unchanged from working version) ───
+// ─── getPlayerProps (unchanged) ───
 async function getPlayerProps(sportKey, marketFilter = null) {
   const apiKey = process.env.ODDS_API_KEY;
   if (!apiKey) return { available: false, message: "Odds API key not configured" };
-
   const oddsSport = PROP_SPORTS[sportKey];
-  if (!oddsSport) return { available: false, message: `No props support for ${sportKey}` };
+  if (!oddsSport) return { available: false, message: `No props for ${sportKey}` };
 
   const cacheKey = `props_${sportKey}_${marketFilter || "all"}`;
   const cached = cache.get(cacheKey);
   if (cached) return cached;
 
   const markets = marketFilter ? [marketFilter] : (PROP_MARKETS[sportKey] || []).slice(0, 3);
-
   try {
     console.log(`[Props] Fetching events for ${oddsSport}...`);
-    const { data: events } = await axios.get(`${ODDS_BASE}/sports/${oddsSport}/events`, {
-      params: { apiKey }, timeout: 15000,
-    });
+    const { data: events } = await axios.get(`${ODDS_BASE}/sports/${oddsSport}/events`, { params: { apiKey }, timeout: 15000 });
     console.log(`[Props] Found ${events.length} events`);
-
-    if (!events?.length) {
-      const result = { available: true, sport: sportKey, props: [], count: 0, markets };
-      cache.set(cacheKey, result);
-      return result;
-    }
+    if (!events?.length) { const r = { available: true, sport: sportKey, props: [], count: 0, markets }; cache.set(cacheKey, r); return r; }
 
     const allProps = [];
     const marketsStr = markets.join(",");
-
     for (const event of events.slice(0, 5)) {
       try {
-        const { data: oddsData } = await axios.get(
-          `${ODDS_BASE}/sports/${oddsSport}/events/${event.id}/odds`,
-          {
-            params: {
-              apiKey, regions: "us,us2", markets: marketsStr, oddsFormat: "american",
-              bookmakers: "draftkings,fanduel,betmgm,bovada,pointsbet,williamhill_us,betrivers,unibet_us,prizepicks,underdog",
-            },
-            timeout: 15000,
-          }
-        );
-
-        for (const bk of oddsData.bookmakers || []) {
-          for (const mkt of bk.markets || []) {
-            for (const out of mkt.outcomes || []) {
-              if (!out.description) continue;
-              allProps.push({
-                player: out.description, market: mkt.key, marketLabel: formatMarketName(mkt.key),
-                game: `${event.away_team} @ ${event.home_team}`, gameId: event.id,
-                commenceTime: event.commence_time, homeTeam: event.home_team, awayTeam: event.away_team,
-                book: bk.title, bookKey: bk.key, side: out.name, point: out.point, price: out.price,
-              });
-            }
-          }
+        const { data: od } = await axios.get(`${ODDS_BASE}/sports/${oddsSport}/events/${event.id}/odds`, {
+          params: { apiKey, regions: "us,us2", markets: marketsStr, oddsFormat: "american", bookmakers: "draftkings,fanduel,betmgm,bovada,pointsbet,williamhill_us,betrivers,unibet_us,prizepicks,underdog" },
+          timeout: 15000,
+        });
+        for (const bk of od.bookmakers || []) for (const m of bk.markets || []) for (const o of m.outcomes || []) {
+          if (!o.description) continue;
+          allProps.push({ player: o.description, market: m.key, marketLabel: fmtMkt(m.key), game: `${event.away_team} @ ${event.home_team}`, gameId: event.id, commenceTime: event.commence_time, homeTeam: event.home_team, awayTeam: event.away_team, book: bk.title, bookKey: bk.key, side: o.name, point: o.point, price: o.price });
         }
-      } catch (err) {
-        console.error(`[Props] Event error ${event.id}:`, err.response?.status || err.message);
-      }
+      } catch (err) { console.error(`[Props] Event ${event.id}: ${err.response?.status || err.message}`); }
     }
-
     console.log(`[Props] Raw lines: ${allProps.length}`);
-    const consolidated = consolidateProps(allProps);
+    const consolidated = consolidate(allProps);
     const result = { available: true, sport: sportKey, props: consolidated, count: consolidated.length, markets };
     cache.set(cacheKey, result);
     return result;
@@ -95,89 +62,78 @@ async function getPlayerProps(sportKey, marketFilter = null) {
   }
 }
 
-function consolidateProps(rawProps) {
-  const grouped = {};
-  for (const prop of rawProps) {
-    const key = `${prop.player}__${prop.market}__${prop.gameId}`;
-    if (!grouped[key]) {
-      grouped[key] = { player: prop.player, market: prop.market, marketLabel: prop.marketLabel, game: prop.game, gameId: prop.gameId, commenceTime: prop.commenceTime, homeTeam: prop.homeTeam, awayTeam: prop.awayTeam, books: {} };
-    }
-    if (!grouped[key].books[prop.book]) grouped[key].books[prop.book] = {};
-    grouped[key].books[prop.book][prop.side.toLowerCase()] = { price: prop.price, point: prop.point };
+function consolidate(raw) {
+  const g = {};
+  for (const p of raw) {
+    const k = `${p.player}__${p.market}__${p.gameId}`;
+    if (!g[k]) g[k] = { player: p.player, market: p.market, marketLabel: p.marketLabel, game: p.game, gameId: p.gameId, commenceTime: p.commenceTime, homeTeam: p.homeTeam, awayTeam: p.awayTeam, books: {} };
+    if (!g[k].books[p.book]) g[k].books[p.book] = {};
+    g[k].books[p.book][p.side.toLowerCase()] = { price: p.price, point: p.point };
   }
-  return Object.values(grouped).map(prop => {
-    const entries = Object.entries(prop.books);
-    const overPts = [], allOvers = [], allUnders = [];
-    for (const [bk, sides] of entries) {
-      if (sides.over) { overPts.push(sides.over.point); allOvers.push({ book: bk, ...sides.over }); }
-      if (sides.under) allUnders.push({ book: bk, ...sides.under });
-    }
-    const consensus = overPts.length ? Math.round((overPts.reduce((a, b) => a + b, 0) / overPts.length) * 10) / 10 : null;
-    const bestOver = allOvers.length ? allOvers.reduce((b, c) => c.price > b.price ? c : b) : null;
-    const bestUnder = allUnders.length ? allUnders.reduce((b, c) => c.price > b.price ? c : b) : null;
-    const spread = overPts.length > 1 ? Math.max(...overPts) - Math.min(...overPts) : 0;
-    return {
-      ...prop, books: entries.map(([n, s]) => ({ name: n, ...s })),
-      consensusLine: consensus, bestOver, bestUnder, lineSpread: spread,
-      bookCount: entries.length, hasEdge: spread >= 1.5,
-    };
+  return Object.values(g).map(p => {
+    const e = Object.entries(p.books), op = [], ao = [], au = [];
+    for (const [b, s] of e) { if (s.over) { op.push(s.over.point); ao.push({ book: b, ...s.over }); } if (s.under) au.push({ book: b, ...s.under }); }
+    const con = op.length ? Math.round((op.reduce((a, b) => a + b, 0) / op.length) * 10) / 10 : null;
+    const bo = ao.length ? ao.reduce((b, c) => c.price > b.price ? c : b) : null;
+    const bu = au.length ? au.reduce((b, c) => c.price > b.price ? c : b) : null;
+    const sp = op.length > 1 ? Math.max(...op) - Math.min(...op) : 0;
+    return { ...p, books: e.map(([n, s]) => ({ name: n, ...s })), consensusLine: con, bestOver: bo, bestUnder: bu, lineSpread: sp, bookCount: e.length, hasEdge: sp >= 1.5 };
   }).sort((a, b) => b.bookCount - a.bookCount);
 }
 
-/**
- * ENHANCED AI daily picks - now with real player data
- */
+// ─── DEEP AI PICKS with full context ───
 async function getDailyPicks(sportKey, props) {
-  const anthropicKey = process.env.ANTHROPIC_API_KEY;
-  if (!anthropicKey) return { available: false, message: "Anthropic API key needed" };
+  const ak = process.env.ANTHROPIC_API_KEY;
+  if (!ak) return { available: false, message: "Anthropic API key needed" };
 
-  // Take top 15 props (by book coverage) for deeper analysis
-  const topProps = props.slice(0, 15);
+  const top = props.slice(0, 12);
+  console.log(`[Picks] Building deep context for ${Math.min(top.length, 8)} players...`);
 
-  // Fetch real player data for each prop (in parallel, limit 8 to save time)
-  console.log(`[Picks] Fetching player data for ${Math.min(topProps.length, 8)} props...`);
-  const enrichedProps = await Promise.all(
-    topProps.slice(0, 8).map(async (prop) => {
+  const enriched = await Promise.all(
+    top.slice(0, 8).map(async (prop) => {
       try {
-        const context = await buildPredictionContext(
-          prop.player, sportKey, prop.market, prop.consensusLine,
-          { homeTeam: prop.homeTeam, awayTeam: prop.awayTeam }
-        );
-        return { ...formatPropForAI(prop), playerContext: context };
+        const ctx = await buildPredictionContext(prop.player, sportKey, prop.market, prop.consensusLine, { homeTeam: prop.homeTeam, awayTeam: prop.awayTeam });
+        return { ...fmtProp(prop), context: ctx };
       } catch (err) {
-        console.error(`[Picks] Context error for ${prop.player}:`, err.message);
-        return formatPropForAI(prop);
+        console.error(`[Picks] Context error ${prop.player}:`, err.message);
+        return fmtProp(prop);
       }
     })
   );
 
-  console.log(`[Picks] Sending ${enrichedProps.length} enriched props to AI...`);
+  console.log(`[Picks] Sending ${enriched.length} deep-enriched props to AI...`);
 
   try {
     const { data } = await axios.post("https://api.anthropic.com/v1/messages", {
-      model: "claude-sonnet-4-20250514", max_tokens: 2000,
-      system: `You are an elite sports betting analyst with access to REAL player data. You make data-driven predictions based on:
-- Player season averages and recent game logs
-- Hit rate (how often the player has gone over/under this line recently)
-- Matchup context and opponent defense
-- Line discrepancies between sportsbooks (edges)
-- Injury reports affecting usage
+      model: "claude-sonnet-4-20250514", max_tokens: 2500,
+      system: `You are an elite sports betting analyst with access to REAL, COMPREHENSIVE player data. You make predictions using ALL of the following:
 
-Be specific. Reference actual stats. If a player averages 22 PPG but the line is 24.5, note that.
-If they've gone over in 7 of last 10, note that.
-If key teammates are injured meaning more usage, note that.
+DATA YOU HAVE ACCESS TO:
+1. SEASON AVERAGES — full stat lines for the current season
+2. RECENT GAME LOGS — last 5 games with per-game stats and opponents
+3. HOME/AWAY SPLITS — how the player performs at home vs on the road
+4. VS OPPONENT HISTORY — how they've performed against this specific team
+5. HIT RATE — what % of recent games they've gone over/under this exact line, plus current streak
+6. OPPONENT DEFENSE — defensive rankings and stats of the team they're facing
+7. TEAM PACE — pace of play for both teams (fast pace = inflated stats)
+8. INJURIES — key players out on both teams (missing teammates = more usage)
+9. SCHEDULE — whether team is on a back-to-back (fatigue)
+10. LINE DISCREPANCIES — where different sportsbooks disagree on the number
 
-Respond ONLY in valid JSON with no markdown.`,
-      messages: [{ role: "user", content: `Analyze these ${sportKey.toUpperCase()} player props with REAL PLAYER DATA and pick the 5-8 best plays:
+ANALYSIS RULES:
+- ALWAYS reference specific numbers from the data (e.g. "averaging 24.3 PPG, but 28.1 at home")
+- ALWAYS mention the hit rate if available (e.g. "gone over in 8 of last 10")
+- Note home/away splits when there's a significant difference (2+ point gap)
+- Note vs opponent history when available
+- Flag back-to-backs as negative for overs
+- Flag missing teammates as positive for usage/stats
+- Note pace matchups: fast vs fast = over territory, slow vs slow = under territory
+- Line discrepancies > 2 points between books = strong edge signal
 
-${JSON.stringify(enrichedProps, null, 2)}
+Respond ONLY in valid JSON, no markdown.`,
+      messages: [{ role: "user", content: `Analyze these ${sportKey.toUpperCase()} player props with FULL CONTEXT DATA and pick the 5-8 best plays:
 
-For each pick, consider:
-1. Does the player's season average support over or under?
-2. What's their recent trend (last 5 games)?
-3. Hit rate: how often have they gone over/under this line?
-4. Are there line discrepancies between books (edges)?
-5. Any injury/matchup factors?
+${JSON.stringify(enriched, null, 2)}
 
 Respond with:
 {
@@ -189,17 +145,21 @@ Respond with:
     "bestBook": "book name",
     "bestOdds": "+110",
     "confidence": 75,
-    "reasoning": "2-3 sentences referencing SPECIFIC stats - season avg, recent games, hit rate, matchup",
-    "edge": "Where the value is, reference real numbers",
-    "seasonAvg": "22.3 PPG",
-    "recentAvg": "25.1 over last 5",
-    "hitRate": "7/10 over"
+    "reasoning": "3-4 sentences with SPECIFIC stats: season avg, recent avg, home/away split, vs opponent, hit rate, injuries, pace. Reference real numbers.",
+    "edge": "The specific edge: hit rate, line discrepancy, venue split, matchup advantage, etc.",
+    "keyStats": {
+      "seasonAvg": "22.3",
+      "recentAvg": "25.1 (L5)",
+      "hitRate": "8/10 over",
+      "venueSplit": "26.1 at home vs 19.4 away",
+      "vsOpponent": "28.0 in 2 games vs OPP"
+    }
   }],
-  "summary": "1-2 sentence overview referencing data trends"
+  "summary": "2-3 sentence data-driven overview of today's board, reference trends"
 }` }],
     }, {
-      headers: { "x-api-key": anthropicKey, "anthropic-version": "2023-06-01", "content-type": "application/json" },
-      timeout: 45000,
+      headers: { "x-api-key": ak, "anthropic-version": "2023-06-01", "content-type": "application/json" },
+      timeout: 60000, // Longer timeout for deep analysis
     });
 
     const text = data.content.filter(c => c.type === "text").map(c => c.text).join("");
@@ -210,33 +170,13 @@ Respond with:
   }
 }
 
-function formatPropForAI(prop) {
-  return {
-    player: prop.player, market: prop.marketLabel, line: prop.consensusLine,
-    game: prop.game, bookCount: prop.bookCount, hasEdge: prop.hasEdge, lineSpread: prop.lineSpread,
-    bestOver: prop.bestOver ? `${prop.bestOver.book} ${prop.bestOver.point} (${prop.bestOver.price > 0 ? "+" : ""}${prop.bestOver.price})` : null,
-    bestUnder: prop.bestUnder ? `${prop.bestUnder.book} ${prop.bestUnder.point} (${prop.bestUnder.price > 0 ? "+" : ""}${prop.bestUnder.price})` : null,
-  };
+function fmtProp(p) {
+  return { player: p.player, market: p.marketLabel, line: p.consensusLine, game: p.game, bookCount: p.bookCount, hasEdge: p.hasEdge, lineSpread: p.lineSpread, bestOver: p.bestOver ? `${p.bestOver.book} ${p.bestOver.point} (${p.bestOver.price > 0 ? "+" : ""}${p.bestOver.price})` : null, bestUnder: p.bestUnder ? `${p.bestUnder.book} ${p.bestUnder.point} (${p.bestUnder.price > 0 ? "+" : ""}${p.bestUnder.price})` : null };
 }
 
-function formatMarketName(key) {
-  const map = {
-    player_points: "Points", player_rebounds: "Rebounds", player_assists: "Assists",
-    player_threes: "3-Pointers", player_blocks: "Blocks", player_steals: "Steals",
-    player_points_rebounds_assists: "Pts+Reb+Ast", player_points_rebounds: "Pts+Reb",
-    player_points_assists: "Pts+Ast", player_rebounds_assists: "Reb+Ast",
-    player_double_double: "Double-Double", player_triple_double: "Triple-Double",
-    player_pass_yds: "Pass Yards", player_pass_tds: "Pass TDs",
-    player_pass_completions: "Completions", player_rush_yds: "Rush Yards",
-    player_rush_attempts: "Rush Att", player_rush_tds: "Rush TDs",
-    player_reception_yds: "Rec Yards", player_receptions: "Receptions",
-    player_reception_tds: "Rec TDs", player_anytime_td: "Anytime TD",
-    batter_hits: "Hits", batter_total_bases: "Total Bases",
-    batter_rbis: "RBIs", batter_runs_scored: "Runs", batter_home_runs: "HRs",
-    batter_stolen_bases: "SBs", pitcher_strikeouts: "Strikeouts", pitcher_outs: "Outs",
-    player_goals: "Goals", player_shots_on_goal: "SOG", player_blocked_shots: "Blocks",
-  };
-  return map[key] || key.replace(/player_|batter_|pitcher_/g, "").replace(/_/g, " ");
+function fmtMkt(k) {
+  const m = { player_points: "Points", player_rebounds: "Rebounds", player_assists: "Assists", player_threes: "3-Pointers", player_blocks: "Blocks", player_steals: "Steals", player_points_rebounds_assists: "Pts+Reb+Ast", player_points_rebounds: "Pts+Reb", player_points_assists: "Pts+Ast", player_rebounds_assists: "Reb+Ast", player_double_double: "Double-Double", player_triple_double: "Triple-Double", player_pass_yds: "Pass Yards", player_pass_tds: "Pass TDs", player_pass_completions: "Completions", player_rush_yds: "Rush Yards", player_rush_attempts: "Rush Att", player_rush_tds: "Rush TDs", player_reception_yds: "Rec Yards", player_receptions: "Receptions", player_reception_tds: "Rec TDs", player_anytime_td: "Anytime TD", batter_hits: "Hits", batter_total_bases: "Total Bases", batter_rbis: "RBIs", batter_runs_scored: "Runs", batter_home_runs: "HRs", batter_stolen_bases: "SBs", pitcher_strikeouts: "Strikeouts", pitcher_outs: "Outs", player_goals: "Goals", player_shots_on_goal: "SOG", player_blocked_shots: "Blocks" };
+  return m[k] || k.replace(/player_|batter_|pitcher_/g, "").replace(/_/g, " ");
 }
 
 module.exports = { getPlayerProps, getDailyPicks, PROP_SPORTS, PROP_MARKETS };
