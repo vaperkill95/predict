@@ -351,7 +351,7 @@ export default function App() {
         api.getCDLMatches().then(data => {
           if (!data.available) { setError(data.message); setLoading(false); return; }
           setScores({ sport: "cdl", count: data.matches.length, games: data.matches.map(m => ({ id: String(m.id), name: m.name, date: m.scheduledAt, status: { type: m.status === "live" ? "STATUS_IN_PROGRESS" : m.status === "completed" ? "STATUS_FINAL" : "STATUS_SCHEDULED", displayClock: m.status === "live" ? "LIVE" : "", completed: m.status === "completed" }, home: m.team2 ? { id: m.team2.id, name: m.team2.name, abbreviation: m.team2.acronym, logo: m.team2.logo, score: m.team2.score, winner: m.winner === m.team2.name } : { name: "TBD", score: null }, away: m.team1 ? { id: m.team1.id, name: m.team1.name, abbreviation: m.team1.acronym, logo: m.team1.logo, score: m.team1.score, winner: m.winner === m.team1.name } : { name: "TBD", score: null }, venue: m.tournament, broadcast: m.league })) });
-        }).catch(e => setError(e.message)).finally(() => setLoading(false));
+        }).catch(e => { if (!isCDL) setError(e.message); }).finally(() => setLoading(false));
       } else {
         api.getScores(sport).then(setScores).catch(e => setError(e.message)).finally(() => setLoading(false));
       }
@@ -387,7 +387,7 @@ export default function App() {
           </div>
           <div className="sports-bar" style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
             {SPORTS.map(s => (
-              <button key={s.key} onClick={() => { setSport(s.key); setMarketFilter(null); setSearchFilter(""); }}
+              <button key={s.key} onClick={() => { setSport(s.key); setMarketFilter(null); setSearchFilter(""); if (s.key === "cdl" && ["props", "picks"].includes(tab)) setTab("live"); }}
                 style={{ background: sport === s.key ? `${s.color}25` : "var(--bg-card)", border: `1px solid ${sport === s.key ? s.color : "var(--border)"}`, color: sport === s.key ? "#f1f5f9" : "var(--text-muted)", padding: "5px 9px", borderRadius: 6, fontSize: 11, fontWeight: 600, display: "flex", alignItems: "center", gap: 3 }}>
                 <span style={{ fontSize: 12 }}>{s.icon}</span> {s.label}
               </button>
@@ -395,7 +395,7 @@ export default function App() {
           </div>
         </div>
         <nav className="tab-bar" style={{ display: "flex", gap: 1, marginBottom: -1 }}>
-          {TABS.map(t => (
+          {TABS.filter(t => !isCDL || !["props", "picks"].includes(t.key)).map(t => (
             <button key={t.key} onClick={() => setTab(t.key)}
               style={{ background: tab === t.key ? "var(--bg-elevated)" : "transparent", border: "none", borderBottom: tab === t.key ? `2px solid ${accent}` : "2px solid transparent", color: tab === t.key ? "var(--text-primary)" : "var(--text-muted)", padding: "8px 12px", fontSize: 11, fontWeight: 600, display: "flex", alignItems: "center", gap: 4, borderRadius: "5px 5px 0 0", whiteSpace: "nowrap" }}>
               <span>{t.icon}</span> {t.label}
@@ -481,30 +481,42 @@ export default function App() {
         )}
 
         {/* ═══ HISTORY ═══ */}
-        {tab === "history" && (
+        {tab === "history" && (() => {
+          // Filter history by selected sport
+          const sportEntries = history?.entries?.filter(e => e.sport === sport) || [];
+          const sportPicks = sportEntries.flatMap(e => e.picks);
+          const graded = sportPicks.filter(p => p.result);
+          const hits = graded.filter(p => p.result === "hit");
+          const sportStats = {
+            sessions: sportEntries.length,
+            totalPicks: sportPicks.length,
+            gradedPicks: graded.length,
+            hits: hits.length,
+            hitRate: graded.length > 0 ? Math.round((hits.length / graded.length) * 1000) / 10 : null,
+          };
+
+          return (
           <div className="fade-up">
-            <h2 style={{ fontFamily: "var(--font-display)", fontWeight: 700, fontSize: 16, marginBottom: 4 }}>📈 Pick History</h2>
-            <p style={{ fontSize: 10, color: "var(--text-dim)", marginBottom: 14 }}>Track AI pick performance over time</p>
+            <h2 style={{ fontFamily: "var(--font-display)", fontWeight: 700, fontSize: 16, marginBottom: 4 }}>📈 {meta?.label} Pick History</h2>
+            <p style={{ fontSize: 10, color: "var(--text-dim)", marginBottom: 14 }}>Showing picks for {meta?.label} only</p>
 
-            {history?.stats && (
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(120px, 1fr))", gap: 8, marginBottom: 16 }}>
-                {[
-                  { label: "Sessions", value: history.stats.totalSessions, color: accent },
-                  { label: "Total Picks", value: history.stats.totalPicks, color: "var(--text-primary)" },
-                  { label: "Graded", value: history.stats.gradedPicks, color: "var(--amber)" },
-                  { label: "Hit Rate", value: history.stats.hitRate !== null ? `${history.stats.hitRate}%` : "N/A", color: "var(--green)" },
-                ].map((s, i) => (
-                  <Card key={i} style={{ textAlign: "center", padding: 12 }}>
-                    <div style={{ fontSize: 9, color: "var(--text-dim)", fontFamily: "var(--font-mono)", textTransform: "uppercase", letterSpacing: 1, marginBottom: 4 }}>{s.label}</div>
-                    <div style={{ fontSize: 20, fontWeight: 700, fontFamily: "var(--font-mono)", color: s.color }}>{s.value}</div>
-                  </Card>
-                ))}
-              </div>
-            )}
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(120px, 1fr))", gap: 8, marginBottom: 16 }}>
+              {[
+                { label: "Sessions", value: sportStats.sessions, color: accent },
+                { label: "Total Picks", value: sportStats.totalPicks, color: "var(--text-primary)" },
+                { label: "Graded", value: sportStats.gradedPicks, color: "var(--amber)" },
+                { label: "Hit Rate", value: sportStats.hitRate !== null ? `${sportStats.hitRate}%` : "N/A", color: "var(--green)" },
+              ].map((s, i) => (
+                <Card key={i} style={{ textAlign: "center", padding: 12 }}>
+                  <div style={{ fontSize: 9, color: "var(--text-dim)", fontFamily: "var(--font-mono)", textTransform: "uppercase", letterSpacing: 1, marginBottom: 4 }}>{s.label}</div>
+                  <div style={{ fontSize: 20, fontWeight: 700, fontFamily: "var(--font-mono)", color: s.color }}>{s.value}</div>
+                </Card>
+              ))}
+            </div>
 
-            {history?.entries?.length > 0 ? (
+            {sportEntries.length > 0 ? (
               <div className="history-grid" style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                {history.entries.map((entry, i) => (
+                {sportEntries.map((entry, i) => (
                   <Card key={i}>
                     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
                       <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
@@ -519,6 +531,7 @@ export default function App() {
                           <span style={{ fontWeight: 700 }}>{p.player}</span>
                           <span style={{ color: p.pick === "OVER" ? "var(--green)" : "var(--red)" }}>{p.pick} {p.line}</span>
                           {p.result && <span style={{ color: p.result === "hit" ? "var(--green)" : "var(--red)", fontWeight: 700 }}>{p.result === "hit" ? "✓" : "✗"}</span>}
+                          {p.actual != null && <span style={{ color: "var(--text-dim)" }}>({p.actual})</span>}
                         </div>
                       ))}
                     </div>
@@ -526,10 +539,11 @@ export default function App() {
                 ))}
               </div>
             ) : (
-              <Empty icon="📈" title="No history yet" sub="Pick history will appear here after you generate AI Top Picks. Each session is saved automatically." />
+              <Empty icon="📈" title={`No ${meta?.label} history yet`} sub={`Generate AI Top Picks for ${meta?.label} to start tracking. Each session saves automatically.`} />
             )}
           </div>
-        )}
+          );
+        })()}
 
         {/* ═══ SCORES ═══ */}
         {tab === "live" && (
