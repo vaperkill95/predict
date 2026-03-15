@@ -19,69 +19,58 @@
   --font-mono: 'JetBrains Mono', monospace;
 }
 
-* {
-  box-sizing: border-box;
-  margin: 0;
-  padding: 0;
-}
-
-html, body, #root {
-  height: 100%;
-}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html, body, #root { height: 100%; }
 
 body {
   background: var(--bg-deep);
   color: var(--text-primary);
   font-family: var(--font-body);
   -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
 }
 
-::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar { width: 5px; height: 5px; }
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
-::-webkit-scrollbar-thumb:hover { background: var(--border-bright); }
 
-@keyframes fadeUp {
-  from { opacity: 0; transform: translateY(16px); }
-  to { opacity: 1; transform: translateY(0); }
-}
+@keyframes fadeUp { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: translateY(0); } }
+@keyframes shimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
+@keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
+@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
 
-@keyframes shimmer {
-  0% { background-position: 200% 0; }
-  100% { background-position: -200% 0; }
-}
-
-@keyframes pulse {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.4; }
-}
-
-@keyframes spin {
-  from { transform: rotate(0deg); }
-  to { transform: rotate(360deg); }
-}
-
-.fade-up {
-  animation: fadeUp 0.4s ease both;
-}
-
+.fade-up { animation: fadeUp 0.35s ease both; }
 .shimmer {
   background: linear-gradient(90deg, var(--bg-card) 25%, var(--border) 50%, var(--bg-card) 75%);
   background-size: 200% 100%;
   animation: shimmer 1.5s infinite;
 }
 
-button {
-  font-family: var(--font-display);
-  cursor: pointer;
-  transition: all 0.2s ease;
+button { font-family: var(--font-display); cursor: pointer; transition: all 0.15s ease; }
+button:active { transform: scale(0.97); }
+input { font-family: var(--font-body); }
+
+/* Mobile responsive */
+@media (max-width: 768px) {
+  .sports-bar { gap: 3px !important; }
+  .sports-bar button { padding: 4px 8px !important; font-size: 10px !important; }
+  .sports-bar button span:first-child { font-size: 12px !important; }
+  .tab-bar { gap: 1px !important; overflow-x: auto !important; -webkit-overflow-scrolling: touch; }
+  .tab-bar button { padding: 7px 10px !important; font-size: 11px !important; white-space: nowrap; }
+  .main-content { padding: 14px 12px 40px !important; }
+  .header { padding: 14px 12px 0 !important; }
+  .prop-row-grid { grid-template-columns: 1fr auto auto auto !important; gap: 6px !important; padding: 10px !important; }
+  .prop-row-grid .books-col { display: none !important; }
+  .prop-expanded-grid { grid-template-columns: repeat(2, 1fr) !important; }
+  .picks-grid { grid-template-columns: 1fr !important; }
+  .games-grid { grid-template-columns: 1fr !important; }
+  .market-filters { overflow-x: auto; -webkit-overflow-scrolling: touch; flex-wrap: nowrap !important; }
+  .market-filters::-webkit-scrollbar { display: none; }
+  .search-bar { width: 120px !important; }
+  .history-grid { grid-template-columns: 1fr !important; }
 }
 
-button:active {
-  transform: scale(0.97);
-}
-
-input {
-  font-family: var(--font-body);
+@media (max-width: 480px) {
+  .prop-row-grid { grid-template-columns: 1fr auto auto !important; }
+  .prop-row-grid .under-col { display: none !important; }
+  .header h1 { font-size: 20px !important; }
 }
