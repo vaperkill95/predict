@@ -98,18 +98,18 @@ async function getDailyPicks(sportKey, props) {
 
   const top = props.slice(0, 10);
 
-  // SPEED: Fetch player data in parallel batches of 6 (not 8), with 6s timeout per player
-  console.log(`[Picks] Building context for ${Math.min(top.length, 6)} players in parallel...`);
+  // SPEED: Fetch player data in parallel, 10s timeout per player
+  console.log(`[Picks] Building context for ${Math.min(top.length, 8)} players in parallel...`);
   const startTime = Date.now();
 
   const enriched = await Promise.all(
-    top.slice(0, 6).map(prop =>
+    top.slice(0, 8).map(prop =>
       Promise.race([
         buildPredictionContext(prop.player, sportKey, prop.market, prop.consensusLine, { homeTeam: prop.homeTeam, awayTeam: prop.awayTeam })
           .then(ctx => ({ ...fmtProp(prop), context: ctx }))
           .catch(() => fmtProp(prop)),
-        // SPEED: 6 second timeout per player — skip slow ones
-        new Promise(resolve => setTimeout(() => resolve(fmtProp(prop)), 6000)),
+        // 10 second timeout per player — skip truly stuck ones
+        new Promise(resolve => setTimeout(() => resolve(fmtProp(prop)), 10000)),
       ])
     )
   );
@@ -130,7 +130,7 @@ async function getDailyPicks(sportKey, props) {
 
 RULES: Reference SPECIFIC numbers. Mention hit rate. Note venue splits if 2+ point gap. Be concise — 2-3 sentences max per pick.
 Respond ONLY in valid JSON, no markdown.`,
-      messages: [{ role: "user", content: `Pick the 5-6 best ${sportKey.toUpperCase()} plays:\n\n${JSON.stringify(enriched, null, 2)}\n\nJSON format:\n{"picks":[{"player":"name","market":"stat","pick":"OVER/UNDER","line":24.5,"bestBook":"book","bestOdds":"+110","confidence":75,"reasoning":"2-3 sentences with real stats","edge":"specific edge","keyStats":{"seasonAvg":"22.3","recentAvg":"25.1 (L5)","hitRate":"8/10 over","venueSplit":"26.1 home vs 19.4 away","vsOpponent":"28.0 in 2 vs OPP"}}],"summary":"1-2 sentences"}` }],
+      messages: [{ role: "user", content: `Pick the 5-8 best ${sportKey.toUpperCase()} plays:\n\n${JSON.stringify(enriched, null, 2)}\n\nJSON format:\n{"picks":[{"player":"name","market":"stat","pick":"OVER/UNDER","line":24.5,"bestBook":"book","bestOdds":"+110","confidence":75,"reasoning":"2-3 sentences with real stats","edge":"specific edge","keyStats":{"seasonAvg":"22.3","recentAvg":"25.1 (L5)","hitRate":"8/10 over","venueSplit":"26.1 home vs 19.4 away","vsOpponent":"28.0 in 2 vs OPP"}}],"summary":"1-2 sentences"}` }],
     }, {
       headers: { "x-api-key": ak, "anthropic-version": "2023-06-01", "content-type": "application/json" },
       timeout: 30000,

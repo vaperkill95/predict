@@ -14,8 +14,8 @@ const SPORT_MAP = {
   ncaafb: { sport: "football", league: "college-football" },
 };
 
-// Fast ESPN fetch with short timeout
-async function espnGet(url, timeout = 5000) {
+// ESPN fetch with reasonable timeout
+async function espnGet(url, timeout = 7000) {
   try {
     const { data } = await axios.get(url, { timeout });
     return data;
@@ -47,11 +47,11 @@ async function getPlayerStats(playerName, sportKey) {
   const id = player.id;
   const base = `${ESPN_BASE}/${config.sport}/${config.league}/athletes/${id}`;
 
-  // Fetch overview, gamelog, stats ALL in parallel with fast timeouts
+  // Fetch overview, gamelog, stats ALL in parallel
   const [overview, gamelog, stats] = await Promise.all([
-    espnGet(base, 4000),
-    espnGet(`${base}/gamelog`, 4000),
-    espnGet(`${base}/statistics`, 4000),
+    espnGet(base, 6000),
+    espnGet(`${base}/gamelog`, 6000),
+    espnGet(`${base}/statistics`, 6000),
   ]);
 
   let seasonAverages = {};
