@@ -467,7 +467,7 @@ export default function App() {
               )}
             </div>
             {isCDL ? <Empty icon="🎮" title="CDL Picks Coming Soon" sub="AI picks aren't available for esports." />
-              : picksLoading ? <Card><div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 14 }}><Spinner color={accent} /><span style={{ fontSize: 12, color: "var(--text-secondary)" }}>AI analyzing today's board...</span></div><div style={{ display: "flex", flexDirection: "column", gap: 6 }}><Shimmer h={70} /><Shimmer h={70} /><Shimmer h={70} /></div></Card>
+              : picksLoading ? <Card><div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 10, padding: "30px 0" }}><Spinner size={24} color={accent} /><span style={{ fontSize: 13, fontWeight: 600, color: "var(--text-secondary)" }}>Analyzing today's board...</span><div style={{ display: "flex", gap: 6, flexWrap: "wrap", justifyContent: "center" }}>{["Fetching lines", "Pulling player stats", "Checking matchups", "Running AI analysis"].map((step, i) => <span key={i} style={{ fontSize: 9, fontFamily: "var(--font-mono)", padding: "3px 8px", borderRadius: 4, background: "var(--bg-deep)", color: "var(--text-dim)", border: "1px solid var(--border)", animation: `fadeUp 0.3s ease ${i * 0.5}s both` }}>{step}</span>)}</div><p style={{ fontSize: 10, color: "var(--text-dim)", marginTop: 4 }}>First load takes ~10s · Cached for 10 minutes after</p></div></Card>
               : picks?.picks?.length > 0 ? (
                 <>
                   {picks.summary && <Card style={{ marginBottom: 12, border: `1px solid ${accent}18` }}><p style={{ fontSize: 12, color: "var(--text-secondary)" }}>📊 {picks.summary}</p></Card>}
