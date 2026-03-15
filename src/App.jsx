@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { api } from "./api";
+import CDLPropsTab from "./CDLPropsTab";
 
 const SPORTS = [
   { key: "nba", label: "NBA", icon: "🏀", color: "#E35205" },
@@ -395,7 +396,7 @@ export default function App() {
           </div>
         </div>
         <nav className="tab-bar" style={{ display: "flex", gap: 1, marginBottom: -1 }}>
-          {TABS.filter(t => !isCDL || !["props", "picks"].includes(t.key)).map(t => (
+          {TABS.filter(t => !isCDL || !["picks"].includes(t.key)).map(t => (
             <button key={t.key} onClick={() => setTab(t.key)}
               style={{ background: tab === t.key ? "var(--bg-elevated)" : "transparent", border: "none", borderBottom: tab === t.key ? `2px solid ${accent}` : "2px solid transparent", color: tab === t.key ? "var(--text-primary)" : "var(--text-muted)", padding: "8px 12px", fontSize: 11, fontWeight: 600, display: "flex", alignItems: "center", gap: 4, borderRadius: "5px 5px 0 0", whiteSpace: "nowrap" }}>
               <span>{t.icon}</span> {t.label}
@@ -438,7 +439,7 @@ export default function App() {
               </div>
             )}
 
-            {isCDL ? <Empty icon="🎮" title="CDL Props Coming Soon" sub="Player props aren't available for esports yet." />
+            {isCDL ? <CDLPropsTab />
               : propsLoading ? <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>{Array.from({ length: 6 }).map((_, i) => <Shimmer key={i} h={48} />)}</div>
               : filtered.length > 0 ? <div>{filtered.map((p, i) => <PropRow key={i} prop={p} accent={accent} />)}</div>
               : props?.available === false ? <Empty icon="🔑" title="API Key Needed" sub={props.message} />

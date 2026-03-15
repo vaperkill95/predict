@@ -12,6 +12,8 @@ const oddsRoutes = require("./routes/odds");
 const cdlRoutes = require("./routes/cdl");
 const propsRoutes = require("./routes/props");
 const liveRoutes = require("./routes/live");
+const cdlPropsRoutes = require("./routes/cdl-props");
+const { scrapeCDLStats } = require("./services/cdl-stats-scraper");
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -28,6 +30,11 @@ app.use("/api/odds", oddsRoutes);
 app.use("/api/cdl", cdlRoutes);
 app.use("/api/props", propsRoutes);
 app.use("/api/live", liveRoutes);
+app.use("/api/cdl", cdlPropsRoutes);
+
+// Start CDL stats scraper (every 30 min)
+scrapeCDLStats().catch(err => console.log("Initial CDL scrape skipped:", err.message));
+setInterval(() => scrapeCDLStats().catch(() => {}), 30 * 60 * 1000);
 
 app.get("/api/health", (req, res) => {
   res.json({
