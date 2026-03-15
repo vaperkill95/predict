@@ -1,14 +1,13 @@
 const axios = require("axios");
 const NodeCache = require("node-cache");
 
-// Cache: 60s for live data, 5min for standings
 const liveCache = new NodeCache({ stdTTL: 60 });
 const standingsCache = new NodeCache({ stdTTL: 300 });
 
-// ESPN public API base
 const ESPN_BASE = "https://site.api.espn.com/apis/site/v2/sports";
+// FIXED: Standings uses a DIFFERENT base URL than scores
+const ESPN_STANDINGS_BASE = "https://site.api.espn.com/apis/v2/sports";
 
-// Sport config mapping
 const SPORT_MAP = {
   nba: { sport: "basketball", league: "nba" },
   nfl: { sport: "football", league: "nfl" },
@@ -24,9 +23,6 @@ const SPORT_MAP = {
   mls: { sport: "soccer", league: "usa.1" },
 };
 
-/**
- * Fetch scoreboard (live + upcoming + recent games)
- */
 async function getScoreboard(sportKey) {
   const cacheKey = `scores_${sportKey}`;
   const cached = liveCache.get(cacheKey);
@@ -51,49 +47,33 @@ async function getScoreboard(sportKey) {
         shortName: event.shortName,
         date: event.date,
         status: {
-          type: competition?.status?.type?.name, // STATUS_SCHEDULED, STATUS_IN_PROGRESS, STATUS_FINAL
+          type: competition?.status?.type?.name,
           detail: competition?.status?.type?.detail,
           displayClock: competition?.status?.displayClock,
           period: competition?.status?.period,
           completed: competition?.status?.type?.completed,
         },
         home: {
-          id: home?.team?.id,
-          name: home?.team?.displayName,
-          abbreviation: home?.team?.abbreviation,
-          logo: home?.team?.logo,
-          score: home?.score ? parseInt(home.score) : null,
-          record: home?.records?.[0]?.summary,
-          winner: home?.winner,
+          id: home?.team?.id, name: home?.team?.displayName, abbreviation: home?.team?.abbreviation,
+          logo: home?.team?.logo, score: home?.score ? parseInt(home.score) : null,
+          record: home?.records?.[0]?.summary, winner: home?.winner,
         },
         away: {
-          id: away?.team?.id,
-          name: away?.team?.displayName,
-          abbreviation: away?.team?.abbreviation,
-          logo: away?.team?.logo,
-          score: away?.score ? parseInt(away.score) : null,
-          record: away?.records?.[0]?.summary,
-          winner: away?.winner,
+          id: away?.team?.id, name: away?.team?.displayName, abbreviation: away?.team?.abbreviation,
+          logo: away?.team?.logo, score: away?.score ? parseInt(away.score) : null,
+          record: away?.records?.[0]?.summary, winner: away?.winner,
         },
-        odds: competition?.odds?.[0]
-          ? {
-              spread: competition.odds[0].details,
-              overUnder: competition.odds[0].overUnder,
-              provider: competition.odds[0].provider?.name,
-            }
-          : null,
+        odds: competition?.odds?.[0] ? {
+          spread: competition.odds[0].details,
+          overUnder: competition.odds[0].overUnder,
+          provider: competition.odds[0].provider?.name,
+        } : null,
         venue: competition?.venue?.fullName,
         broadcast: competition?.broadcasts?.[0]?.names?.join(", "),
       };
     });
 
-    const result = {
-      sport: sportKey,
-      date: data.day?.date,
-      games,
-      count: games.length,
-    };
-
+    const result = { sport: sportKey, date: data.day?.date, games, count: games.length };
     liveCache.set(cacheKey, result);
     return result;
   } catch (err) {
@@ -103,7 +83,7 @@ async function getScoreboard(sportKey) {
 }
 
 /**
- * Fetch standings
+ * FIXED: Standings - uses correct ESPN URL /apis/v2/ and proper stat parsing
  */
 async function getStandings(sportKey) {
   const cacheKey = `standings_${sportKey}`;
@@ -113,26 +93,43 @@ async function getStandings(sportKey) {
   const config = SPORT_MAP[sportKey];
   if (!config) throw new Error(`Unknown sport: ${sportKey}`);
 
-  const url = `${ESPN_BASE}/${config.sport}/${config.league}/standings`;
+  // FIXED: Use /apis/v2/ NOT /apis/site/v2/ for standings
+  const url = `${ESPN_STANDINGS_BASE}/${config.sport}/${config.league}/standings`;
 
   try {
     const { data } = await axios.get(url, { timeout: 10000 });
-    const groups = (data.children || []).map((group) => ({
-      name: group.name,
-      teams: (group.standings?.entries || []).map((entry) => {
-        const stats = {};
+
+    const groups = (data.children || []).map((group) => {
+      const entries = group.standings?.entries || [];
+
+      const teams = entries.map((entry) => {
+        // Build stats object from ESPN stats array
+        const statsMap = {};
         (entry.stats || []).forEach((s) => {
-          stats[s.abbreviation || s.name] = s.displayValue || s.value;
+          statsMap[s.name] = s.displayValue || String(s.value);
         });
+
         return {
           id: entry.team?.id,
           name: entry.team?.displayName,
           abbreviation: entry.team?.abbreviation,
           logo: entry.team?.logos?.[0]?.href,
-          stats,
+          stats: {
+            W: statsMap.wins || statsMap.gamesWon || "0",
+            L: statsMap.losses || statsMap.gamesLost || "0",
+            PCT: statsMap.winPercent || statsMap.winPct || ".000",
+            GB: statsMap.gamesBehind || "-",
+            STRK: statsMap.streak || "-",
+            DIFF: statsMap.differential || statsMap.pointDifferential || "-",
+          },
         };
-      }),
-    }));
+      });
+
+      // Sort by wins descending
+      teams.sort((a, b) => parseInt(b.stats.W || 0) - parseInt(a.stats.W || 0));
+
+      return { name: group.name, teams };
+    });
 
     const result = { sport: sportKey, groups };
     standingsCache.set(cacheKey, result);
@@ -143,9 +140,6 @@ async function getStandings(sportKey) {
   }
 }
 
-/**
- * Fetch game detail / box score
- */
 async function getGameDetail(sportKey, gameId) {
   const config = SPORT_MAP[sportKey];
   if (!config) throw new Error(`Unknown sport: ${sportKey}`);
@@ -155,13 +149,9 @@ async function getGameDetail(sportKey, gameId) {
   try {
     const { data } = await axios.get(url, { timeout: 10000 });
     return {
-      boxScore: data.boxscore,
-      leaders: data.leaders,
-      predictor: data.predictor,
-      odds: data.odds,
-      standings: data.standings,
-      header: data.header,
-      plays: data.plays?.items?.slice(-20), // last 20 plays
+      boxScore: data.boxscore, leaders: data.leaders, predictor: data.predictor,
+      odds: data.odds, standings: data.standings, header: data.header,
+      plays: data.plays?.items?.slice(-20),
     };
   } catch (err) {
     console.error(`ESPN game detail error:`, err.message);
@@ -169,52 +159,25 @@ async function getGameDetail(sportKey, gameId) {
   }
 }
 
-/**
- * Fetch team stats / roster
- */
 async function getTeamInfo(sportKey, teamId) {
   const config = SPORT_MAP[sportKey];
   const url = `${ESPN_BASE}/${config.sport}/${config.league}/teams/${teamId}`;
-
   try {
     const { data } = await axios.get(url, { timeout: 10000 });
-    return {
-      team: data.team,
-      stats: data.team?.record,
-      nextEvent: data.team?.nextEvent,
-    };
+    return { team: data.team, stats: data.team?.record, nextEvent: data.team?.nextEvent };
   } catch (err) {
-    console.error(`ESPN team info error:`, err.message);
     throw new Error(`Failed to fetch team info`);
   }
 }
 
-/**
- * Search athletes
- */
 async function searchAthlete(query) {
   const url = `https://site.web.api.espn.com/apis/common/v3/search?query=${encodeURIComponent(query)}&limit=5&type=player`;
-
   try {
     const { data } = await axios.get(url, { timeout: 10000 });
     return (data.items || []).map((item) => ({
-      id: item.id,
-      name: item.displayName,
-      position: item.position,
-      team: item.team,
-      link: item.link,
+      id: item.id, name: item.displayName, position: item.position, team: item.team, link: item.link,
     }));
-  } catch (err) {
-    console.error("ESPN search error:", err.message);
-    return [];
-  }
+  } catch { return []; }
 }
 
-module.exports = {
-  getScoreboard,
-  getStandings,
-  getGameDetail,
-  getTeamInfo,
-  searchAthlete,
-  SPORT_MAP,
-};
+module.exports = { getScoreboard, getStandings, getGameDetail, getTeamInfo, searchAthlete, SPORT_MAP };
