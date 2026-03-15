@@ -18,30 +18,26 @@ export const api = {
   getScores: (sport) => apiFetch(`/sports/scores/${sport}`),
   getStandings: (sport) => apiFetch(`/sports/standings/${sport}`),
   getGame: (sport, gameId) => apiFetch(`/sports/game/${sport}/${gameId}`),
-  getTeam: (sport, teamId) => apiFetch(`/sports/team/${sport}/${teamId}`),
   searchPlayer: (query) => apiFetch(`/sports/search/player?q=${encodeURIComponent(query)}`),
-  getLeagues: () => apiFetch("/sports/leagues"),
 
   // Odds
   getOdds: (sport) => apiFetch(`/odds/${sport}`),
 
   // AI Predictions
   predictGame: (sport, gameId) =>
-    apiFetch("/predictions/game", {
-      method: "POST",
-      body: JSON.stringify({ sport, gameId }),
-    }),
+    apiFetch("/predictions/game", { method: "POST", body: JSON.stringify({ sport, gameId }) }),
   predictPlayer: (playerName, sport, opponent) =>
-    apiFetch("/predictions/player", {
-      method: "POST",
-      body: JSON.stringify({ playerName, sport, opponent }),
-    }),
+    apiFetch("/predictions/player", { method: "POST", body: JSON.stringify({ playerName, sport, opponent }) }),
 
-  // CDL Esports
+  // Player Props (NEW)
+  getProps: (sport, market) => apiFetch(`/props/${sport}${market ? `?market=${market}` : ""}`),
+  getDailyPicks: (sport) => apiFetch(`/props/${sport}/picks`),
+  getPropMarkets: (sport) => apiFetch(`/props/${sport}/markets`),
+
+  // CDL
   getCDLMatches: () => apiFetch("/cdl/matches"),
   getCDLStandings: () => apiFetch("/cdl/standings"),
   getCDLPlayers: (query) => apiFetch(`/cdl/players?q=${encodeURIComponent(query)}`),
 
-  // Health
   health: () => apiFetch("/health"),
 };
