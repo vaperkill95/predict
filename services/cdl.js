@@ -147,31 +147,51 @@ async function getCDLStandings() {
   }
 
   try {
-    // Get current CDL series/tournaments
-    const { data: series } = await axios.get(`${PANDA_BASE}/codmw/series/running`, {
-      headers, timeout: 10000,
-    });
+    // Step 1: Find running CDL tournaments
+    let tournaments = [];
+
+    try {
+      const { data } = await axios.get(`${PANDA_BASE}/codmw/tournaments/running`, { headers, timeout: 10000 });
+      tournaments = data || [];
+    } catch {}
+
+    // Fallback: try upcoming
+    if (!tournaments.length) {
+      try {
+        const { data } = await axios.get(`${PANDA_BASE}/codmw/tournaments/upcoming`, { headers, timeout: 10000, params: { "page[size]": 5, sort: "begin_at" } });
+        tournaments = data || [];
+      } catch {}
+    }
+
+    // Fallback: try recent past
+    if (!tournaments.length) {
+      try {
+        const { data } = await axios.get(`${PANDA_BASE}/codmw/tournaments/past`, { headers, timeout: 10000, params: { "page[size]": 5, sort: "-end_at" } });
+        tournaments = data || [];
+      } catch {}
+    }
+
+    if (!tournaments.length) {
+      // Final fallback: build standings from match results
+      return await buildStandingsFromMatches(headers);
+    }
+
+    // Step 2: Get standings — use GENERIC /tournaments/{id}/standings (NOT /codmw/tournaments/{id}/standings)
+    const tournament = tournaments.find(t =>
+      t.league?.name?.includes("Call of Duty") || t.serie?.full_name?.includes("CDL")
+    ) || tournaments[0];
 
     let standings = [];
+    try {
+      const { data } = await axios.get(`${PANDA_BASE}/tournaments/${tournament.id}/standings`, { headers, timeout: 10000 });
+      standings = data || [];
+    } catch (err) {
+      console.error("CDL tournament standings 404, falling back to match results:", err.message);
+      return await buildStandingsFromMatches(headers);
+    }
 
-    if (series.length > 0) {
-      // Get tournaments in current series
-      const { data: tournaments } = await axios.get(
-        `${PANDA_BASE}/codmw/tournaments`, {
-          headers, timeout: 10000,
-          params: { "filter[serie_id]": series[0].id, "page[size]": 5 },
-        }
-      );
-
-      if (tournaments.length > 0) {
-        // Get standings for latest tournament
-        const { data: standingsData } = await axios.get(
-          `${PANDA_BASE}/codmw/tournaments/${tournaments[0].id}/standings`, {
-            headers, timeout: 10000,
-          }
-        );
-        standings = standingsData;
-      }
+    if (!standings.length) {
+      return await buildStandingsFromMatches(headers);
     }
 
     const result = {
@@ -185,9 +205,9 @@ async function getCDLStandings() {
           acronym: s.team?.acronym || CDL_TEAMS[s.team?.name]?.abbr,
           color: CDL_TEAMS[s.team?.name]?.color,
         },
-        wins: s.wins,
-        losses: s.losses,
-        ties: s.ties,
+        wins: s.wins || s.team_wins || 0,
+        losses: s.losses || s.team_losses || 0,
+        ties: s.ties || 0,
       })),
     };
 
@@ -195,7 +215,56 @@ async function getCDLStandings() {
     return result;
   } catch (err) {
     console.error("PandaScore CDL standings error:", err.message);
-    return { available: false, message: "Failed to fetch CDL standings" };
+    return await buildStandingsFromMatches(headers);
+  }
+}
+
+/**
+ * Fallback: Build CDL standings from recent match results
+ */
+async function buildStandingsFromMatches(headers) {
+  try {
+    const hdr = headers || getHeaders();
+    if (!hdr) return { available: false, message: "PandaScore API key not configured" };
+
+    const { data: matches } = await axios.get(`${PANDA_BASE}/codmw/matches/past`, {
+      headers: hdr, timeout: 10000,
+      params: { "page[size]": 50, sort: "-scheduled_at" },
+    });
+
+    const teamStats = {};
+    for (const match of matches || []) {
+      if (!match.opponents || match.opponents.length < 2) continue;
+      for (const opp of match.opponents) {
+        const team = opp.opponent;
+        if (!teamStats[team.id]) {
+          teamStats[team.id] = { id: team.id, name: team.name, logo: team.image_url, acronym: team.acronym, wins: 0, losses: 0 };
+        }
+      }
+      if (match.winner?.id) {
+        if (teamStats[match.winner.id]) teamStats[match.winner.id].wins++;
+        for (const opp of match.opponents) {
+          if (opp.opponent.id !== match.winner.id && teamStats[opp.opponent.id]) {
+            teamStats[opp.opponent.id].losses++;
+          }
+        }
+      }
+    }
+
+    const standings = Object.values(teamStats)
+      .sort((a, b) => b.wins - a.wins)
+      .map((t, i) => ({
+        rank: i + 1,
+        team: { id: t.id, name: t.name, logo: t.logo, acronym: t.acronym || CDL_TEAMS[t.name]?.abbr, color: CDL_TEAMS[t.name]?.color },
+        wins: t.wins, losses: t.losses, ties: 0,
+      }));
+
+    const result = { available: true, standings };
+    cache.set("cdl_standings", result);
+    return result;
+  } catch (err) {
+    console.error("CDL fallback standings error:", err.message);
+    return { available: false, message: "Failed to build CDL standings" };
   }
 }
 

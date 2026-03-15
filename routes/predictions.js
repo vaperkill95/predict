@@ -29,9 +29,9 @@ router.post("/game", async (req, res, next) => {
       try {
         const headers = { Authorization: `Bearer ${pandaKey}` };
 
-        // Fetch match details
+        // Fetch match details — use GENERIC /matches/{id} (NOT /codmw/matches/{id})
         const { data: match } = await axios.get(
-          `https://api.pandascore.co/codmw/matches/${gameId}`,
+          `https://api.pandascore.co/matches/${gameId}`,
           { headers, timeout: 10000 }
         );
 
