@@ -15,8 +15,8 @@ const liveRoutes = require("./routes/live");
 const cdlPropsRoutes = require("./routes/cdl-props");
 const { scrapeCDLStats } = require("./services/cdl-stats-scraper");
 const lineMovement = require("./services/line-movement");
-const dvp = require("./services/defense-vs-position");
-const esports = require("./services/esports-expansion");
+const trendingPicks = require("./services/trending-picks");
+const discordAlerts = require("./services/discord-alerts");
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -36,8 +36,7 @@ app.use("/api/props", propsRoutes);
 app.use("/api/live", liveRoutes);
 app.use("/api/cdl", cdlPropsRoutes);
 app.use("/api/movement", lineMovement.router);
-app.use("/api/dvp", dvp.router);
-app.use("/api/esports", esports.router);
+app.use("/api/trending", trendingPicks.router);
 
 // Start CDL stats scraper (every 30 min)
 scrapeCDLStats().catch(err => console.log("Initial CDL scrape skipped:", err.message));
@@ -54,8 +53,46 @@ lineMovement.startTracking(async (sport) => {
   }
 });
 
-// Start Defense vs Position refresh (every 6 hours)
-dvp.startRefresh();
+// Helper functions for trending + discord services
+async function fetchPropsInternal(sport) {
+  try {
+    if (sport === "cdl") {
+      const resp = await fetch(`http://localhost:${PORT}/api/cdl/props`);
+      return await resp.json();
+    }
+    const resp = await fetch(`http://localhost:${PORT}/api/props/${sport}`);
+    return await resp.json();
+  } catch (err) {
+    console.error(`fetchPropsInternal failed for ${sport}:`, err.message);
+    return { props: [] };
+  }
+}
+
+async function fetchPicksInternal(sport) {
+  try {
+    const resp = await fetch(`http://localhost:${PORT}/api/props/${sport}/picks`);
+    return await resp.json();
+  } catch (err) {
+    console.error(`fetchPicksInternal failed for ${sport}:`, err.message);
+    return { picks: [] };
+  }
+}
+
+async function getMovementInternal(sport) {
+  try {
+    const resp = await fetch(`http://localhost:${PORT}/api/movement/${sport}`);
+    return await resp.json();
+  } catch (err) {
+    console.error(`getMovementInternal failed for ${sport}:`, err.message);
+    return { props: [] };
+  }
+}
+
+// Start trending picks refresh (every 10 min)
+trendingPicks.startRefresh(fetchPropsInternal, fetchPicksInternal, getMovementInternal);
+
+// Start Discord alerts (every 10 min) — requires DISCORD_WEBHOOK_URL in .env
+discordAlerts.start(fetchPropsInternal, fetchPicksInternal);
 
 app.get("/api/health", (req, res) => {
   res.json({
@@ -65,6 +102,7 @@ app.get("/api/health", (req, res) => {
       anthropic: process.env.ANTHROPIC_API_KEY ? "configured" : "missing",
       odds_api: process.env.ODDS_API_KEY ? "configured" : "missing",
       pandascore: process.env.PANDASCORE_API_KEY ? "configured" : "missing",
+      discord_alerts: process.env.DISCORD_WEBHOOK_URL ? "configured" : "missing",
     },
   });
 });
