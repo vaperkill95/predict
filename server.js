@@ -54,13 +54,23 @@ app.get("/", (req, res) => {
   res.sendFile(path.join(__dirname, "public", "landing.html"));
 });
 
-// ─── Serve static files (public folder for landing assets, dist for React app) ───
+// ─── Static files from public folder ───
 app.use(express.static(path.join(__dirname, "public")));
-app.use("/app", express.static(path.join(__dirname, "dist")));
 
-// ─── React app catch-all at /app/* ───
-app.get("/app", (req, res) => { res.sendFile(path.join(__dirname, "dist", "index.html")); });
-app.get("/app/*", (req, res) => { res.sendFile(path.join(__dirname, "dist", "index.html")); });
+// ─── React app static assets (JS/CSS bundles need to be accessible) ───
+app.use("/app", express.static(path.join(__dirname, "dist")));
+app.use("/assets", express.static(path.join(__dirname, "dist", "assets")));
+
+// ─── React SPA routes ───
+app.get("/app", (req, res) => {
+  res.sendFile(path.join(__dirname, "dist", "index.html"));
+});
+app.get("/app/*", (req, res) => {
+  res.sendFile(path.join(__dirname, "dist", "index.html"));
+});
+
+// ─── Fallback: also serve dist at root for any remaining asset requests ───
+app.use(express.static(path.join(__dirname, "dist")));
 
 // Error handling
 app.use((err, req, res, next) => {
