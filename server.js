@@ -14,6 +14,7 @@ const propsRoutes = require("./routes/props");
 const liveRoutes = require("./routes/live");
 const cdlPropsRoutes = require("./routes/cdl-props");
 const { scrapeCDLStats } = require("./services/cdl-stats-scraper");
+const lineMovement = require("./services/line-movement");
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -32,10 +33,22 @@ app.use("/api/cdl", cdlRoutes);
 app.use("/api/props", propsRoutes);
 app.use("/api/live", liveRoutes);
 app.use("/api/cdl", cdlPropsRoutes);
+app.use("/api/movement", lineMovement.router);
 
 // Start CDL stats scraper (every 30 min)
 scrapeCDLStats().catch(err => console.log("Initial CDL scrape skipped:", err.message));
 setInterval(() => scrapeCDLStats().catch(() => {}), 30 * 60 * 1000);
+
+// Start line movement tracking (every 15 min)
+lineMovement.startTracking(async (sport) => {
+  try {
+    const { getPlayerProps } = require("./services/props");
+    return await getPlayerProps(sport);
+  } catch (err) {
+    console.error(`Movement: failed to fetch ${sport}:`, err.message);
+    return { props: [] };
+  }
+});
 
 app.get("/api/health", (req, res) => {
   res.json({

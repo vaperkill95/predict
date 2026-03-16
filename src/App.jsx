@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { api } from "./api";
 import CDLPropsTab from "./CDLPropsTab";
+import { LineMovementChip, BiggestMovesPanel } from "./LineMovement";
 
 const SPORTS = [
   { key: "nba", label: "NBA", icon: "🏀", color: "#E35205" },
@@ -66,7 +67,7 @@ function Empty({ icon, title, sub }) {
 }
 
 // ─── Prop Row with Demon/Goblin + Pick Builder ───
-function PropRow({ prop, accent, onAddPick, isInBuilder }) {
+function PropRow({ prop, accent, onAddPick, isInBuilder, sport: propSport }) {
   const [open, setOpen] = useState(false);
   const isDemon = prop.lineType === "demon";
   const isGoblin = prop.lineType === "goblin";
@@ -109,6 +110,9 @@ function PropRow({ prop, accent, onAddPick, isInBuilder }) {
 
       {open && (
         <div style={{ padding: "0 12px 10px", borderTop: "1px solid var(--border)" }}>
+          {/* Line Movement */}
+          <LineMovementChip player={prop.player} market={prop.market} sport={propSport} gameId={prop.gameId} />
+
           {/* Add to pick builder buttons */}
           <div style={{ display: "flex", gap: 6, marginTop: 8, marginBottom: 8 }}>
             <button onClick={(e) => { e.stopPropagation(); onAddPick?.(prop, "OVER"); }}
@@ -526,9 +530,12 @@ export default function App() {
               </div>
             )}
 
+            {/* Biggest Line Moves */}
+            {!isCDL && !propsLoading && filtered.length > 0 && <BiggestMovesPanel sport={sport} />}
+
             {isCDL ? <CDLPropsTab />
               : propsLoading ? <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>{Array.from({ length: 6 }).map((_, i) => <Shimmer key={i} h={48} />)}</div>
-              : filtered.length > 0 ? <div>{filtered.map((p, i) => <PropRow key={i} prop={p} accent={accent} onAddPick={addToPicker} isInBuilder={getPickerState(p)} />)}</div>
+              : filtered.length > 0 ? <div>{filtered.map((p, i) => <PropRow key={i} prop={p} accent={accent} onAddPick={addToPicker} isInBuilder={getPickerState(p)} sport={sport} />)}</div>
               : props?.available === false ? <Empty icon="🔑" title="API Key Needed" sub={props.message} />
               : <Empty icon="📋" title="No props available" sub={`No props for ${meta?.label} right now. Check back closer to game time.`} />}
           </div>
