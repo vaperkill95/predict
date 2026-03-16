@@ -24,6 +24,7 @@ app.use(express.json());
 app.use(cors({ origin: process.env.CLIENT_URL || "*", credentials: true }));
 app.use("/api/", rateLimit({ windowMs: 15 * 60 * 1000, max: 500, message: { error: "Rate limited" } }));
 
+// API Routes
 app.use("/api/sports", sportsRoutes);
 app.use("/api/predictions", predictionsRoutes);
 app.use("/api/odds", oddsRoutes);
@@ -48,9 +49,20 @@ app.get("/api/health", (req, res) => {
   });
 });
 
-app.use(express.static(path.join(__dirname, "dist")));
-app.get("*", (req, res) => { res.sendFile(path.join(__dirname, "dist", "index.html")); });
+// ─── LANDING PAGE at root / ───
+app.get("/", (req, res) => {
+  res.sendFile(path.join(__dirname, "public", "landing.html"));
+});
 
+// ─── Serve static files (public folder for landing assets, dist for React app) ───
+app.use(express.static(path.join(__dirname, "public")));
+app.use("/app", express.static(path.join(__dirname, "dist")));
+
+// ─── React app catch-all at /app/* ───
+app.get("/app", (req, res) => { res.sendFile(path.join(__dirname, "dist", "index.html")); });
+app.get("/app/*", (req, res) => { res.sendFile(path.join(__dirname, "dist", "index.html")); });
+
+// Error handling
 app.use((err, req, res, next) => {
   console.error("Server error:", err.message);
   res.status(err.status || 500).json({ error: err.message || "Internal server error" });
