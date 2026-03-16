@@ -65,14 +65,25 @@ function Empty({ icon, title, sub }) {
   return <div style={{ textAlign: "center", padding: "44px 16px" }}><div style={{ fontSize: 36, marginBottom: 8, opacity: 0.7 }}>{icon}</div><h3 style={{ fontFamily: "var(--font-display)", fontWeight: 700, fontSize: 14, marginBottom: 4 }}>{title}</h3><p style={{ color: "var(--text-dim)", fontSize: 11, maxWidth: 360, margin: "0 auto", lineHeight: 1.5 }}>{sub}</p></div>;
 }
 
-// ─── Prop Row ───
-function PropRow({ prop, accent }) {
+// ─── Prop Row with Demon/Goblin + Pick Builder ───
+function PropRow({ prop, accent, onAddPick, isInBuilder }) {
   const [open, setOpen] = useState(false);
+  const isDemon = prop.lineType === "demon";
+  const isGoblin = prop.lineType === "goblin";
+  const borderColor = isDemon ? "#f59e0b30" : isGoblin ? "#8b5cf630" : prop.hasEdge ? "var(--green)18" : "var(--border)";
+
   return (
-    <div style={{ background: "var(--bg-card)", borderRadius: 8, border: `1px solid ${prop.hasEdge ? "var(--green)18" : "var(--border)"}`, marginBottom: 4, overflow: "hidden" }}>
+    <div style={{ background: "var(--bg-card)", borderRadius: 8, border: `1px solid ${borderColor}`, marginBottom: 4, overflow: "hidden", position: "relative" }}>
+      {/* Demon/Goblin accent stripe */}
+      {(isDemon || isGoblin) && <div style={{ position: "absolute", left: 0, top: 0, bottom: 0, width: 3, background: isDemon ? "#f59e0b" : "#8b5cf6" }} />}
+
       <div className="prop-row-grid" onClick={() => setOpen(!open)} style={{ display: "grid", gridTemplateColumns: "1fr 60px 90px 90px auto", alignItems: "center", gap: 10, padding: "10px 12px", cursor: "pointer" }}>
         <div style={{ minWidth: 0 }}>
-          <div style={{ fontSize: 13, fontWeight: 700, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{prop.player}</div>
+          <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
+            <span style={{ fontSize: 13, fontWeight: 700, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{prop.player}</span>
+            {isDemon && <span style={{ fontSize: 8, fontWeight: 800, padding: "1px 5px", borderRadius: 3, background: "#f59e0b", color: "#000", letterSpacing: 0.5 }}>DEMON</span>}
+            {isGoblin && <span style={{ fontSize: 8, fontWeight: 800, padding: "1px 5px", borderRadius: 3, background: "#8b5cf6", color: "#fff", letterSpacing: 0.5 }}>GOBLIN</span>}
+          </div>
           <div style={{ fontSize: 10, color: "var(--text-dim)", marginTop: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
             {prop.game} · <span style={{ color: accent }}>{prop.marketLabel}</span>
           </div>
@@ -95,9 +106,22 @@ function PropRow({ prop, accent }) {
           <span style={{ fontSize: 10, color: "var(--text-dim)", transform: open ? "rotate(180deg)" : "none", transition: "transform .15s", marginLeft: 2 }}>▾</span>
         </div>
       </div>
+
       {open && (
         <div style={{ padding: "0 12px 10px", borderTop: "1px solid var(--border)" }}>
-          <div className="prop-expanded-grid" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(140px, 1fr))", gap: 4, marginTop: 8 }}>
+          {/* Add to pick builder buttons */}
+          <div style={{ display: "flex", gap: 6, marginTop: 8, marginBottom: 8 }}>
+            <button onClick={(e) => { e.stopPropagation(); onAddPick?.(prop, "OVER"); }}
+              style={{ flex: 1, padding: "6px 0", borderRadius: 5, fontSize: 11, fontWeight: 700, background: isInBuilder?.over ? "var(--green)" : "var(--green)15", border: `1px solid var(--green)40`, color: isInBuilder?.over ? "#000" : "var(--green)", cursor: "pointer" }}>
+              {isInBuilder?.over ? "✓ OVER Added" : "+ Add OVER"}
+            </button>
+            <button onClick={(e) => { e.stopPropagation(); onAddPick?.(prop, "UNDER"); }}
+              style={{ flex: 1, padding: "6px 0", borderRadius: 5, fontSize: 11, fontWeight: 700, background: isInBuilder?.under ? "var(--red)" : "var(--red)15", border: `1px solid var(--red)40`, color: isInBuilder?.under ? "#fff" : "var(--red)", cursor: "pointer" }}>
+              {isInBuilder?.under ? "✓ UNDER Added" : "+ Add UNDER"}
+            </button>
+          </div>
+
+          <div className="prop-expanded-grid" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(140px, 1fr))", gap: 4 }}>
             {prop.books.map((b, i) => (
               <div key={i} style={{ background: "var(--bg-deep)", borderRadius: 6, padding: "6px 8px", fontSize: 11, fontFamily: "var(--font-mono)" }}>
                 <div style={{ fontSize: 9, color: "var(--text-dim)", marginBottom: 3, fontWeight: 700 }}>{b.name}</div>
@@ -275,6 +299,9 @@ export default function App() {
   const [history, setHistory] = useState(null);
   const [marketFilter, setMarketFilter] = useState(null);
   const [searchFilter, setSearchFilter] = useState("");
+  const [lineTypeFilter, setLineTypeFilter] = useState(null); // "demon", "goblin", "edge", or null
+  const [pickerPicks, setPickerPicks] = useState([]); // Pick builder selections
+  const [showBuilder, setShowBuilder] = useState(false);
   const [time, setTime] = useState(new Date());
   const [liveData, setLiveData] = useState({});
   const [grading, setGrading] = useState(false);
@@ -372,7 +399,48 @@ export default function App() {
     try { setPrediction(await api.predictGame(sport, g.id)); } catch (e) { setError(e.message); } finally { setPredicting(false); }
   }, [sport]);
 
-  const filtered = props?.props?.filter(p => !searchFilter || p.player.toLowerCase().includes(searchFilter.toLowerCase())) || [];
+  const filtered = (props?.props || []).filter(p => {
+    if (searchFilter && !p.player.toLowerCase().includes(searchFilter.toLowerCase())) return false;
+    if (lineTypeFilter === "demon" && p.lineType !== "demon") return false;
+    if (lineTypeFilter === "goblin" && p.lineType !== "goblin") return false;
+    if (lineTypeFilter === "edge" && !p.hasEdge) return false;
+    return true;
+  });
+
+  // Demon/goblin counts for filter badges
+  const demonCount = (props?.props || []).filter(p => p.lineType === "demon").length;
+  const goblinCount = (props?.props || []).filter(p => p.lineType === "goblin").length;
+  const edgeCount = (props?.props || []).filter(p => p.hasEdge).length;
+
+  // Pick builder functions
+  const addToPicker = (prop, side) => {
+    const key = `${prop.player}__${prop.market}__${side}`;
+    const exists = pickerPicks.find(p => p.key === key);
+    if (exists) {
+      setPickerPicks(prev => prev.filter(p => p.key !== key));
+    } else {
+      // Remove opposite side if exists
+      const oppositeKey = `${prop.player}__${prop.market}__${side === "OVER" ? "UNDER" : "OVER"}`;
+      setPickerPicks(prev => [...prev.filter(p => p.key !== oppositeKey), {
+        key, player: prop.player, market: prop.marketLabel, line: prop.consensusLine,
+        side, game: prop.game, bestBook: side === "OVER" ? prop.bestOver?.book : prop.bestUnder?.book,
+        bestOdds: side === "OVER" ? prop.bestOver?.price : prop.bestUnder?.price,
+      }]);
+    }
+    setShowBuilder(true);
+  };
+
+  const getPickerState = (prop) => {
+    const overKey = `${prop.player}__${prop.market}__OVER`;
+    const underKey = `${prop.player}__${prop.market}__UNDER`;
+    return {
+      over: pickerPicks.some(p => p.key === overKey),
+      under: pickerPicks.some(p => p.key === underKey),
+    };
+  };
+
+  const removePick = (key) => setPickerPicks(prev => prev.filter(p => p.key !== key));
+  const clearPicker = () => { setPickerPicks([]); setShowBuilder(false); };
 
   return (
     <div style={{ minHeight: "100vh", position: "relative" }}>
@@ -439,9 +507,28 @@ export default function App() {
               </div>
             )}
 
+            {/* Demon/Goblin/Edge filters */}
+            {!isCDL && props?.props?.length > 0 && (
+              <div style={{ display: "flex", gap: 4, marginBottom: 12, flexWrap: "wrap" }}>
+                <button onClick={() => setLineTypeFilter(lineTypeFilter === "demon" ? null : "demon")}
+                  style={{ padding: "5px 10px", borderRadius: 5, fontSize: 10, fontWeight: 700, background: lineTypeFilter === "demon" ? "#f59e0b25" : "var(--bg-card)", border: `1px solid ${lineTypeFilter === "demon" ? "#f59e0b" : "var(--border)"}`, color: lineTypeFilter === "demon" ? "#f59e0b" : "var(--text-muted)", display: "flex", alignItems: "center", gap: 4 }}>
+                  🔥 Demons {demonCount > 0 && <span style={{ background: "#f59e0b", color: "#000", borderRadius: 8, padding: "0 5px", fontSize: 9 }}>{demonCount}</span>}
+                </button>
+                <button onClick={() => setLineTypeFilter(lineTypeFilter === "goblin" ? null : "goblin")}
+                  style={{ padding: "5px 10px", borderRadius: 5, fontSize: 10, fontWeight: 700, background: lineTypeFilter === "goblin" ? "#8b5cf625" : "var(--bg-card)", border: `1px solid ${lineTypeFilter === "goblin" ? "#8b5cf6" : "var(--border)"}`, color: lineTypeFilter === "goblin" ? "#8b5cf6" : "var(--text-muted)", display: "flex", alignItems: "center", gap: 4 }}>
+                  👹 Goblins {goblinCount > 0 && <span style={{ background: "#8b5cf6", color: "#fff", borderRadius: 8, padding: "0 5px", fontSize: 9 }}>{goblinCount}</span>}
+                </button>
+                <button onClick={() => setLineTypeFilter(lineTypeFilter === "edge" ? null : "edge")}
+                  style={{ padding: "5px 10px", borderRadius: 5, fontSize: 10, fontWeight: 700, background: lineTypeFilter === "edge" ? "var(--green)25" : "var(--bg-card)", border: `1px solid ${lineTypeFilter === "edge" ? "var(--green)" : "var(--border)"}`, color: lineTypeFilter === "edge" ? "var(--green)" : "var(--text-muted)", display: "flex", alignItems: "center", gap: 4 }}>
+                  ⚡ Edges {edgeCount > 0 && <span style={{ background: "var(--green)", color: "#000", borderRadius: 8, padding: "0 5px", fontSize: 9 }}>{edgeCount}</span>}
+                </button>
+                {lineTypeFilter && <button onClick={() => setLineTypeFilter(null)} style={{ padding: "5px 8px", borderRadius: 5, fontSize: 10, background: "transparent", border: "1px solid var(--border)", color: "var(--text-dim)" }}>✕ Clear</button>}
+              </div>
+            )}
+
             {isCDL ? <CDLPropsTab />
               : propsLoading ? <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>{Array.from({ length: 6 }).map((_, i) => <Shimmer key={i} h={48} />)}</div>
-              : filtered.length > 0 ? <div>{filtered.map((p, i) => <PropRow key={i} prop={p} accent={accent} />)}</div>
+              : filtered.length > 0 ? <div>{filtered.map((p, i) => <PropRow key={i} prop={p} accent={accent} onAddPick={addToPicker} isInBuilder={getPickerState(p)} />)}</div>
               : props?.available === false ? <Empty icon="🔑" title="API Key Needed" sub={props.message} />
               : <Empty icon="📋" title="No props available" sub={`No props for ${meta?.label} right now. Check back closer to game time.`} />}
           </div>
@@ -596,6 +683,97 @@ export default function App() {
           ⚠️ For entertainment & research only. Not financial or gambling advice.
         </div>
       </main>
+
+      {/* ═══ FLOATING PICK BUILDER ═══ */}
+      {pickerPicks.length > 0 && (
+        <div style={{
+          position: "fixed", bottom: 0, left: 0, right: 0, zIndex: 100,
+          background: "var(--bg-card)f5", backdropFilter: "blur(16px)",
+          borderTop: "1px solid var(--border-bright)",
+          padding: showBuilder ? "14px 20px 20px" : "10px 20px",
+          transition: "all 0.2s ease",
+          maxHeight: showBuilder ? "50vh" : "48px", overflow: "hidden",
+        }}>
+          {/* Header bar */}
+          <div onClick={() => setShowBuilder(!showBuilder)} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", cursor: "pointer", marginBottom: showBuilder ? 10 : 0 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <span style={{ fontSize: 14 }}>🎫</span>
+              <span style={{ fontFamily: "var(--font-display)", fontWeight: 700, fontSize: 13 }}>Pick Builder</span>
+              <Badge color={accent}>{pickerPicks.length} pick{pickerPicks.length !== 1 ? "s" : ""}</Badge>
+            </div>
+            <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+              <button onClick={(e) => { e.stopPropagation(); clearPicker(); }} style={{ padding: "4px 10px", borderRadius: 5, fontSize: 10, background: "var(--bg-deep)", border: "1px solid var(--border)", color: "var(--text-muted)" }}>Clear All</button>
+              <span style={{ fontSize: 12, color: "var(--text-dim)", transform: showBuilder ? "rotate(180deg)" : "none", transition: "transform .15s" }}>▲</span>
+            </div>
+          </div>
+
+          {/* Expanded picks list */}
+          {showBuilder && (
+            <div style={{ overflowY: "auto", maxHeight: "35vh" }}>
+              <div style={{ display: "flex", flexDirection: "column", gap: 4, marginBottom: 12 }}>
+                {pickerPicks.map((pick) => (
+                  <div key={pick.key} style={{
+                    display: "flex", alignItems: "center", justifyContent: "space-between",
+                    padding: "8px 10px", borderRadius: 6, background: "var(--bg-deep)",
+                    border: `1px solid ${pick.side === "OVER" ? "var(--green)25" : "var(--red)25"}`,
+                  }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 8, flex: 1, minWidth: 0 }}>
+                      <span style={{
+                        padding: "2px 8px", borderRadius: 4, fontSize: 10, fontWeight: 700,
+                        fontFamily: "var(--font-mono)",
+                        background: pick.side === "OVER" ? "var(--green)18" : "var(--red)18",
+                        color: pick.side === "OVER" ? "var(--green)" : "var(--red)",
+                      }}>{pick.side}</span>
+                      <div style={{ minWidth: 0 }}>
+                        <div style={{ fontSize: 12, fontWeight: 700, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{pick.player}</div>
+                        <div style={{ fontSize: 9, color: "var(--text-dim)" }}>{pick.market} {pick.line} · {pick.game}</div>
+                      </div>
+                    </div>
+                    {pick.bestOdds && <span style={{ fontSize: 11, fontFamily: "var(--font-mono)", color: "var(--text-secondary)", marginRight: 8 }}>{pick.bestOdds > 0 ? "+" : ""}{pick.bestOdds}</span>}
+                    <button onClick={() => removePick(pick.key)} style={{ background: "none", border: "none", color: "var(--text-dim)", fontSize: 14, padding: "2px 4px" }}>✕</button>
+                  </div>
+                ))}
+              </div>
+
+              {/* Export buttons */}
+              <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                <button onClick={() => {
+                  const text = pickerPicks.map(p => `${p.player} — ${p.side} ${p.line} ${p.market}`).join("\n");
+                  navigator.clipboard?.writeText(text);
+                  alert("Picks copied to clipboard!");
+                }} style={{
+                  flex: 1, padding: "10px 0", borderRadius: 6, fontSize: 12, fontWeight: 700,
+                  background: `${accent}20`, border: `1px solid ${accent}40`, color: accent,
+                }}>📋 Copy Picks</button>
+                <button onClick={() => {
+                  const text = pickerPicks.map(p => `${p.player} ${p.side} ${p.line} ${p.market} @ ${p.bestBook || "Best Book"}`).join("\n");
+                  const url = `https://app.prizepicks.com`;
+                  window.open(url, "_blank");
+                  navigator.clipboard?.writeText(text);
+                }} style={{
+                  flex: 1, padding: "10px 0", borderRadius: 6, fontSize: 12, fontWeight: 700,
+                  background: "#7c3aed20", border: "1px solid #7c3aed40", color: "#a78bfa",
+                }}>🎯 Open PrizePicks</button>
+                <button onClick={() => {
+                  const text = pickerPicks.map(p => `${p.player} ${p.side} ${p.line} ${p.market}`).join("\n");
+                  window.open("https://pick6.draftkings.com", "_blank");
+                  navigator.clipboard?.writeText(text);
+                }} style={{
+                  flex: 1, padding: "10px 0", borderRadius: 6, fontSize: 12, fontWeight: 700,
+                  background: "#16a34a20", border: "1px solid #16a34a40", color: "#4ade80",
+                }}>🏈 Open DraftKings</button>
+              </div>
+
+              <p style={{ fontSize: 9, color: "var(--text-dim)", textAlign: "center", marginTop: 8, fontFamily: "var(--font-mono)" }}>
+                Picks are copied to clipboard when you open an app — paste them as reference
+              </p>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Bottom padding when builder is open */}
+      {pickerPicks.length > 0 && <div style={{ height: showBuilder ? 280 : 48 }} />}
     </div>
   );
 }

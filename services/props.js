@@ -80,7 +80,35 @@ function consolidate(raw) {
     const bo = ao.length ? ao.reduce((b, c) => c.price > b.price ? c : b) : null;
     const bu = au.length ? au.reduce((b, c) => c.price > b.price ? c : b) : null;
     const sp = op.length > 1 ? Math.max(...op) - Math.min(...op) : 0;
-    return { ...p, books: e.map(([n, s]) => ({ name: n, ...s })), consensusLine: con, bestOver: bo, bestUnder: bu, lineSpread: sp, bookCount: e.length, hasEdge: sp >= 1.5 };
+
+    // DEMON/GOBLIN detection
+    // Demon = line is set suspiciously LOW (easy over) — best over odds are very favorable
+    // Goblin = line is set suspiciously HIGH (easy under) — best under odds are very favorable
+    let lineType = "normal"; // "demon", "goblin", or "normal"
+    
+    // Check if best over has plus odds (positive american odds = underdog/value)
+    // AND multiple books agree on a low line
+    if (bo && bu) {
+      // Demon: Over is plus money AND line spread shows books disagree (some set way lower)
+      if (bo.price >= 100 && sp >= 2) {
+        lineType = "demon";
+      }
+      // Goblin: Under is plus money AND line spread shows books disagree (some set way higher)  
+      else if (bu.price >= 100 && sp >= 2) {
+        lineType = "goblin";
+      }
+      // Also flag based on odds skew even without spread
+      // If over is +150 or better, it's a demon (books think over is unlikely but odds are juicy)
+      else if (bo.price >= 150) {
+        lineType = "demon";
+      }
+      // If under is +150 or better, it's a goblin
+      else if (bu.price >= 150) {
+        lineType = "goblin";
+      }
+    }
+
+    return { ...p, books: e.map(([n, s]) => ({ name: n, ...s })), consensusLine: con, bestOver: bo, bestUnder: bu, lineSpread: sp, bookCount: e.length, hasEdge: sp >= 1.5, lineType };
   }).sort((a, b) => b.bookCount - a.bookCount);
 }
 
