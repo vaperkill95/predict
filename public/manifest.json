@@ -1,0 +1,28 @@
+{
+  "name": "ORACLE — AI Sports Prediction Engine",
+  "short_name": "ORACLE",
+  "description": "AI-powered player prop predictions with 7-factor analysis, injury tracking, and real-time odds from 8+ sportsbooks",
+  "start_url": "/app/",
+  "display": "standalone",
+  "background_color": "#060a14",
+  "theme_color": "#38bdf8",
+  "orientation": "portrait-primary",
+  "scope": "/",
+  "icons": [
+    {
+      "src": "/static/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/static/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ],
+  "categories": ["sports", "entertainment"],
+  "screenshots": [],
+  "prefer_related_applications": false
+}

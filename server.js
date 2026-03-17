@@ -68,6 +68,20 @@ try {
   console.log("enhanced-props-middleware not found, props served without enrichment");
 }
 
+let wnba = null;
+try {
+  wnba = require("./services/wnba");
+} catch (e) {
+  console.log("wnba not found, skipping WNBA endpoints");
+}
+
+let modelTuner = null;
+try {
+  modelTuner = require("./services/model-tuner");
+} catch (e) {
+  console.log("model-tuner not found, skipping tuner endpoint");
+}
+
 const app = express();
 const PORT = process.env.PORT || 3001;
 
@@ -133,6 +147,12 @@ if (backtester) {
 }
 if (refData) {
   app.use("/api/refs", refData.router);
+}
+if (wnba) {
+  app.use("/api/wnba", wnba.router);
+}
+if (modelTuner) {
+  app.use("/api/tuner", modelTuner.router);
 }
 
 // === Start services ===
@@ -208,6 +228,11 @@ trendingPicks.startRefresh(fetchPropsInternal, fetchPicksInternal, getMovementIn
 // Start Discord alerts (every 10 min)
 discordAlerts.start(fetchPropsInternal, fetchPicksInternal);
 
+// === PWA Manifest ===
+app.get("/manifest.json", (req, res) => {
+  res.sendFile(path.join(__dirname, "public", "manifest.json"));
+});
+
 // === Health endpoint ===
 app.get("/api/health", (req, res) => {
   res.json({
@@ -223,6 +248,8 @@ app.get("/api/health", (req, res) => {
       auto_grader: autoGrader ? "active" : "not loaded",
       backtester: backtester ? "available" : "not loaded",
       referee_data: refData ? "active" : "not loaded",
+      wnba: wnba ? "active" : "not loaded",
+      model_tuner: modelTuner ? "available" : "not loaded",
       enrichment: enrichment ? "active" : "not loaded",
     },
   });
