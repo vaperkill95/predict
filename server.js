@@ -18,7 +18,7 @@ const lineMovement = require("./services/line-movement");
 const trendingPicks = require("./services/trending-picks");
 const discordAlerts = require("./services/discord-alerts");
 const analytics = require("./services/enhanced-analytics");
-
+const predictionModel = require("./services/prediction-model");
 const app = express();
 const PORT = process.env.PORT || 3001;
 
@@ -54,7 +54,6 @@ setInterval(() => scrapeCDLStats().catch(() => {}), 30 * 60 * 1000);
 lineMovement.startTracking(async (sport) => {
   try {
     const { getPlayerProps } = require("./services/props");
-const predictionModel = require("./services/prediction-model");
     return await getPlayerProps(sport);
   } catch (err) {
     console.error(`Movement: failed to fetch ${sport}:`, err.message);
