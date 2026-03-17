@@ -1,0 +1,52 @@
+<!-- help-button.html — injected into /app/ pages -->
+<style>
+.oracle-help-btn {
+  position: fixed;
+  bottom: 20px;
+  right: 20px;
+  z-index: 9999;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 18px;
+  background: #111827;
+  border: 1px solid #1e293b;
+  border-radius: 50px;
+  color: #94a3b8;
+  font-family: "DM Sans", sans-serif;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  text-decoration: none;
+  transition: all 0.2s ease;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.4);
+}
+.oracle-help-btn:hover {
+  background: #1a2236;
+  color: #f1f5f9;
+  border-color: #38bdf8;
+  transform: translateY(-2px);
+  box-shadow: 0 6px 24px rgba(56,189,248,0.15);
+  text-decoration: none;
+}
+.oracle-help-icon {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: rgba(56,189,248,0.15);
+  color: #38bdf8;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  font-size: 13px;
+}
+@media (max-width: 640px) {
+  .oracle-help-btn span { display: none; }
+  .oracle-help-btn { padding: 12px; border-radius: 50%; }
+}
+</style>
+<a href="/how-it-works" class="oracle-help-btn">
+  <div class="oracle-help-icon">?</div>
+  <span>How It Works</span>
+</a>

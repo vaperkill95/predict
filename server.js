@@ -269,9 +269,22 @@ app.get("/api/health", (req, res) => {
   });
 });
 
-// === Landing page at root / ===
+// === Landing page at root / (inject How It Works link) ===
 app.get("/", (req, res) => {
-  res.sendFile(path.join(__dirname, "public", "landing.html"));
+  const landingPath = path.join(__dirname, "public", "landing.html");
+  const fs = require("fs");
+  try {
+    let html = fs.readFileSync(landingPath, "utf8");
+    // Inject "How It Works" link before the "Open App" CTA in the nav
+    const navLink = '<a href="/how-it-works" style="color:#94a3b8;font-size:14px;font-weight:500;text-decoration:none;padding:10px 16px;border-radius:8px;transition:all 0.2s;">How It Works</a>';
+    html = html.replace(
+      '<a href="/app/" class="nav-cta">',
+      navLink + '\n    <a href="/app/" class="nav-cta">'
+    );
+    res.type("html").send(html);
+  } catch (e) {
+    res.sendFile(landingPath);
+  }
 });
 
 // === How It Works page ===
@@ -284,13 +297,33 @@ app.use(express.static(path.join(__dirname, "public")));
 app.use("/app", express.static(path.join(__dirname, "dist")));
 app.use("/assets", express.static(path.join(__dirname, "dist", "assets")));
 
-// === React SPA routes ===
-app.get("/app", (req, res) => {
-  res.sendFile(path.join(__dirname, "dist", "index.html"));
-});
-app.get("/app/*", (req, res) => {
-  res.sendFile(path.join(__dirname, "dist", "index.html"));
-});
+// === React SPA routes (inject help button) ===
+const helpButtonPath = path.join(__dirname, "public", "help-button.html");
+let helpButtonHTML = "";
+try {
+  helpButtonHTML = require("fs").readFileSync(helpButtonPath, "utf8");
+} catch (e) {
+  console.log("help-button.html not found, app served without help button");
+}
+
+function serveAppWithHelp(req, res) {
+  const indexPath = path.join(__dirname, "dist", "index.html");
+  if (helpButtonHTML) {
+    const fs = require("fs");
+    try {
+      let html = fs.readFileSync(indexPath, "utf8");
+      html = html.replace("</body>", helpButtonHTML + "\n</body>");
+      res.type("html").send(html);
+    } catch (e) {
+      res.sendFile(indexPath);
+    }
+  } else {
+    res.sendFile(indexPath);
+  }
+}
+
+app.get("/app", serveAppWithHelp);
+app.get("/app/*", serveAppWithHelp);
 
 // === Fallback static ===
 app.use(express.static(path.join(__dirname, "dist")));
