@@ -82,6 +82,13 @@ try {
   console.log("model-tuner not found, skipping tuner endpoint");
 }
 
+let evEngine = null;
+try {
+  evEngine = require("./services/ev-engine");
+} catch (e) {
+  console.log("ev-engine not found, skipping +EV scanner");
+}
+
 const app = express();
 const PORT = process.env.PORT || 3001;
 
@@ -154,6 +161,9 @@ if (wnba) {
 if (modelTuner) {
   app.use("/api/tuner", modelTuner.router);
 }
+if (evEngine) {
+  app.use("/api/ev", evEngine.router);
+}
 
 // === Start services ===
 dvp.startRefresh();
@@ -170,6 +180,9 @@ if (autoGrader && autoGrader.startGrading) {
 }
 if (refData && refData.startRefresh) {
   refData.startRefresh();
+}
+if (evEngine && evEngine.startScanning) {
+  evEngine.startScanning();
 }
 
 // Start CDL stats scraper (every 30 min)
@@ -250,6 +263,7 @@ app.get("/api/health", (req, res) => {
       referee_data: refData ? "active" : "not loaded",
       wnba: wnba ? "active" : "not loaded",
       model_tuner: modelTuner ? "available" : "not loaded",
+      ev_engine: evEngine ? "active" : "not loaded",
       enrichment: enrichment ? "active" : "not loaded",
     },
   });
