@@ -61,6 +61,13 @@ try {
   console.log("referee-data not found, skipping ref tracking");
 }
 
+let enhancedPropsMiddleware = null;
+try {
+  enhancedPropsMiddleware = require("./services/enhanced-props-middleware");
+} catch (e) {
+  console.log("enhanced-props-middleware not found, props served without enrichment");
+}
+
 const app = express();
 const PORT = process.env.PORT || 3001;
 
@@ -80,6 +87,10 @@ app.use("/api/dvp", dvp.router);
 app.use("/api/esports", esports.router);
 app.use("/api/analytics", analytics.router);
 app.use("/api/predict", predictionModel.router);
+// === Enhanced props middleware — auto-enriches props with analytics data ===
+if (enhancedPropsMiddleware) {
+  enhancedPropsMiddleware.applyMiddleware(app);
+}
 // === Smart picks fallback — if /api/props/:sport/picks fails, use model picks ===
 app.get("/api/props/:sport/picks", async (req, res, next) => {
   // Let the original handler try first
