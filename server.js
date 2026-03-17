@@ -274,6 +274,11 @@ app.get("/", (req, res) => {
   res.sendFile(path.join(__dirname, "public", "landing.html"));
 });
 
+// === How It Works page ===
+app.get("/how-it-works", (req, res) => {
+  res.sendFile(path.join(__dirname, "public", "how-it-works.html"));
+});
+
 // === Static files ===
 app.use(express.static(path.join(__dirname, "public")));
 app.use("/app", express.static(path.join(__dirname, "dist")));

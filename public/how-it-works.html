@@ -1,0 +1,598 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>How It Works — ORACLE</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;600;800;900&family=DM+Sans:wght@400;500;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg-deep: #060a14; --bg-base: #0a0f1a; --bg-card: #111827; --bg-elevated: #1a2236;
+  --border: #1e293b; --text-primary: #f1f5f9; --text-secondary: #94a3b8; --text-muted: #64748b;
+  --accent: #38bdf8; --green: #10b981; --red: #ef4444; --amber: #f59e0b; --purple: #a78bfa;
+  --font-display: "Outfit", sans-serif; --font-body: "DM Sans", sans-serif; --font-mono: "JetBrains Mono", monospace;
+}
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { background: var(--bg-deep); color: var(--text-primary); font-family: var(--font-body); line-height: 1.7; }
+a { color: var(--accent); text-decoration: none; }
+a:hover { text-decoration: underline; }
+
+.container { max-width: 860px; margin: 0 auto; padding: 0 24px; }
+
+/* Nav */
+.nav { padding: 20px 0; border-bottom: 1px solid var(--border); background: var(--bg-base); position: sticky; top: 0; z-index: 100; backdrop-filter: blur(12px); }
+.nav-inner { display: flex; align-items: center; justify-content: space-between; max-width: 860px; margin: 0 auto; padding: 0 24px; }
+.nav-logo { font-family: var(--font-display); font-weight: 900; font-size: 20px; letter-spacing: 2px; }
+.nav-logo span { color: var(--accent); }
+.nav-links { display: flex; gap: 16px; }
+.nav-links a { font-size: 13px; color: var(--text-secondary); font-weight: 500; padding: 6px 14px; border-radius: 6px; transition: all 0.2s; }
+.nav-links a:hover { background: var(--bg-elevated); color: var(--text-primary); text-decoration: none; }
+.nav-links a.active { background: var(--accent); color: #000; }
+
+/* Hero */
+.hero { padding: 80px 0 60px; text-align: center; }
+.hero h1 { font-family: var(--font-display); font-weight: 900; font-size: clamp(32px, 5vw, 48px); margin-bottom: 16px; }
+.hero h1 span { background: linear-gradient(135deg, var(--accent), var(--purple)); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+.hero p { color: var(--text-secondary); font-size: 18px; max-width: 600px; margin: 0 auto; }
+
+/* TOC */
+.toc { background: var(--bg-card); border: 1px solid var(--border); border-radius: 16px; padding: 32px; margin: 40px 0; }
+.toc h2 { font-family: var(--font-display); font-weight: 800; font-size: 20px; margin-bottom: 20px; }
+.toc-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 8px; }
+.toc-item { display: flex; align-items: center; gap: 10px; padding: 10px 14px; border-radius: 8px; font-size: 14px; color: var(--text-secondary); transition: all 0.2s; cursor: pointer; }
+.toc-item:hover { background: var(--bg-elevated); color: var(--text-primary); }
+.toc-item .num { font-family: var(--font-mono); font-size: 11px; color: var(--accent); background: rgba(56,189,248,0.1); padding: 2px 8px; border-radius: 4px; }
+
+/* Section */
+.section { padding: 60px 0; border-bottom: 1px solid var(--border); }
+.section:last-of-type { border-bottom: none; }
+.section-label { font-family: var(--font-mono); font-size: 11px; color: var(--accent); letter-spacing: 2px; text-transform: uppercase; margin-bottom: 8px; }
+.section h2 { font-family: var(--font-display); font-weight: 800; font-size: 28px; margin-bottom: 16px; }
+.section h3 { font-family: var(--font-display); font-weight: 700; font-size: 20px; margin: 32px 0 12px; color: var(--text-primary); }
+.section p { color: var(--text-secondary); margin-bottom: 16px; font-size: 15px; }
+
+/* Term cards */
+.term { background: var(--bg-card); border: 1px solid var(--border); border-radius: 12px; padding: 20px 24px; margin: 16px 0; }
+.term-header { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
+.term-emoji { font-size: 20px; }
+.term-name { font-family: var(--font-display); font-weight: 700; font-size: 16px; }
+.term-badge { font-family: var(--font-mono); font-size: 10px; padding: 2px 8px; border-radius: 4px; }
+.term p { color: var(--text-secondary); font-size: 14px; margin: 0; }
+
+/* Example box */
+.example { background: var(--bg-elevated); border-left: 3px solid var(--accent); border-radius: 0 8px 8px 0; padding: 16px 20px; margin: 16px 0; font-size: 14px; }
+.example-label { font-family: var(--font-mono); font-size: 10px; color: var(--accent); letter-spacing: 1px; text-transform: uppercase; margin-bottom: 6px; }
+
+/* Feature grid */
+.feature-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 16px; margin: 24px 0; }
+.feature-card { background: var(--bg-card); border: 1px solid var(--border); border-radius: 12px; padding: 20px; transition: all 0.2s; }
+.feature-card:hover { border-color: var(--accent); transform: translateY(-2px); }
+.feature-card .icon { font-size: 24px; margin-bottom: 10px; }
+.feature-card h4 { font-family: var(--font-display); font-weight: 700; font-size: 15px; margin-bottom: 6px; }
+.feature-card p { font-size: 13px; color: var(--text-secondary); margin: 0; }
+
+/* Scale */
+.scale { display: flex; gap: 4px; margin: 16px 0; flex-wrap: wrap; }
+.scale-item { padding: 8px 16px; border-radius: 8px; font-family: var(--font-mono); font-size: 12px; text-align: center; }
+
+/* Table */
+.data-table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 14px; }
+.data-table th { text-align: left; padding: 10px 16px; background: var(--bg-elevated); font-family: var(--font-mono); font-size: 11px; color: var(--text-muted); letter-spacing: 1px; text-transform: uppercase; }
+.data-table td { padding: 10px 16px; border-bottom: 1px solid var(--border); color: var(--text-secondary); }
+.data-table tr:hover td { background: var(--bg-card); }
+
+/* CTA */
+.cta-box { text-align: center; padding: 60px 0; }
+.cta-btn { display: inline-block; padding: 14px 36px; background: var(--accent); color: #000; font-family: var(--font-display); font-weight: 800; font-size: 16px; border-radius: 12px; transition: all 0.2s; }
+.cta-btn:hover { transform: translateY(-2px); box-shadow: 0 8px 30px rgba(56,189,248,0.3); text-decoration: none; }
+
+/* Footer */
+.footer { padding: 40px 0; text-align: center; color: var(--text-muted); font-size: 12px; border-top: 1px solid var(--border); }
+
+/* Responsive */
+@media (max-width: 640px) {
+  .toc-grid { grid-template-columns: 1fr; }
+  .feature-grid { grid-template-columns: 1fr; }
+  .hero { padding: 40px 0 30px; }
+  .section { padding: 40px 0; }
+}
+</style>
+</head>
+<body>
+
+<!-- Navigation -->
+<nav class="nav">
+  <div class="nav-inner">
+    <div class="nav-logo">⟁ <span>ORACLE</span></div>
+    <div class="nav-links">
+      <a href="/">Home</a>
+      <a href="/app/">Open App</a>
+      <a href="/how-it-works" class="active">How It Works</a>
+    </div>
+  </div>
+</nav>
+
+<!-- Hero -->
+<div class="hero">
+  <div class="container">
+    <h1>How <span>ORACLE</span> Works</h1>
+    <p>A complete guide to understanding every feature, every number, and every term. No experience needed — we'll break it all down.</p>
+  </div>
+</div>
+
+<div class="container">
+
+<!-- Table of Contents -->
+<div class="toc">
+  <h2>What's Inside</h2>
+  <div class="toc-grid">
+    <a class="toc-item" href="#basics"><span class="num">01</span> The Basics</a>
+    <a class="toc-item" href="#props"><span class="num">02</span> Player Props Explained</a>
+    <a class="toc-item" href="#terminology"><span class="num">03</span> Terminology Guide</a>
+    <a class="toc-item" href="#prediction"><span class="num">04</span> The 7-Factor Prediction Model</a>
+    <a class="toc-item" href="#ev"><span class="num">05</span> +EV Betting Explained</a>
+    <a class="toc-item" href="#tabs"><span class="num">06</span> Every Tab Explained</a>
+    <a class="toc-item" href="#signals"><span class="num">07</span> Demons, Goblins & Edges</a>
+    <a class="toc-item" href="#sports"><span class="num">08</span> Sports Coverage</a>
+    <a class="toc-item" href="#accuracy"><span class="num">09</span> Accuracy & Grading</a>
+    <a class="toc-item" href="#tips"><span class="num">10</span> Tips for Best Results</a>
+  </div>
+</div>
+
+<!-- Section 1: Basics -->
+<div class="section" id="basics">
+  <div class="section-label">01 — Getting Started</div>
+  <h2>What is ORACLE?</h2>
+  <p>ORACLE is a <strong>free</strong> sports prediction tool that analyzes player performance data from multiple sources to help you make smarter decisions about player props. It compares odds from 8+ sportsbooks, runs a 7-factor prediction model, and shows you where the data says the value is.</p>
+  <p>Think of it like this: instead of guessing whether LeBron will score over 25 points tonight, ORACLE looks at his last 68 games, checks if key teammates are injured, sees how fast tonight's opponent plays, factors in the day of the week and whether it's a home game, and tells you there's a 72% chance he goes over — with a Grade A confidence rating.</p>
+  
+  <h3>What makes ORACLE different?</h3>
+  <div class="feature-grid">
+    <div class="feature-card">
+      <div class="icon">🆓</div>
+      <h4>Completely Free</h4>
+      <p>No signup, no payment, no hidden costs. PickFinder charges $15/mo. Sharp App charges $49/mo. ORACLE is $0 forever.</p>
+    </div>
+    <div class="feature-card">
+      <div class="icon">🧠</div>
+      <h4>7-Factor AI Model</h4>
+      <p>Not just averages — we factor in injuries, pace, Vegas lines, rest days, recent form, venue, and regression patterns.</p>
+    </div>
+    <div class="feature-card">
+      <div class="icon">📊</div>
+      <h4>+EV Detection</h4>
+      <p>Finds bets where the math is in your favor. The same technique professional bettors use to profit long-term.</p>
+    </div>
+    <div class="feature-card">
+      <div class="icon">🔍</div>
+      <h4>8+ Sportsbooks</h4>
+      <p>Compares lines from DraftKings, FanDuel, BetMGM, Caesars, Bovada, BetRivers, PrizePicks, and Underdog side by side.</p>
+    </div>
+  </div>
+</div>
+
+<!-- Section 2: Player Props -->
+<div class="section" id="props">
+  <div class="section-label">02 — The Foundation</div>
+  <h2>What Are Player Props?</h2>
+  <p>A <strong>player prop</strong> (short for "player proposition") is a bet on whether a specific player will go <strong>OVER</strong> or <strong>UNDER</strong> a specific number for a stat. It's not about who wins the game — it's about individual player performance.</p>
+  
+  <div class="example">
+    <div class="example-label">Example</div>
+    <strong>Jalen Brunson — Points: Over/Under 27.5</strong><br>
+    If you think Brunson will score 28 or more points, you'd take the <strong style="color:var(--green)">OVER</strong>.<br>
+    If you think he'll score 27 or fewer, you'd take the <strong style="color:var(--red)">UNDER</strong>.
+  </div>
+
+  <h3>Common prop markets</h3>
+  <table class="data-table">
+    <tr><th>Market</th><th>What it means</th><th>Example</th></tr>
+    <tr><td>Points</td><td>Total points scored</td><td>Brunson Over 27.5 pts</td></tr>
+    <tr><td>Rebounds</td><td>Total rebounds grabbed</td><td>Towns Over 10.5 reb</td></tr>
+    <tr><td>Assists</td><td>Total assists recorded</td><td>Brunson Over 6.5 ast</td></tr>
+    <tr><td>3-Pointers</td><td>Three-point shots made</td><td>Curry Over 4.5 threes</td></tr>
+    <tr><td>PRA</td><td>Points + Rebounds + Assists combined</td><td>Jokic Over 45.5 PRA</td></tr>
+    <tr><td>Steals</td><td>Steals recorded</td><td>Edwards Over 1.5 stl</td></tr>
+    <tr><td>Blocks</td><td>Shots blocked</td><td>Wembanyama Over 3.5 blk</td></tr>
+  </table>
+
+  <h3>What's a "line"?</h3>
+  <p>The <strong>line</strong> is the number set by the sportsbook — it's the dividing line between OVER and UNDER. When ORACLE shows "27.5", that's the line. The .5 exists to prevent a "push" (tie) since you can't score half a point.</p>
+</div>
+
+<!-- Section 3: Terminology -->
+<div class="section" id="terminology">
+  <div class="section-label">03 — Know the Language</div>
+  <h2>Terminology Guide</h2>
+  <p>Every term you'll see on ORACLE, explained simply.</p>
+
+  <div class="term">
+    <div class="term-header">
+      <span class="term-emoji">📊</span>
+      <span class="term-name">Consensus Line</span>
+    </div>
+    <p>The average line across all sportsbooks. If FanDuel says 27.5 and DraftKings says 28.5, the consensus is 28.0. This represents what the market "thinks" the number should be.</p>
+  </div>
+
+  <div class="term">
+    <div class="term-header">
+      <span class="term-emoji">📚</span>
+      <span class="term-name">Book Count</span>
+    </div>
+    <p>How many sportsbooks are offering this prop. More books = more data to compare = more confident in the line. If only 1 book has it, be cautious. If 6+ have it, the line is well-established.</p>
+  </div>
+
+  <div class="term">
+    <div class="term-header">
+      <span class="term-emoji">📏</span>
+      <span class="term-name">Line Spread</span>
+    </div>
+    <p>The difference between the highest and lowest line across books. A spread of 0 means all books agree. A spread of 3+ means books disagree significantly — this is where edges hide.</p>
+  </div>
+
+  <div class="term">
+    <div class="term-header">
+      <span class="term-emoji">💰</span>
+      <span class="term-name">Odds (American Format)</span>
+    </div>
+    <p><strong>Negative odds</strong> (like -110) mean you risk that amount to win $100. So -110 means bet $110 to win $100.<br>
+    <strong>Positive odds</strong> (like +150) mean you win that amount on a $100 bet. So +150 means bet $100 to win $150.<br>
+    The further from -100/+100, the more the book is leaning one direction.</p>
+  </div>
+
+  <div class="term">
+    <div class="term-header">
+      <span class="term-emoji">🎯</span>
+      <span class="term-name">Hit Rate</span>
+    </div>
+    <p>The percentage of games where a player would have gone OVER a specific line. If Brunson's hit rate for Over 27.5 pts is 62%, that means he scored 28+ points in 62% of his games this season.</p>
+  </div>
+
+  <div class="term">
+    <div class="term-header">
+      <span class="term-emoji">📈</span>
+      <span class="term-name">L5 / L10 Average</span>
+    </div>
+    <p>The player's average over their <strong>last 5</strong> or <strong>last 10</strong> games. This shows recent form. If L5 is much higher than the season average, the player is on a hot streak.</p>
+  </div>
+
+  <div class="term">
+    <div class="term-header">
+      <span class="term-emoji">🏠</span>
+      <span class="term-name">Home / Away Split</span>
+    </div>
+    <p>How differently a player performs at home vs. on the road. Some players score 3-5 more points at home due to crowd energy, familiarity, and less travel fatigue.</p>
+  </div>
+
+  <div class="term">
+    <div class="term-header">
+      <span class="term-emoji">📅</span>
+      <span class="term-name">Day of Week Split</span>
+    </div>
+    <p>A player's average performance on each day of the week. Surprisingly, some players consistently score more on Fridays and Saturdays (national TV games, higher energy) than on Tuesday mid-week games.</p>
+  </div>
+
+  <div class="term">
+    <div class="term-header">
+      <span class="term-emoji">😴</span>
+      <span class="term-name">Back-to-Back (B2B)</span>
+    </div>
+    <p>When a team plays two games on consecutive days. Players typically score 2-4 fewer points on the second night due to fatigue. ORACLE detects B2B games and adjusts projections down.</p>
+  </div>
+
+  <div class="term">
+    <div class="term-header">
+      <span class="term-emoji">💧</span>
+      <span class="term-name">Vig / Juice</span>
+    </div>
+    <p>The sportsbook's built-in profit margin. Standard vig is -110 on both sides, meaning you risk $110 to win $100. The sportsbook keeps $10 regardless of outcome. ORACLE's +EV engine removes the vig to find the "fair" probability.</p>
+  </div>
+
+  <div class="term">
+    <div class="term-header">
+      <span class="term-emoji">✅</span>
+      <span class="term-name">+EV (Positive Expected Value)</span>
+    </div>
+    <p>A bet where the math is in your favor long-term. If the true probability of winning is higher than what the odds imply, you have +EV. This is how professional bettors make money — they don't need to win every bet, they need to consistently find +EV spots.</p>
+  </div>
+</div>
+
+<!-- Section 4: Prediction Model -->
+<div class="section" id="prediction">
+  <div class="section-label">04 — The Brain</div>
+  <h2>The 7-Factor Prediction Model</h2>
+  <p>ORACLE doesn't just look at averages. It combines 7 different factors to generate a projection for every prop. Here's each one:</p>
+
+  <div class="term" style="border-left: 3px solid var(--amber); border-color: var(--border); border-left-color: var(--amber);">
+    <div class="term-header">
+      <span class="term-emoji">⚖️</span>
+      <span class="term-name">1. Weighted Recency</span>
+      <span class="term-badge" style="background:rgba(245,158,11,0.15);color:var(--amber);">50% WEIGHT</span>
+    </div>
+    <p>Your last 3 games matter more than a game from 2 months ago. ORACLE gives 50% weight to the last 3 games, 30% to games 4-10, and only 20% to the rest of the season. This catches hot and cold streaks faster than a simple average.</p>
+  </div>
+
+  <div class="term" style="border-left: 3px solid var(--red); border-color: var(--border); border-left-color: var(--red);">
+    <div class="term-header">
+      <span class="term-emoji">🏥</span>
+      <span class="term-name">2. Injury Impact</span>
+      <span class="term-badge" style="background:rgba(239,68,68,0.15);color:var(--red);">REAL-TIME</span>
+    </div>
+    <p>When a key teammate is OUT, the remaining players see a usage spike. If Karl-Anthony Towns is injured, Brunson's scoring projection goes UP because he'll handle the ball more and take more shots. ORACLE tracks 85+ injuries across 28 NBA teams and automatically adjusts.</p>
+  </div>
+
+  <div class="term" style="border-left: 3px solid var(--green); border-color: var(--border); border-left-color: var(--green);">
+    <div class="term-header">
+      <span class="term-emoji">🎰</span>
+      <span class="term-name">3. Vegas Game Environment</span>
+      <span class="term-badge" style="background:rgba(16,185,129,0.15);color:var(--green);">KEY FACTOR</span>
+    </div>
+    <p>The Vegas game total tells you how many points are expected in the game. A total of 235 = fast, high-scoring game = more stats for everyone. A total of 208 = slow grind = fewer stats. ORACLE also checks the spread — if a team is favored by 15+, starters may sit the 4th quarter (fewer minutes = lower stats).</p>
+  </div>
+
+  <div class="term" style="border-left: 3px solid var(--accent); border-color: var(--border); border-left-color: var(--accent);">
+    <div class="term-header">
+      <span class="term-emoji">🏃</span>
+      <span class="term-name">4. Pace / Tempo</span>
+      <span class="term-badge" style="background:rgba(56,189,248,0.15);color:var(--accent);">MATCHUP</span>
+    </div>
+    <p>Different teams play at different speeds. The Indiana Pacers play at 104 possessions per game (fast). The Cleveland Cavaliers play at 97 (slow). More possessions = more opportunities to score. ORACLE calculates the expected game pace by averaging both teams' pace ratings.</p>
+  </div>
+
+  <div class="term" style="border-left: 3px solid var(--purple); border-color: var(--border); border-left-color: var(--purple);">
+    <div class="term-header">
+      <span class="term-emoji">🔄</span>
+      <span class="term-name">5. Usage Redistribution</span>
+      <span class="term-badge" style="background:rgba(167,139,250,0.15);color:var(--purple);">INJURY-LINKED</span>
+    </div>
+    <p>When a teammate is out, their "usage" (percentage of team plays they were involved in) gets redistributed to the remaining players. Points are most affected (1:1 boost), assists moderately (0.6x), rebounds least (0.3x). This catches the "X is out so Y will eat" plays that casual bettors miss.</p>
+  </div>
+
+  <div class="term" style="border-left: 3px solid #f472b6; border-color: var(--border); border-left-color: #f472b6;">
+    <div class="term-header">
+      <span class="term-emoji">📉</span>
+      <span class="term-name">6. Regression to Mean</span>
+      <span class="term-badge" style="background:rgba(244,114,182,0.15);color:#f472b6;">SMART</span>
+    </div>
+    <p>If a player is performing 1.5+ standard deviations above their average (hot streak), they're statistically likely to cool off. If they're 1.5+ below (cold streak), they're likely to bounce back. ORACLE detects these extremes and adjusts the projection toward the player's true average.</p>
+  </div>
+
+  <div class="term" style="border-left: 3px solid #22d3ee; border-color: var(--border); border-left-color: #22d3ee;">
+    <div class="term-header">
+      <span class="term-emoji">🏠</span>
+      <span class="term-name">7. Home / Away Venue</span>
+      <span class="term-badge" style="background:rgba(34,211,238,0.15);color:#22d3ee;">CONTEXT</span>
+    </div>
+    <p>Players perform differently at home vs. away. Some have a +5 point home advantage. ORACLE checks whether tonight's game is home or away and applies a 15% weighted adjustment based on the player's venue-specific history.</p>
+  </div>
+
+  <div class="example">
+    <div class="example-label">How it all combines — example</div>
+    <strong>Jalen Brunson vs Boston Celtics (Home)</strong><br><br>
+    Season avg: 25.3 pts → Weighted avg (recent games weighted more): 26.4 pts<br>
+    Injury boost (Miles McBride OUT): +1.2 pts<br>
+    Pace adjustment (average matchup): 0%<br>
+    Regression: stable (no adjustment)<br>
+    Home boost: +0.5 pts<br><br>
+    <strong style="color:var(--accent)">Final projection: 28.1 pts → OVER 27.5 (Grade A, 78% confidence)</strong>
+  </div>
+</div>
+
+<!-- Section 5: +EV -->
+<div class="section" id="ev">
+  <div class="section-label">05 — The Secret Weapon</div>
+  <h2>+EV Betting: How Pros Actually Make Money</h2>
+  <p>This is the single most important concept in sports betting. Most people think you need to pick winners 70% of the time to profit. <strong>That's wrong.</strong> You need to find bets where the odds are in your favor — that's called <strong>Positive Expected Value (+EV)</strong>.</p>
+
+  <h3>The coin flip analogy</h3>
+  <p>Imagine a coin flip. It's 50/50. If someone offers you +150 odds on heads (bet $100 to win $150), you should take it every time — even though you'll lose half the time. Over 100 flips, you'll win about 50 × $150 = $7,500 and lose about 50 × $100 = $5,000. Net profit: $2,500. That's +EV.</p>
+  <p>Now imagine the opposite: someone offers -200 on heads (bet $200 to win $100). Even though heads hits 50% of the time, you'll lose money over time. That's -EV.</p>
+
+  <h3>How ORACLE finds +EV</h3>
+  <p>ORACLE uses a technique called <strong>"devigging"</strong> — removing the sportsbook's profit margin from the odds to find the <strong>true probability</strong> of an outcome. Then it compares that fair probability to each sportsbook's odds. If a book is offering better odds than the fair probability suggests, that's a +EV bet.</p>
+
+  <div class="example">
+    <div class="example-label">+EV Example</div>
+    <strong>LaMelo Ball UNDER 21.5 Points</strong><br><br>
+    Market consensus (devigged): 55.2% chance of UNDER<br>
+    Bovada offers UNDER at +105 odds (implied: 48.8%)<br>
+    Edge: 55.2% - 48.8% = <strong style="color:var(--green)">+6.4% edge</strong><br>
+    EV per $100 bet: <strong style="color:var(--green)">+$12.80</strong><br>
+    Grade: <strong style="color:var(--green)">A</strong>
+  </div>
+
+  <p>You don't need to win every bet. Over 100 bets with a 5% average edge, you'll profit significantly even if you only win 55% of them. <strong>This is how professional bettors think.</strong></p>
+</div>
+
+<!-- Section 6: Tabs -->
+<div class="section" id="tabs">
+  <div class="section-label">06 — Using the App</div>
+  <h2>Every Tab Explained</h2>
+
+  <div class="term">
+    <div class="term-header"><span class="term-emoji">📋</span><span class="term-name">Player Props</span></div>
+    <p>The main view. Shows all available player props across 8+ sportsbooks, compared side by side. Click any row to expand and see every book's line + odds. Filter by stat type (Points, Rebounds, Assists, 3PT, PRA) or by signal type (Demons, Goblins, Edges). Each prop is enriched with hit rate, L5/L10 averages, and confidence scoring.</p>
+  </div>
+
+  <div class="term">
+    <div class="term-header"><span class="term-emoji">🔥</span><span class="term-name">Top Picks</span></div>
+    <p>ORACLE's best picks of the day. The 7-factor prediction model analyzes every prop, scores them by confidence (0-95%), and surfaces the top 8 with the strongest signals. Each pick shows the projection, hit rate, reasoning, and a letter grade (A+ through C). Updated every 15 minutes.</p>
+  </div>
+
+  <div class="term">
+    <div class="term-header"><span class="term-emoji">📈</span><span class="term-name">Trending</span></div>
+    <p>Props ranked by "trending score" — a composite of multiple signals converging on the same prop. A prop gets a high trending score when it has Demon detection (high book consensus), line movement (lines shifting in one direction), AI confidence, and edge detection all pointing the same way.</p>
+  </div>
+
+  <div class="term">
+    <div class="term-header"><span class="term-emoji">📚</span><span class="term-name">History</span></div>
+    <p>Tracks every pick ORACLE makes and grades them against final box scores. Shows your hit rate over time, broken down by confidence tier, stat type, and pick direction (OVER vs UNDER). This is how you track whether the model is actually performing.</p>
+  </div>
+
+  <div class="term">
+    <div class="term-header"><span class="term-emoji">⚡</span><span class="term-name">Scores</span></div>
+    <p>Live and upcoming games from ESPN. Shows start times, broadcast channels, and team matchups. Click any game to get an AI prediction for the winner.</p>
+  </div>
+
+  <div class="term">
+    <div class="term-header"><span class="term-emoji">🔮</span><span class="term-name">Predictor</span></div>
+    <p>Same game list as Scores, but focused on game outcome predictions. Click "AI Predict" to get a detailed analysis of each game including win probability, key matchups, and scoring projection.</p>
+  </div>
+
+  <div class="term">
+    <div class="term-header"><span class="term-emoji">🏅</span><span class="term-name">Standings</span></div>
+    <p>Current season standings pulled from ESPN. Shows wins, losses, win percentage, and conference/division rankings for all teams.</p>
+  </div>
+</div>
+
+<!-- Section 7: Signals -->
+<div class="section" id="signals">
+  <div class="section-label">07 — Reading the Signals</div>
+  <h2>Demons, Goblins & Edges</h2>
+  <p>ORACLE detects three types of line anomalies that represent different kinds of opportunities:</p>
+
+  <div class="term" style="border-left: 3px solid var(--amber); border-color: var(--border); border-left-color: var(--amber);">
+    <div class="term-header">
+      <span class="term-emoji">🔥</span>
+      <span class="term-name">DEMON Lines</span>
+      <span class="term-badge" style="background:rgba(245,158,11,0.15);color:var(--amber);">HIGH VALUE</span>
+    </div>
+    <p>A Demon is detected when <strong>6+ sportsbooks agree</strong> on a line AND there's a 2+ point spread between books. This means the market has strong consensus but at least one book is offering a significantly different number — that outlier book is where the value is. Demons are the highest-conviction plays.</p>
+  </div>
+
+  <div class="term" style="border-left: 3px solid var(--text-muted); border-color: var(--border); border-left-color: var(--text-muted);">
+    <div class="term-header">
+      <span class="term-emoji">👹</span>
+      <span class="term-name">GOBLIN Lines</span>
+      <span class="term-badge" style="background:rgba(100,116,139,0.15);color:var(--text-muted);">CAUTION</span>
+    </div>
+    <p>A Goblin is a <strong>warning signal</strong>. It appears when there's a 3+ point line spread between books, suggesting the market is confused or a sharp bettor has moved one side aggressively. Goblins can be traps set by sportsbooks. Approach with caution.</p>
+  </div>
+
+  <div class="term" style="border-left: 3px solid var(--green); border-color: var(--border); border-left-color: var(--green);">
+    <div class="term-header">
+      <span class="term-emoji">⚡</span>
+      <span class="term-name">EDGE Detected</span>
+      <span class="term-badge" style="background:rgba(16,185,129,0.15);color:var(--green);">OPPORTUNITY</span>
+    </div>
+    <p>An Edge is found when the line spread between books is 1.5+ points. One book's number is significantly different from the others, creating a mathematical edge for bettors who take the right side at the right book.</p>
+  </div>
+
+  <h3>DvP Smash Spots</h3>
+  <div class="term" style="border-left: 3px solid var(--green); border-color: var(--border); border-left-color: var(--green);">
+    <div class="term-header">
+      <span class="term-emoji">🟢</span>
+      <span class="term-name">Smash Spot</span>
+    </div>
+    <p>A Smash Spot appears when a player's position faces a defense ranked in the bottom 10 (worst) for allowing that stat. For example, if the Hornets allow the 3rd most points to point guards, and Brunson is a PG playing the Hornets tonight — that's a Smash Spot. Target these aggressively.</p>
+  </div>
+
+  <h3>Favorability Scale</h3>
+  <div class="scale">
+    <span class="scale-item" style="background:rgba(16,185,129,0.2);color:var(--green);">🟢 Smash (1-10)</span>
+    <span class="scale-item" style="background:rgba(245,158,11,0.2);color:var(--amber);">🟡 Favorable (11-15)</span>
+    <span class="scale-item" style="background:rgba(148,163,184,0.2);color:var(--text-secondary);">⚪ Neutral (16-20)</span>
+    <span class="scale-item" style="background:rgba(249,115,22,0.2);color:#f97316;">🟠 Tough (21-25)</span>
+    <span class="scale-item" style="background:rgba(239,68,68,0.2);color:var(--red);">🔴 Avoid (26-30)</span>
+  </div>
+</div>
+
+<!-- Section 8: Sports -->
+<div class="section" id="sports">
+  <div class="section-label">08 — Coverage</div>
+  <h2>13 Sports Covered</h2>
+  <table class="data-table">
+    <tr><th>Sport</th><th>Data Source</th><th>Features</th></tr>
+    <tr><td>🏀 NBA</td><td>ESPN + Odds API</td><td>Props, scores, standings, DvP, predictions, +EV</td></tr>
+    <tr><td>🏈 NFL</td><td>ESPN + Odds API</td><td>Props, scores, standings, predictions</td></tr>
+    <tr><td>⚾ MLB</td><td>ESPN + Odds API</td><td>Props, scores, standings</td></tr>
+    <tr><td>🏒 NHL</td><td>ESPN + Odds API</td><td>Props, scores, standings</td></tr>
+    <tr><td>⚽ EPL / La Liga</td><td>ESPN</td><td>Scores, standings</td></tr>
+    <tr><td>🏀 NCAAM / 🏈 NCAAF</td><td>ESPN</td><td>Scores, standings</td></tr>
+    <tr><td>🎮 CDL</td><td>PandaScore + BreakingPoint</td><td>Match predictions, per-map kill props, standings</td></tr>
+    <tr><td>🎯 Valorant / 💣 CS2</td><td>PandaScore</td><td>Matches, standings, predictions</td></tr>
+    <tr><td>⚔️ LoL / 🛡️ Dota2</td><td>PandaScore</td><td>Matches, standings, predictions</td></tr>
+  </table>
+</div>
+
+<!-- Section 9: Accuracy -->
+<div class="section" id="accuracy">
+  <div class="section-label">09 — Tracking Results</div>
+  <h2>Accuracy & Auto-Grading</h2>
+  <p>ORACLE doesn't just make picks — it tracks whether they actually hit. Every 30 minutes, the auto-grader checks finished games and compares our picks against the final box scores.</p>
+
+  <h3>Confidence tiers</h3>
+  <table class="data-table">
+    <tr><th>Grade</th><th>Confidence</th><th>What it means</th></tr>
+    <tr><td style="color:var(--green);font-weight:700;">A+</td><td>80%+</td><td>Strongest possible signal. Multiple factors aligned. Target aggressively.</td></tr>
+    <tr><td style="color:var(--green);">A</td><td>70-79%</td><td>Strong pick. Most factors agree. High conviction.</td></tr>
+    <tr><td style="color:var(--accent);">B+</td><td>60-69%</td><td>Good pick. Solid edge detected. Worth consideration.</td></tr>
+    <tr><td style="color:var(--accent);">B</td><td>55-59%</td><td>Decent pick. Some factors align. Moderate conviction.</td></tr>
+    <tr><td style="color:var(--amber);">C+</td><td>50-54%</td><td>Marginal edge. Proceed with caution.</td></tr>
+    <tr><td style="color:var(--text-muted);">C</td><td>Below 50%</td><td>Weak signal. Skip or reduce bet size.</td></tr>
+  </table>
+
+  <h3>Backtesting</h3>
+  <p>You can test the model's historical accuracy for any player using the backtest endpoint. It runs the prediction model against every game in the season and reports how often it would have been right. This is how we validate and improve the model over time.</p>
+</div>
+
+<!-- Section 10: Tips -->
+<div class="section" id="tips">
+  <div class="section-label">10 — Maximize Your Edge</div>
+  <h2>Tips for Best Results</h2>
+
+  <div class="term">
+    <div class="term-header"><span class="term-emoji">1️⃣</span><span class="term-name">Focus on +EV, not win rate</span></div>
+    <p>A 55% win rate at +EV odds makes more money than a 70% win rate at bad odds. Check the +EV tab and prioritize bets with 3%+ edge.</p>
+  </div>
+
+  <div class="term">
+    <div class="term-header"><span class="term-emoji">2️⃣</span><span class="term-name">Target Grade A and A+ picks only</span></div>
+    <p>Don't bet every pick. Focus on the highest-confidence selections where multiple factors (injuries, pace, trend, hit rate) all point the same direction.</p>
+  </div>
+
+  <div class="term">
+    <div class="term-header"><span class="term-emoji">3️⃣</span><span class="term-name">Check injuries before every bet</span></div>
+    <p>ORACLE auto-adjusts for injuries, but check the injury report anyway. A star player going from "Questionable" to "Out" right before game time changes everything.</p>
+  </div>
+
+  <div class="term">
+    <div class="term-header"><span class="term-emoji">4️⃣</span><span class="term-name">Rebounds are the most predictable stat</span></div>
+    <p>Research shows rebounds are less variable than points and assists. Rebounding props are the easiest to predict because they correlate strongly with position, minutes, and matchup. If you're new, start here.</p>
+  </div>
+
+  <div class="term">
+    <div class="term-header"><span class="term-emoji">5️⃣</span><span class="term-name">Beware of blowouts</span></div>
+    <p>If a team is favored by 12+ points, starters may sit the entire 4th quarter. That's 12 minutes of stats gone. ORACLE flags blowout risk — if you see it, lean UNDER on the favorite's starters.</p>
+  </div>
+
+  <div class="term">
+    <div class="term-header"><span class="term-emoji">6️⃣</span><span class="term-name">Shop for the best line</span></div>
+    <p>ORACLE shows you every book's line. ALWAYS take the best available. If FanDuel has Over 27.5 at -110 and DraftKings has Over 26.5 at -110, DraftKings is strictly better. One point can be the difference between hitting and missing.</p>
+  </div>
+
+  <div class="term">
+    <div class="term-header"><span class="term-emoji">7️⃣</span><span class="term-name">Track your results</span></div>
+    <p>The History tab tracks everything. After a week, check your hit rate by confidence tier. If Grade A+ picks are hitting at 65%+, your process is working. If not, adjust your filters.</p>
+  </div>
+</div>
+
+<!-- CTA -->
+<div class="cta-box">
+  <p style="color:var(--text-secondary);margin-bottom:24px;font-size:16px;">Ready to start finding edges?</p>
+  <a href="/app/" class="cta-btn">Open ORACLE →</a>
+</div>
+
+</div>
+
+<!-- Footer -->
+<div class="footer">
+  <div class="container">
+    <p>⟁ ORACLE — AI Sports Prediction Engine</p>
+    <p style="margin-top:8px;">For entertainment & research only. Not financial or gambling advice.</p>
+  </div>
+</div>
+
+</body>
+</html>
