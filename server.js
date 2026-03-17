@@ -54,6 +54,13 @@ try {
   console.log("backtester not found, skipping backtest endpoint");
 }
 
+let refData = null;
+try {
+  refData = require("./services/referee-data");
+} catch (e) {
+  console.log("referee-data not found, skipping ref tracking");
+}
+
 const app = express();
 const PORT = process.env.PORT || 3001;
 
@@ -113,6 +120,9 @@ if (autoGrader) {
 if (backtester) {
   app.use("/api/backtest", backtester.router);
 }
+if (refData) {
+  app.use("/api/refs", refData.router);
+}
 
 // === Start services ===
 dvp.startRefresh();
@@ -126,6 +136,9 @@ if (smartPicks && smartPicks.startRefresh) {
 }
 if (autoGrader && autoGrader.startGrading) {
   autoGrader.startGrading();
+}
+if (refData && refData.startRefresh) {
+  refData.startRefresh();
 }
 
 // Start CDL stats scraper (every 30 min)
@@ -198,6 +211,7 @@ app.get("/api/health", (req, res) => {
       smart_picks: smartPicks ? "active" : "not loaded",
       auto_grader: autoGrader ? "active" : "not loaded",
       backtester: backtester ? "available" : "not loaded",
+      referee_data: refData ? "active" : "not loaded",
       enrichment: enrichment ? "active" : "not loaded",
     },
   });
