@@ -33,6 +33,13 @@ try {
   console.log("prop-enrichment not found, skipping enriched props endpoint");
 }
 
+let smartPicks = null;
+try {
+  smartPicks = require("./services/smart-picks");
+} catch (e) {
+  console.log("smart-picks not found, skipping model-powered picks");
+}
+
 const app = express();
 const PORT = process.env.PORT || 3001;
 
@@ -52,6 +59,29 @@ app.use("/api/dvp", dvp.router);
 app.use("/api/esports", esports.router);
 app.use("/api/analytics", analytics.router);
 app.use("/api/predict", predictionModel.router);
+// === Smart picks fallback — if /api/props/:sport/picks fails, use model picks ===
+app.get("/api/props/:sport/picks", async (req, res, next) => {
+  // Let the original handler try first
+  const originalJson = res.json.bind(res);
+  res.json = function(data) {
+    // If original picks failed, try smart picks
+    if (data && data.available === false && smartPicks) {
+      const cached = smartPicks.picksCache[req.params.sport];
+      if (cached && cached.picks && cached.picks.length > 0) {
+        return originalJson({
+          available: true,
+          picks: cached.picks,
+          summary: `${cached.picks.length} model-powered picks`,
+          sport: req.params.sport,
+          timestamp: cached.lastUpdated,
+          source: 'prediction-model',
+        });
+      }
+    }
+    return originalJson(data);
+  };
+  next();
+});
 app.use("/api/props", propsRoutes);
 app.use("/api/live", liveRoutes);
 app.use("/api/cdl", cdlPropsRoutes);
@@ -60,6 +90,9 @@ app.use("/api/trending", trendingPicks.router);
 if (enrichment) {
   app.use("/api/enriched", enrichment.router);
 }
+if (smartPicks) {
+  app.use("/api/picks", smartPicks.router);
+}
 
 // === Start services ===
 dvp.startRefresh();
@@ -67,6 +100,9 @@ analytics.startRefresh();
 predictionModel.startRefresh();
 if (enrichment && enrichment.startCache) {
   enrichment.startCache();
+}
+if (smartPicks && smartPicks.startRefresh) {
+  smartPicks.startRefresh();
 }
 
 // Start CDL stats scraper (every 30 min)
@@ -136,6 +172,7 @@ app.get("/api/health", (req, res) => {
       pandascore: process.env.PANDASCORE_API_KEY ? "configured" : "missing",
       discord_alerts: process.env.DISCORD_WEBHOOK_URL ? "configured" : "missing",
       prediction_model: "active",
+      smart_picks: smartPicks ? "active" : "not loaded",
       enrichment: enrichment ? "active" : "not loaded",
     },
   });
