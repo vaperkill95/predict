@@ -17,7 +17,6 @@ const { scrapeCDLStats } = require("./services/cdl-stats-scraper");
 const lineMovement = require("./services/line-movement");
 const trendingPicks = require("./services/trending-picks");
 const discordAlerts = require("./services/discord-alerts");
-const analytics = require("./services/enhanced-analytics");
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -38,8 +37,6 @@ const esports = require('./services/esports-expansion');
 app.use('/api/dvp', dvp.router);
 app.use('/api/esports', esports.router);
 dvp.startRefresh();
-app.use("/api/analytics", analytics.router);
-analytics.startRefresh();
 app.use("/api/props", propsRoutes);
 app.use("/api/live", liveRoutes);
 app.use("/api/cdl", cdlPropsRoutes);
