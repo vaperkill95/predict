@@ -54,6 +54,7 @@ setInterval(() => scrapeCDLStats().catch(() => {}), 30 * 60 * 1000);
 lineMovement.startTracking(async (sport) => {
   try {
     const { getPlayerProps } = require("./services/props");
+const predictionModel = require("./services/prediction-model");
     return await getPlayerProps(sport);
   } catch (err) {
     console.error(`Movement: failed to fetch ${sport}:`, err.message);
@@ -143,5 +144,7 @@ app.use((err, req, res, next) => {
   console.error("Server error:", err.message);
   res.status(err.status || 500).json({ error: err.message || "Internal server error" });
 });
+
+predictionModel.startRefresh();
 
 app.listen(PORT, () => console.log(`⟁ ORACLE v2 running on port ${PORT}`));
