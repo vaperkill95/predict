@@ -40,6 +40,20 @@ try {
   console.log("smart-picks not found, skipping model-powered picks");
 }
 
+let autoGrader = null;
+try {
+  autoGrader = require("./services/auto-grader");
+} catch (e) {
+  console.log("auto-grader not found, skipping pick grading");
+}
+
+let backtester = null;
+try {
+  backtester = require("./services/backtester");
+} catch (e) {
+  console.log("backtester not found, skipping backtest endpoint");
+}
+
 const app = express();
 const PORT = process.env.PORT || 3001;
 
@@ -93,6 +107,12 @@ if (enrichment) {
 if (smartPicks) {
   app.use("/api/picks", smartPicks.router);
 }
+if (autoGrader) {
+  app.use("/api/grades", autoGrader.router);
+}
+if (backtester) {
+  app.use("/api/backtest", backtester.router);
+}
 
 // === Start services ===
 dvp.startRefresh();
@@ -103,6 +123,9 @@ if (enrichment && enrichment.startCache) {
 }
 if (smartPicks && smartPicks.startRefresh) {
   smartPicks.startRefresh();
+}
+if (autoGrader && autoGrader.startGrading) {
+  autoGrader.startGrading();
 }
 
 // Start CDL stats scraper (every 30 min)
@@ -173,6 +196,8 @@ app.get("/api/health", (req, res) => {
       discord_alerts: process.env.DISCORD_WEBHOOK_URL ? "configured" : "missing",
       prediction_model: "active",
       smart_picks: smartPicks ? "active" : "not loaded",
+      auto_grader: autoGrader ? "active" : "not loaded",
+      backtester: backtester ? "available" : "not loaded",
       enrichment: enrichment ? "active" : "not loaded",
     },
   });
