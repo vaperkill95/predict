@@ -39,6 +39,8 @@ app.use('/api/dvp', dvp.router);
 app.use('/api/esports', esports.router);
 dvp.startRefresh();
 app.use("/api/analytics", analytics.router);
+app.use("/api/predict", predictionModel.router);
+app.use("/api/enriched", enrichment.router)
 analytics.startRefresh();
 app.use("/api/props", propsRoutes);
 app.use("/api/live", liveRoutes);
