@@ -132,7 +132,7 @@ a:hover { text-decoration: underline; }
     <a class="toc-item" href="#basics"><span class="num">01</span> The Basics</a>
     <a class="toc-item" href="#props"><span class="num">02</span> Player Props Explained</a>
     <a class="toc-item" href="#terminology"><span class="num">03</span> Terminology Guide</a>
-    <a class="toc-item" href="#prediction"><span class="num">04</span> The 7-Factor Prediction Model</a>
+    <a class="toc-item" href="#prediction"><span class="num">04</span> The 10-Factor Prediction Model</a>
     <a class="toc-item" href="#ev"><span class="num">05</span> +EV Betting Explained</a>
     <a class="toc-item" href="#pro-tools"><span class="num">05b</span> Pro Bettor Toolkit (CLV, RLM, Kelly)</a>
     <a class="toc-item" href="#tabs"><span class="num">06</span> Every Tab Explained</a>
@@ -353,8 +353,8 @@ a:hover { text-decoration: underline; }
 <!-- Section 4: Prediction Model -->
 <div class="section" id="prediction">
   <div class="section-label">04 — The Brain</div>
-  <h2>The 7-Factor Prediction Model</h2>
-  <p>ORACLE doesn't just look at averages. It combines 7 different factors to generate a projection for every prop. Here's each one:</p>
+  <h2>The 10-Factor Prediction Model</h2>
+  <p>ORACLE doesn't just look at averages. It combines 10 different factors to generate a projection for every prop. The first 7 are the foundation, and the 3 newest factors (Minutes, Game Script, Opponent History) are what push accuracy to the next level. Here's each one:</p>
 
   <div class="term" style="border-left: 3px solid var(--amber); border-color: var(--border); border-left-color: var(--amber);">
     <div class="term-header">
@@ -419,15 +419,44 @@ a:hover { text-decoration: underline; }
     <p>Players perform differently at home vs. away. Some have a +5 point home advantage. ORACLE checks whether tonight's game is home or away and applies a 15% weighted adjustment based on the player's venue-specific history.</p>
   </div>
 
+  <div class="term" style="border-left: 3px solid var(--green); border-color: var(--border); border-left-color: var(--green);">
+    <div class="term-header">
+      <span class="term-emoji">⏱️</span>
+      <span class="term-name">8. Minutes Projection</span>
+      <span class="term-badge" style="background:rgba(16,185,129,0.15);color:var(--green);">NEW — CRITICAL</span>
+    </div>
+    <p>Minutes played is the <strong>#1 predictor</strong> of player stats — more minutes = more stats, period. ORACLE projects expected minutes by checking the Vegas spread (15+ point favorites = starters sit Q4, losing 4-6 minutes), back-to-back games (starters lose ~2.5 min from fatigue), and teammate injuries (remaining players absorb more minutes). A player projected for 28 min instead of their usual 35 means roughly 20% fewer stats — this single adjustment prevents the most common reason picks miss.</p>
+  </div>
+
+  <div class="term" style="border-left: 3px solid var(--amber); border-color: var(--border); border-left-color: var(--amber);">
+    <div class="term-header">
+      <span class="term-emoji">📋</span>
+      <span class="term-name">9. Game Script Analysis</span>
+      <span class="term-badge" style="background:rgba(245,158,11,0.15);color:var(--amber);">NEW — HIGH IMPACT</span>
+    </div>
+    <p>The Vegas game total and spread predict the entire game environment. A total of 235 with a 1.5 spread = fast, competitive shootout where starters play full minutes and everyone's stats are boosted. A total of 210 with a 12 spread = slow blowout where starters sit early. ORACLE calculates separate multipliers for points, rebounds, and assists based on the predicted game script.</p>
+  </div>
+
+  <div class="term" style="border-left: 3px solid var(--red); border-color: var(--border); border-left-color: var(--red);">
+    <div class="term-header">
+      <span class="term-emoji">🆚</span>
+      <span class="term-name">10. Opponent-Specific History</span>
+      <span class="term-badge" style="background:rgba(239,68,68,0.15);color:var(--red);">NEW — HIGH IMPACT</span>
+    </div>
+    <p>Some players consistently dominate certain opponents. Brunson might average 25 points overall but 31 points vs the Celtics — that's a +6 opponent-specific advantage. ORACLE checks the player's game log for previous matchups against tonight's opponent and applies a 20% weighted adjustment when there's a meaningful historical pattern (2+ game sample, 2+ point difference from season average).</p>
+  </div>
+
   <div class="example">
-    <div class="example-label">How it all combines — example</div>
+    <div class="example-label">How all 10 factors combine — example</div>
     <strong>Jalen Brunson vs Boston Celtics (Home)</strong><br><br>
     Season avg: 25.3 pts → Weighted avg (recent games weighted more): 26.4 pts<br>
     Injury boost (Miles McBride OUT): +1.2 pts<br>
-    Pace adjustment (average matchup): 0%<br>
-    Regression: stable (no adjustment)<br>
-    Home boost: +0.5 pts<br><br>
-    <strong style="color:var(--accent)">Final projection: 28.1 pts → OVER 27.5 (Grade A, 78% confidence)</strong>
+    Home boost: +0.5 pts<br>
+    <strong style="color:var(--green)">Minutes projection: 36.2 min (close game, +1.5 from avg) → ×1.04 multiplier</strong><br>
+    <strong style="color:var(--amber)">Game script: Total 228, spread -2.5 = competitive shootout → ×1.03 boost</strong><br>
+    <strong style="color:var(--red)">Vs Celtics history: avg 31.2 in 4 games (+5.9 vs season) → +1.2 adj</strong><br>
+    Regression: stable (no adjustment)<br><br>
+    <strong style="color:var(--accent)">Final projection: 30.4 pts → OVER 27.5 (Grade A+, 85% confidence)</strong>
   </div>
 </div>
 

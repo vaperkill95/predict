@@ -110,6 +110,13 @@ try {
   console.log("advanced-tools not found, skipping middling/arb scanner");
 }
 
+let predV2 = null;
+try {
+  predV2 = require("./services/prediction-engine-v2");
+} catch (e) {
+  console.log("prediction-engine-v2 not found, skipping enhanced predictions");
+}
+
 const app = express();
 const PORT = process.env.PORT || 3001;
 
@@ -193,6 +200,9 @@ if (potd) {
 }
 if (advancedTools) {
   app.use("/api/advanced", advancedTools.router);
+}
+if (predV2) {
+  app.use("/api/predict-v2", predV2.router);
 }
 
 // === Start services ===
@@ -306,6 +316,7 @@ app.get("/api/health", (req, res) => {
       sharp_tools: sharpTools ? "active" : "not loaded",
       pick_of_the_day: potd ? "active" : "not loaded",
       advanced_tools: advancedTools ? "active" : "not loaded",
+      prediction_v2: predV2 ? "active" : "not loaded",
       enrichment: enrichment ? "active" : "not loaded",
     },
   });
