@@ -172,16 +172,38 @@ async function generatePickOfTheDay() {
   // Fetch all data sources in parallel
   let props = [], evBets = [], dvpData = [];
   try {
-    // Try enriched props first, fall back to regular props
-    let propsResp;
-    try {
-      propsResp = await axios.get(`http://localhost:${PORT}/api/enriched/props/nba`, { timeout: 20000 });
-    } catch (enrichErr) {
-      console.log('[POTD] Enriched endpoint unavailable, trying regular props...');
-      propsResp = await axios.get(`http://localhost:${PORT}/api/props/nba`, { timeout: 15000 });
-    }
-    const evResp = await axios.get(`http://localhost:${PORT}/api/ev/bets?minEdge=0`, { timeout: 10000 }).catch(() => ({ data: { bets: [] } }));
+    // Fetch regular props
+    const propsResp = await axios.get(`http://localhost:${PORT}/api/props/nba`, { timeout: 15000 });
     props = propsResp.data?.props || [];
+
+    // Manually apply enrichment from the middleware cache
+    let enrichmentData = {};
+    try {
+      const enhancedProps = require('./enhanced-props-middleware');
+      if (enhancedProps && enhancedProps.getEnrichmentData) {
+        enrichmentData = await enhancedProps.getEnrichmentData('nba');
+      }
+    } catch (e) {
+      console.log('[POTD] Could not load enrichment module, checking for inline analytics...');
+    }
+
+    // Merge enrichment into props
+    if (Object.keys(enrichmentData).length > 0) {
+      props = props.map(prop => {
+        const key = `${prop.player}|${prop.market}`;
+        const analytics = enrichmentData[key];
+        if (analytics) {
+          return { ...prop, enriched: true, analytics };
+        }
+        return prop;
+      });
+      console.log(`[POTD] Enriched ${props.filter(p => p.enriched).length} of ${props.length} props from cache`);
+    } else if (props.some(p => p.enriched)) {
+      // Props already came enriched (middleware ran on external request previously)
+      console.log(`[POTD] Props already enriched: ${props.filter(p => p.enriched).length}`);
+    }
+
+    const evResp = await axios.get(`http://localhost:${PORT}/api/ev/bets?minEdge=0`, { timeout: 10000 }).catch(() => ({ data: { bets: [] } }));
     evBets = evResp.data?.bets || [];
   } catch (e) {
     console.warn('[POTD] Data fetch failed:', e.message);
