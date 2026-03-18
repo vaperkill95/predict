@@ -89,6 +89,13 @@ try {
   console.log("ev-engine not found, skipping +EV scanner");
 }
 
+let sharpTools = null;
+try {
+  sharpTools = require("./services/sharp-tools");
+} catch (e) {
+  console.log("sharp-tools not found, skipping pro bettor tools");
+}
+
 const app = express();
 const PORT = process.env.PORT || 3001;
 
@@ -164,6 +171,9 @@ if (modelTuner) {
 if (evEngine) {
   app.use("/api/ev", evEngine.router);
 }
+if (sharpTools) {
+  app.use("/api/sharp", sharpTools.router);
+}
 
 // === Start services ===
 dvp.startRefresh();
@@ -183,6 +193,9 @@ if (refData && refData.startRefresh) {
 }
 if (evEngine && evEngine.startScanning) {
   evEngine.startScanning();
+}
+if (sharpTools && sharpTools.startTracking) {
+  sharpTools.startTracking();
 }
 
 // Start CDL stats scraper (every 30 min)
@@ -264,6 +277,7 @@ app.get("/api/health", (req, res) => {
       wnba: wnba ? "active" : "not loaded",
       model_tuner: modelTuner ? "available" : "not loaded",
       ev_engine: evEngine ? "active" : "not loaded",
+      sharp_tools: sharpTools ? "active" : "not loaded",
       enrichment: enrichment ? "active" : "not loaded",
     },
   });

@@ -132,6 +132,7 @@ a:hover { text-decoration: underline; }
     <a class="toc-item" href="#terminology"><span class="num">03</span> Terminology Guide</a>
     <a class="toc-item" href="#prediction"><span class="num">04</span> The 7-Factor Prediction Model</a>
     <a class="toc-item" href="#ev"><span class="num">05</span> +EV Betting Explained</a>
+    <a class="toc-item" href="#pro-tools"><span class="num">05b</span> Pro Bettor Toolkit (CLV, RLM, Kelly)</a>
     <a class="toc-item" href="#tabs"><span class="num">06</span> Every Tab Explained</a>
     <a class="toc-item" href="#signals"><span class="num">07</span> Demons, Goblins & Edges</a>
     <a class="toc-item" href="#sports"><span class="num">08</span> Sports Coverage</a>
@@ -296,6 +297,54 @@ a:hover { text-decoration: underline; }
     </div>
     <p>A bet where the math is in your favor long-term. If the true probability of winning is higher than what the odds imply, you have +EV. This is how professional bettors make money — they don't need to win every bet, they need to consistently find +EV spots.</p>
   </div>
+
+  <div class="term">
+    <div class="term-header">
+      <span class="term-emoji">📐</span>
+      <span class="term-name">CLV (Closing Line Value)</span>
+    </div>
+    <p>The #1 metric pro bettors track. It measures whether you got a <strong>better number than where the line closed</strong> at game time. If you took OVER 27.5 and the line closed at 26.5, you have +1.0 CLV — you got an easier number to hit. Consistently beating the closing line is the single best predictor of long-term profitability.</p>
+  </div>
+
+  <div class="term">
+    <div class="term-header">
+      <span class="term-emoji">🔄</span>
+      <span class="term-name">RLM (Reverse Line Movement)</span>
+    </div>
+    <p>When a line moves in the <strong>opposite direction</strong> of where the public is betting. Example: 80% of bets are on the OVER, but the line moves UP (making OVER harder to hit). This means sharp money — big professional bets — is coming in on the UNDER, overriding the public volume. RLM is the #1 way sharps find edges.</p>
+  </div>
+
+  <div class="term">
+    <div class="term-header">
+      <span class="term-emoji">💨</span>
+      <span class="term-name">Steam Move</span>
+    </div>
+    <p>When a line moves 1+ point across multiple sportsbooks within minutes. This signals large coordinated sharp money hitting the market. Steam moves happen fast — by the time most people notice, the value is already gone. ORACLE detects these in real-time.</p>
+  </div>
+
+  <div class="term">
+    <div class="term-header">
+      <span class="term-emoji">📊</span>
+      <span class="term-name">Kelly Criterion</span>
+    </div>
+    <p>A mathematical formula that tells you the <strong>optimal bet size</strong> based on your edge. Instead of betting the same amount every time, Kelly sizes bets proportionally — bigger when your edge is bigger, smaller when it's marginal. Most pros use "quarter Kelly" (25% of the formula's suggestion) for safety.</p>
+  </div>
+
+  <div class="term">
+    <div class="term-header">
+      <span class="term-emoji">🔗</span>
+      <span class="term-name">Correlated Parlay</span>
+    </div>
+    <p>A parlay where the legs are statistically connected. If Game Total goes OVER, Player Points is more likely to go OVER too (more scoring = more individual stats). Smart parlays use positive correlations. Bad parlays combine uncorrelated or negatively correlated legs.</p>
+  </div>
+
+  <div class="term">
+    <div class="term-header">
+      <span class="term-emoji">🏦</span>
+      <span class="term-name">Devigging</span>
+    </div>
+    <p>The process of removing the sportsbook's profit margin (vig) from the odds to find the "true" fair probability. If a book offers -110 on both OVER and UNDER, the vig makes both sides slightly negative EV. Devigging reveals the actual 50/50 line. ORACLE uses the Power method — the same math used by professional syndicates.</p>
+  </div>
 </div>
 
 <!-- Section 4: Prediction Model -->
@@ -403,6 +452,103 @@ a:hover { text-decoration: underline; }
   </div>
 
   <p>You don't need to win every bet. Over 100 bets with a 5% average edge, you'll profit significantly even if you only win 55% of them. <strong>This is how professional bettors think.</strong></p>
+</div>
+
+<!-- Section 5.5: Pro Tools -->
+<div class="section" id="pro-tools">
+  <div class="section-label">05b — Pro Bettor Toolkit</div>
+  <h2>Sharp Tools: What the Pros Use</h2>
+  <p>These are the exact techniques professional sports bettors use daily. Sharp App charges $49/mo and OddsJam charges $99/mo for these features. ORACLE gives them to you free.</p>
+
+  <h3>Closing Line Value (CLV) Tracker</h3>
+  <div class="term" style="border-left: 3px solid var(--green); border-color: var(--border); border-left-color: var(--green);">
+    <div class="term-header">
+      <span class="term-emoji">📐</span>
+      <span class="term-name">Why CLV Matters More Than Win Rate</span>
+      <span class="term-badge" style="background:rgba(16,185,129,0.15);color:var(--green);">THE #1 METRIC</span>
+    </div>
+    <p>Professional bettors don't obsess over their win percentage — they track CLV. If you consistently get better numbers than where the line closes, you will profit long-term. Period. It doesn't matter if you lose tonight's bet.</p>
+    <p style="margin-top:12px;">ORACLE snapshots every prop line every 15 minutes. When the game starts, it compares the line you could have taken vs. the closing line. If you bet early and the line moved in your direction, you had CLV — you got value the market hadn't priced in yet.</p>
+  </div>
+
+  <div class="example">
+    <div class="example-label">CLV Example</div>
+    <strong>You bet Brunson OVER 27.5 at 2:00 PM</strong><br>
+    By game time (7:30 PM), the line dropped to OVER 26.5<br>
+    Your CLV: <strong style="color:var(--green)">+1.0 point</strong> — you got a harder number but the market moved your way, confirming sharp value.<br><br>
+    <strong>CLV Grade: A</strong> — The market agreed with your bet after you placed it.
+  </div>
+
+  <h3>Reverse Line Movement (RLM)</h3>
+  <div class="term" style="border-left: 3px solid var(--red); border-color: var(--border); border-left-color: var(--red);">
+    <div class="term-header">
+      <span class="term-emoji">🔄</span>
+      <span class="term-name">Following the Smart Money</span>
+      <span class="term-badge" style="background:rgba(239,68,68,0.15);color:var(--red);">SHARP SIGNAL</span>
+    </div>
+    <p>Reverse Line Movement is the most powerful signal in sports betting. It tells you where professional bettors are putting their money — even when they're going against the crowd.</p>
+    <p style="margin-top:12px;">ORACLE detects RLM by comparing the direction of line movement against the juice (which indicates where public money is flowing). When the line moves opposite to public sentiment, sharp money is on the other side.</p>
+  </div>
+
+  <div class="example">
+    <div class="example-label">RLM Example</div>
+    <strong>LaMelo Ball Points — Over/Under 21.5</strong><br>
+    Public: 75% of bets are on OVER (everyone thinks LaMelo will score big)<br>
+    Line movement: Line moves from 21.5 → 22.5 (UP)<br>
+    This makes OVER <em>harder</em> to hit, despite the public betting OVER<br><br>
+    <strong style="color:var(--red)">RLM DETECTED → Sharp money is on UNDER</strong><br>
+    The sportsbooks moved the line UP because large professional bets came in on UNDER, overriding the volume of public OVER bets.
+  </div>
+
+  <h3>Kelly Criterion Calculator</h3>
+  <div class="term" style="border-left: 3px solid var(--accent); border-color: var(--border); border-left-color: var(--accent);">
+    <div class="term-header">
+      <span class="term-emoji">🏦</span>
+      <span class="term-name">How Much to Bet</span>
+      <span class="term-badge" style="background:rgba(56,189,248,0.15);color:var(--accent);">BANKROLL</span>
+    </div>
+    <p>Most people bet the same amount on every play. Pros don't. They use the Kelly Criterion to size bets proportionally to their edge. A 5% edge gets a bigger bet than a 2% edge. A 0% edge gets $0.</p>
+    <p style="margin-top:12px;">ORACLE calculates Kelly for every +EV bet it finds. It recommends quarter-Kelly (the safest option) with a hard cap at 5% of bankroll to prevent overexposure.</p>
+  </div>
+
+  <div class="example">
+    <div class="example-label">Kelly Example</div>
+    <strong>Bankroll: $1,000 | Edge: 5% | Odds: -110</strong><br>
+    Full Kelly suggests: 2.7% of bankroll ($27)<br>
+    Quarter Kelly (recommended): 0.68% ($6.80)<br>
+    Half Kelly (moderate): 1.35% ($13.50)<br><br>
+    <strong style="color:var(--accent)">Recommended bet: $6.80</strong> — small enough to survive losing streaks, large enough to compound over time.
+  </div>
+
+  <h3>Correlation Engine</h3>
+  <div class="term" style="border-left: 3px solid var(--purple); border-color: var(--border); border-left-color: var(--purple);">
+    <div class="term-header">
+      <span class="term-emoji">🔗</span>
+      <span class="term-name">Smart Parlay Building</span>
+      <span class="term-badge" style="background:rgba(167,139,250,0.15);color:var(--purple);">PARLAYS</span>
+    </div>
+    <p>Most parlay builders treat each leg as independent — but they're not. If the game total goes OVER, individual player points are more likely to go OVER too. That's a <strong>positive correlation</strong> (r=0.72). ORACLE identifies which props move together so you can build smarter parlays.</p>
+  </div>
+
+  <p><strong>Top correlations to use:</strong></p>
+  <table class="data-table">
+    <tr><th>Combo</th><th>Correlation</th><th>Why It Works</th></tr>
+    <tr><td>Game Total OVER + Player Points OVER</td><td style="color:var(--green)">+0.72 (strong)</td><td>More total scoring = more individual scoring</td></tr>
+    <tr><td>Close spread + Starter stat OVER</td><td style="color:var(--green)">+0.55</td><td>Close games = full 4th quarter minutes</td></tr>
+    <tr><td>Key player OUT + Teammate OVER</td><td style="color:var(--green)">+0.62</td><td>Usage redistributes to remaining players</td></tr>
+    <tr><td>Fast pace + OVER rebounds</td><td style="color:var(--green)">+0.58</td><td>More shots = more rebound opportunities</td></tr>
+  </table>
+  <p style="margin-top:12px;"><strong style="color:var(--red)">Avoid:</strong> Both opposing stars OVER points (-0.30 correlation). If one team dominates, the other star typically underperforms.</p>
+
+  <h3>Steam Move Detection</h3>
+  <div class="term" style="border-left: 3px solid var(--amber); border-color: var(--border); border-left-color: var(--amber);">
+    <div class="term-header">
+      <span class="term-emoji">💨</span>
+      <span class="term-name">Catching Sharp Money in Real-Time</span>
+      <span class="term-badge" style="background:rgba(245,158,11,0.15);color:var(--amber);">REAL-TIME</span>
+    </div>
+    <p>A steam move happens when a line shifts 1+ points across multiple sportsbooks within minutes. This means coordinated professional money is hitting the market. ORACLE scans for steam moves every 15 minutes and alerts you to the direction sharp money is flowing. Act fast — steam value disappears quickly as books adjust.</p>
+  </div>
 </div>
 
 <!-- Section 6: Tabs -->
