@@ -117,6 +117,13 @@ try {
   console.log("prediction-engine-v2 not found, skipping enhanced predictions");
 }
 
+let accuracyBoost = null;
+try {
+  accuracyBoost = require("./services/accuracy-boost");
+} catch (e) {
+  console.log("accuracy-boost not found, skipping additional accuracy factors");
+}
+
 const app = express();
 const PORT = process.env.PORT || 3001;
 
@@ -204,6 +211,9 @@ if (advancedTools) {
 if (predV2) {
   app.use("/api/predict-v2", predV2.router);
 }
+if (accuracyBoost) {
+  app.use("/api/accuracy", accuracyBoost.router);
+}
 
 // === Start services ===
 dvp.startRefresh();
@@ -232,6 +242,9 @@ if (potd && potd.startRefresh) {
 }
 if (advancedTools && advancedTools.startScanning) {
   advancedTools.startScanning();
+}
+if (accuracyBoost && accuracyBoost.startMonitoring) {
+  accuracyBoost.startMonitoring();
 }
 
 // Start CDL stats scraper (every 30 min)
@@ -317,6 +330,7 @@ app.get("/api/health", (req, res) => {
       pick_of_the_day: potd ? "active" : "not loaded",
       advanced_tools: advancedTools ? "active" : "not loaded",
       prediction_v2: predV2 ? "active" : "not loaded",
+      accuracy_boost: accuracyBoost ? "active" : "not loaded",
       enrichment: enrichment ? "active" : "not loaded",
     },
   });
