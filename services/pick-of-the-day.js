@@ -169,42 +169,22 @@ function generateReasoning(prop, scoring) {
 async function generatePickOfTheDay() {
   console.log('[POTD] Generating Pick of the Day...');
 
-  // Fetch all data sources in parallel
-  let props = [], evBets = [], dvpData = [];
+  let props = [], evBets = [];
   try {
-    // Fetch regular props
-    const propsResp = await axios.get(`http://localhost:${PORT}/api/props/nba`, { timeout: 15000 });
+    // Use external URL if available so enrichment middleware runs
+    // Fall back to localhost
+    const baseUrl = process.env.RAILWAY_PUBLIC_DOMAIN 
+      ? `https://${process.env.RAILWAY_PUBLIC_DOMAIN}`
+      : `http://localhost:${PORT}`;
+    
+    console.log(`[POTD] Fetching props from ${baseUrl}`);
+    const propsResp = await axios.get(`${baseUrl}/api/props/nba`, { timeout: 20000 });
     props = propsResp.data?.props || [];
-
-    // Manually apply enrichment from the middleware cache
-    let enrichmentData = {};
-    try {
-      const enhancedProps = require('./enhanced-props-middleware');
-      if (enhancedProps && enhancedProps.getEnrichmentData) {
-        enrichmentData = await enhancedProps.getEnrichmentData('nba');
-      }
-    } catch (e) {
-      console.log('[POTD] Could not load enrichment module, checking for inline analytics...');
-    }
-
-    // Merge enrichment into props
-    if (Object.keys(enrichmentData).length > 0) {
-      props = props.map(prop => {
-        const key = `${prop.player}|${prop.market}`;
-        const analytics = enrichmentData[key];
-        if (analytics) {
-          return { ...prop, enriched: true, analytics };
-        }
-        return prop;
-      });
-      console.log(`[POTD] Enriched ${props.filter(p => p.enriched).length} of ${props.length} props from cache`);
-    } else if (props.some(p => p.enriched)) {
-      // Props already came enriched (middleware ran on external request previously)
-      console.log(`[POTD] Props already enriched: ${props.filter(p => p.enriched).length}`);
-    }
 
     const evResp = await axios.get(`http://localhost:${PORT}/api/ev/bets?minEdge=0`, { timeout: 10000 }).catch(() => ({ data: { bets: [] } }));
     evBets = evResp.data?.bets || [];
+
+    console.log(`[POTD] Got ${props.length} props, ${props.filter(p => p.enriched).length} enriched`);
   } catch (e) {
     console.warn('[POTD] Data fetch failed:', e.message);
     return null;
@@ -219,7 +199,7 @@ async function generatePickOfTheDay() {
     const hasAnalytics = prop.enriched && prop.analytics && prop.analytics.hitRate;
     if (!hasAnalytics && prop.bookCount < 4) continue; // Need either analytics or good book coverage
 
-    const scoring = scoreSignals(prop, evBets, dvpData);
+    const scoring = scoreSignals(prop, evBets, []);
 
     scored.push({
       player: prop.player,
