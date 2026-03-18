@@ -1,0 +1,501 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Sharp Dashboard — ORACLE</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;600;800;900&family=DM+Sans:wght@400;500;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg-deep:#060a14;--bg-base:#0a0f1a;--bg-card:#111827;--bg-elevated:#1a2236;
+  --border:#1e293b;--text-primary:#f1f5f9;--text-secondary:#94a3b8;--text-muted:#64748b;
+  --accent:#38bdf8;--green:#10b981;--red:#ef4444;--amber:#f59e0b;--purple:#a78bfa;
+  --font-display:"Outfit",sans-serif;--font-body:"DM Sans",sans-serif;--font-mono:"JetBrains Mono",monospace;
+}
+*{margin:0;padding:0;box-sizing:border-box;}
+body{background:var(--bg-deep);color:var(--text-primary);font-family:var(--font-body);line-height:1.6;}
+a{color:var(--accent);text-decoration:none;}
+a:hover{text-decoration:underline;}
+.container{max-width:1100px;margin:0 auto;padding:0 20px;}
+
+/* Nav */
+.nav{padding:16px 0;border-bottom:1px solid var(--border);background:var(--bg-base);position:sticky;top:0;z-index:100;backdrop-filter:blur(12px);}
+.nav-inner{display:flex;align-items:center;justify-content:space-between;max-width:1100px;margin:0 auto;padding:0 20px;}
+.nav-logo{font-family:var(--font-display);font-weight:900;font-size:18px;letter-spacing:2px;}
+.nav-logo span{color:var(--accent);}
+.nav-links{display:flex;gap:8px;}
+.nav-links a{font-size:13px;color:var(--text-secondary);font-weight:500;padding:6px 14px;border-radius:6px;transition:all .2s;}
+.nav-links a:hover,.nav-links a.active{background:var(--bg-elevated);color:var(--text-primary);text-decoration:none;}
+
+/* Header */
+.page-header{padding:40px 0 24px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:16px;}
+.page-header h1{font-family:var(--font-display);font-weight:900;font-size:28px;}
+.page-header h1 span{background:linear-gradient(135deg,var(--accent),var(--purple));-webkit-background-clip:text;-webkit-text-fill-color:transparent;}
+.refresh-btn{padding:8px 16px;background:var(--bg-elevated);border:1px solid var(--border);border-radius:8px;color:var(--text-secondary);font-size:12px;font-family:var(--font-mono);cursor:pointer;transition:all .2s;}
+.refresh-btn:hover{border-color:var(--accent);color:var(--text-primary);}
+
+/* Tabs */
+.tab-bar{display:flex;gap:4px;margin-bottom:24px;overflow-x:auto;padding-bottom:4px;}
+.tab{padding:8px 16px;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;color:var(--text-muted);background:transparent;border:1px solid transparent;transition:all .2s;white-space:nowrap;}
+.tab:hover{color:var(--text-secondary);background:var(--bg-card);}
+.tab.active{color:var(--text-primary);background:var(--bg-card);border-color:var(--border);}
+.tab .badge{display:inline-block;padding:1px 6px;border-radius:4px;font-size:10px;font-family:var(--font-mono);margin-left:4px;}
+
+/* Stats bar */
+.stats-bar{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:12px;margin-bottom:24px;}
+.stat-card{background:var(--bg-card);border:1px solid var(--border);border-radius:10px;padding:16px;}
+.stat-card .label{font-size:11px;color:var(--text-muted);font-family:var(--font-mono);text-transform:uppercase;letter-spacing:.5px;}
+.stat-card .value{font-family:var(--font-display);font-weight:800;font-size:24px;margin-top:4px;}
+
+/* Cards */
+.card{background:var(--bg-card);border:1px solid var(--border);border-radius:12px;overflow:hidden;margin-bottom:12px;transition:all .2s;}
+.card:hover{border-color:rgba(56,189,248,.3);}
+.card-header{padding:14px 18px;display:flex;align-items:center;justify-content:space-between;gap:12px;}
+.card-player{font-weight:700;font-size:15px;}
+.card-market{font-size:12px;color:var(--text-muted);}
+.card-badge{padding:3px 10px;border-radius:6px;font-family:var(--font-mono);font-size:11px;font-weight:600;}
+.card-body{padding:0 18px 14px;display:grid;grid-template-columns:repeat(auto-fill,minmax(120px,1fr));gap:8px;}
+.card-stat{padding:8px 10px;background:var(--bg-elevated);border-radius:6px;}
+.card-stat .k{font-size:10px;color:var(--text-muted);font-family:var(--font-mono);text-transform:uppercase;}
+.card-stat .v{font-size:14px;font-weight:600;margin-top:2px;}
+
+/* Kelly calculator */
+.kelly-form{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:12px;margin-bottom:20px;}
+.kelly-form label{display:block;font-size:11px;color:var(--text-muted);font-family:var(--font-mono);margin-bottom:4px;}
+.kelly-form input,.kelly-form select{width:100%;padding:10px 12px;background:var(--bg-elevated);border:1px solid var(--border);border-radius:8px;color:var(--text-primary);font-family:var(--font-mono);font-size:14px;}
+.kelly-form input:focus,.kelly-form select:focus{outline:none;border-color:var(--accent);}
+.kelly-btn{padding:10px 24px;background:var(--accent);color:#000;border:none;border-radius:8px;font-family:var(--font-display);font-weight:700;cursor:pointer;font-size:14px;transition:all .2s;}
+.kelly-btn:hover{transform:translateY(-1px);}
+.kelly-result{background:var(--bg-card);border:1px solid var(--border);border-radius:12px;padding:20px;margin-top:16px;}
+
+/* Bet tracker */
+.tracker-form{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px;margin-bottom:16px;}
+.tracker-form input,.tracker-form select{padding:8px 10px;background:var(--bg-elevated);border:1px solid var(--border);border-radius:6px;color:var(--text-primary);font-family:var(--font-mono);font-size:12px;}
+.tracker-table{width:100%;border-collapse:collapse;font-size:13px;}
+.tracker-table th{text-align:left;padding:8px 12px;background:var(--bg-elevated);font-family:var(--font-mono);font-size:10px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.5px;}
+.tracker-table td{padding:8px 12px;border-bottom:1px solid var(--border);}
+.tracker-stats{display:flex;gap:24px;margin-bottom:16px;flex-wrap:wrap;}
+.tracker-stat{font-family:var(--font-mono);font-size:13px;color:var(--text-secondary);}
+.tracker-stat strong{color:var(--text-primary);}
+
+/* Correlation table */
+.corr-card{padding:14px 18px;background:var(--bg-card);border:1px solid var(--border);border-radius:10px;margin-bottom:10px;}
+.corr-card .corr-name{font-weight:700;font-size:14px;margin-bottom:4px;}
+.corr-card .corr-reason{font-size:12px;color:var(--text-secondary);}
+.corr-strength{font-family:var(--font-mono);font-size:12px;padding:2px 8px;border-radius:4px;}
+
+/* Section panel */
+.panel{display:none;}
+.panel.active{display:block;}
+
+/* Empty state */
+.empty{text-align:center;padding:40px 20px;color:var(--text-muted);font-size:14px;}
+.empty .icon{font-size:32px;margin-bottom:8px;}
+
+/* Loading */
+.loading{text-align:center;padding:30px;color:var(--text-muted);font-size:13px;}
+.spinner{display:inline-block;width:16px;height:16px;border:2px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:spin .6s linear infinite;margin-right:8px;vertical-align:middle;}
+@keyframes spin{to{transform:rotate(360deg);}}
+
+@media(max-width:640px){
+  .stats-bar{grid-template-columns:1fr 1fr;}
+  .card-body{grid-template-columns:1fr 1fr;}
+  .kelly-form{grid-template-columns:1fr 1fr;}
+  .page-header h1{font-size:22px;}
+}
+</style>
+</head>
+<body>
+
+<nav class="nav">
+  <div class="nav-inner">
+    <div class="nav-logo">⟁ <span>ORACLE</span> SHARP</div>
+    <div class="nav-links">
+      <a href="/">Home</a>
+      <a href="/app/">App</a>
+      <a href="/how-it-works">Guide</a>
+      <a href="/sharp" class="active">Sharp Tools</a>
+    </div>
+  </div>
+</nav>
+
+<div class="container">
+  <div class="page-header">
+    <h1>⚡ <span>Sharp Dashboard</span></h1>
+    <button class="refresh-btn" onclick="refreshAll()">↻ Refresh</button>
+  </div>
+
+  <!-- Stats Bar -->
+  <div class="stats-bar" id="statsBar">
+    <div class="stat-card"><div class="label">+EV Bets</div><div class="value" id="statEV">—</div></div>
+    <div class="stat-card"><div class="label">RLM Alerts</div><div class="value" id="statRLM">—</div></div>
+    <div class="stat-card"><div class="label">Steam Moves</div><div class="value" id="statSteam">—</div></div>
+    <div class="stat-card"><div class="label">Props Tracked</div><div class="value" id="statTracked">—</div></div>
+    <div class="stat-card"><div class="label">Your Bets</div><div class="value" id="statBets">—</div></div>
+    <div class="stat-card"><div class="label">Hit Rate</div><div class="value" id="statHitRate">—</div></div>
+  </div>
+
+  <!-- Tab bar -->
+  <div class="tab-bar">
+    <div class="tab active" data-tab="ev">💰 +EV Bets <span class="badge" style="background:rgba(16,185,129,.15);color:var(--green)" id="evBadge">0</span></div>
+    <div class="tab" data-tab="rlm">🔄 RLM Alerts <span class="badge" style="background:rgba(239,68,68,.15);color:var(--red)" id="rlmBadge">0</span></div>
+    <div class="tab" data-tab="steam">💨 Steam Moves <span class="badge" style="background:rgba(245,158,11,.15);color:var(--amber)" id="steamBadge">0</span></div>
+    <div class="tab" data-tab="kelly">🏦 Kelly Calc</div>
+    <div class="tab" data-tab="tracker">📋 Bet Tracker</div>
+    <div class="tab" data-tab="corr">🔗 Correlations</div>
+    <div class="tab" data-tab="clv">📐 CLV</div>
+  </div>
+
+  <!-- +EV Panel -->
+  <div class="panel active" id="panel-ev">
+    <div class="loading" id="evLoading"><span class="spinner"></span>Scanning for +EV bets...</div>
+    <div id="evList"></div>
+  </div>
+
+  <!-- RLM Panel -->
+  <div class="panel" id="panel-rlm">
+    <div class="loading" id="rlmLoading"><span class="spinner"></span>Detecting reverse line movement...</div>
+    <div id="rlmList"></div>
+  </div>
+
+  <!-- Steam Panel -->
+  <div class="panel" id="panel-steam">
+    <div class="loading" id="steamLoading"><span class="spinner"></span>Detecting steam moves...</div>
+    <div id="steamList"></div>
+  </div>
+
+  <!-- Kelly Panel -->
+  <div class="panel" id="panel-kelly">
+    <h3 style="font-family:var(--font-display);font-weight:700;margin-bottom:16px;">Kelly Criterion Calculator</h3>
+    <p style="color:var(--text-secondary);font-size:13px;margin-bottom:20px;">Calculate optimal bet size based on your bankroll and edge. Uses quarter-Kelly by default (safest option recommended by pros).</p>
+    <div class="kelly-form">
+      <div><label>Bankroll ($)</label><input type="number" id="kellyBankroll" value="1000" min="1"></div>
+      <div><label>Edge (%)</label><input type="number" id="kellyEdge" value="5" min="0.1" max="50" step="0.1"></div>
+      <div><label>Odds (American)</label><input type="number" id="kellyOdds" value="-110"></div>
+      <div><label>Kelly Fraction</label><select id="kellyFraction"><option value="quarter" selected>Quarter (safest)</option><option value="half">Half</option><option value="full">Full (risky)</option><option value="eighth">Eighth (ultra-safe)</option></select></div>
+    </div>
+    <button class="kelly-btn" onclick="calcKelly()">Calculate Bet Size</button>
+    <div id="kellyResult"></div>
+  </div>
+
+  <!-- Bet Tracker Panel -->
+  <div class="panel" id="panel-tracker">
+    <h3 style="font-family:var(--font-display);font-weight:700;margin-bottom:12px;">Bet Tracker</h3>
+    <p style="color:var(--text-secondary);font-size:13px;margin-bottom:16px;">Log your bets and track your performance over time. Data is saved in your browser.</p>
+    <div class="tracker-stats" id="trackerStats"></div>
+    <div class="tracker-form">
+      <input type="text" id="betPlayer" placeholder="Player name">
+      <input type="text" id="betMarket" placeholder="Market (pts, reb...)">
+      <input type="number" id="betLine" placeholder="Line" step="0.5">
+      <select id="betDirection"><option value="OVER">OVER</option><option value="UNDER">UNDER</option></select>
+      <input type="number" id="betOdds" placeholder="Odds (-110)" value="-110">
+      <input type="number" id="betAmount" placeholder="Amount ($)" step="1">
+      <select id="betResult"><option value="pending">Pending</option><option value="hit">✅ Hit</option><option value="miss">❌ Miss</option><option value="push">↔ Push</option></select>
+      <button class="kelly-btn" onclick="addBet()" style="height:auto;">+ Add Bet</button>
+    </div>
+    <div id="trackerTable"></div>
+  </div>
+
+  <!-- Correlations Panel -->
+  <div class="panel" id="panel-corr">
+    <h3 style="font-family:var(--font-display);font-weight:700;margin-bottom:12px;">Parlay Correlation Engine</h3>
+    <p style="color:var(--text-secondary);font-size:13px;margin-bottom:20px;">Use positive correlations to build smarter parlays. Avoid negative correlations that work against each other.</p>
+    <div id="corrList"></div>
+  </div>
+
+  <!-- CLV Panel -->
+  <div class="panel" id="panel-clv">
+    <h3 style="font-family:var(--font-display);font-weight:700;margin-bottom:12px;">Closing Line Value Tracker</h3>
+    <p style="color:var(--text-secondary);font-size:13px;margin-bottom:20px;">Lines being tracked for CLV. After games start, ORACLE compares opening vs closing lines to measure if you got value.</p>
+    <div class="loading" id="clvLoading"><span class="spinner"></span>Loading tracked lines...</div>
+    <div id="clvList"></div>
+  </div>
+</div>
+
+<div style="padding:40px 20px;text-align:center;color:var(--text-muted);font-size:11px;border-top:1px solid var(--border);margin-top:40px;">
+  ⟁ ORACLE — For entertainment & research only. Not financial or gambling advice.
+</div>
+
+<script>
+// ============ TAB SWITCHING ============
+document.querySelectorAll('.tab').forEach(tab => {
+  tab.addEventListener('click', () => {
+    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+    document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+    tab.classList.add('active');
+    document.getElementById('panel-' + tab.dataset.tab).classList.add('active');
+  });
+});
+
+// ============ DATA FETCHING ============
+async function fetchJSON(url) {
+  try { const r = await fetch(url); return await r.json(); } catch(e) { return null; }
+}
+
+function renderCard(data, type) {
+  const colors = { 'A+': 'var(--green)', 'A': 'var(--green)', 'B+': 'var(--accent)', 'B': 'var(--accent)', 'C+': 'var(--amber)', 'C': 'var(--amber)', 'strong': 'var(--green)', 'moderate': 'var(--amber)', 'weak': 'var(--text-muted)', 'high': 'var(--red)', 'NEGATIVE': 'var(--red)' };
+  const gradeColor = colors[data.grade || data.strength || data.urgency] || 'var(--text-secondary)';
+  const badge = data.grade || data.strength || data.urgency || '';
+
+  let stats = '';
+  if (type === 'ev') {
+    stats = `
+      <div class="card-stat"><div class="k">Edge</div><div class="v" style="color:var(--green)">+${data.edgePercent}%</div></div>
+      <div class="card-stat"><div class="k">EV/$100</div><div class="v" style="color:var(--green)">$${data.evPer100}</div></div>
+      <div class="card-stat"><div class="k">Book</div><div class="v">${data.book}</div></div>
+      <div class="card-stat"><div class="k">Odds</div><div class="v">${data.oddsDisplay}</div></div>
+      <div class="card-stat"><div class="k">Fair Prob</div><div class="v">${(data.fairProb*100).toFixed(1)}%</div></div>
+      <div class="card-stat"><div class="k">Kelly ¼</div><div class="v">${(data.kellyQuarter*100).toFixed(2)}%</div></div>
+    `;
+  } else if (type === 'rlm') {
+    stats = `
+      <div class="card-stat"><div class="k">Public Side</div><div class="v">${data.publicSide}</div></div>
+      <div class="card-stat"><div class="k">Sharp Side</div><div class="v" style="color:var(--green)">${data.sharpSide}</div></div>
+      <div class="card-stat"><div class="k">Movement</div><div class="v">${data.lineMovement > 0 ? '+' : ''}${data.lineMovement}</div></div>
+      <div class="card-stat"><div class="k">Direction</div><div class="v">${data.lineDirection}</div></div>
+    `;
+  } else if (type === 'steam') {
+    stats = `
+      <div class="card-stat"><div class="k">Movement</div><div class="v">${data.movement > 0 ? '+' : ''}${data.movement}</div></div>
+      <div class="card-stat"><div class="k">Sharp Side</div><div class="v" style="color:var(--green)">${data.sharpSide}</div></div>
+      <div class="card-stat"><div class="k">Time</div><div class="v">${data.timeMinutes} min</div></div>
+      <div class="card-stat"><div class="k">Books</div><div class="v">${data.booksAffected}</div></div>
+    `;
+  }
+
+  return `<div class="card">
+    <div class="card-header">
+      <div><div class="card-player">${data.player}</div><div class="card-market">${data.market} — ${data.pick || data.sharpSide || ''} ${data.line || ''}</div></div>
+      <div class="card-badge" style="background:${gradeColor}22;color:${gradeColor}">${badge}</div>
+    </div>
+    <div class="card-body">${stats}</div>
+    ${data.analysis ? `<div style="padding:0 18px 14px;font-size:12px;color:var(--text-secondary)">${data.analysis}</div>` : ''}
+  </div>`;
+}
+
+// ============ +EV BETS ============
+async function loadEV() {
+  const d = await fetchJSON('/api/ev/bets?minEdge=0.5');
+  document.getElementById('evLoading').style.display = 'none';
+  const el = document.getElementById('evList');
+  if (!d || !d.bets || d.bets.length === 0) {
+    el.innerHTML = `<div class="empty"><div class="icon">💰</div>No +EV bets found right now.<br>Check back during pre-game hours (11 AM - 7 PM ET) when lines are most active.</div>`;
+    document.getElementById('evBadge').textContent = '0';
+    document.getElementById('statEV').textContent = '0';
+    return;
+  }
+  document.getElementById('evBadge').textContent = d.bets.length;
+  document.getElementById('statEV').textContent = d.bets.length;
+  el.innerHTML = d.bets.map(b => renderCard(b, 'ev')).join('');
+}
+
+// ============ RLM ============
+async function loadRLM() {
+  const d = await fetchJSON('/api/sharp/rlm');
+  document.getElementById('rlmLoading').style.display = 'none';
+  const el = document.getElementById('rlmList');
+  if (!d || !d.alerts || d.alerts.length === 0) {
+    el.innerHTML = `<div class="empty"><div class="icon">🔄</div>No reverse line movement detected yet.<br>RLM builds over time as lines shift. Check back in 30-60 minutes.</div>`;
+    document.getElementById('rlmBadge').textContent = '0';
+    document.getElementById('statRLM').textContent = '0';
+    return;
+  }
+  document.getElementById('rlmBadge').textContent = d.alerts.length;
+  document.getElementById('statRLM').textContent = d.alerts.length;
+  el.innerHTML = d.alerts.map(a => renderCard(a, 'rlm')).join('');
+}
+
+// ============ STEAM ============
+async function loadSteam() {
+  const d = await fetchJSON('/api/sharp/steam');
+  document.getElementById('steamLoading').style.display = 'none';
+  const el = document.getElementById('steamList');
+  if (!d || !d.moves || d.moves.length === 0) {
+    el.innerHTML = `<div class="empty"><div class="icon">💨</div>No steam moves detected yet.<br>Steam moves happen when lines shift rapidly across multiple books. Check back during peak betting hours.</div>`;
+    document.getElementById('steamBadge').textContent = '0';
+    document.getElementById('statSteam').textContent = '0';
+    return;
+  }
+  document.getElementById('steamBadge').textContent = d.moves.length;
+  document.getElementById('statSteam').textContent = d.moves.length;
+  el.innerHTML = d.moves.map(m => renderCard(m, 'steam')).join('');
+}
+
+// ============ CLV ============
+async function loadCLV() {
+  const d = await fetchJSON('/api/sharp/clv/all');
+  document.getElementById('clvLoading').style.display = 'none';
+  const el = document.getElementById('clvList');
+  document.getElementById('statTracked').textContent = d?.tracked || 0;
+  if (!d || !d.series || d.series.length === 0) {
+    el.innerHTML = `<div class="empty"><div class="icon">📐</div>No lines tracked yet.<br>ORACLE snapshots lines every 15 minutes. Check back soon.</div>`;
+    return;
+  }
+  el.innerHTML = d.series.slice(0, 30).map(s => {
+    const moveColor = s.movement > 0 ? 'var(--red)' : s.movement < 0 ? 'var(--green)' : 'var(--text-muted)';
+    return `<div class="card"><div class="card-header">
+      <div><div class="card-player">${s.player}</div><div class="card-market">${s.market}</div></div>
+      <div style="text-align:right"><div style="font-size:12px;color:var(--text-muted)">Movement</div><div style="font-family:var(--font-mono);font-weight:700;color:${moveColor}">${s.movement > 0 ? '+' : ''}${s.movement}</div></div>
+    </div><div class="card-body">
+      <div class="card-stat"><div class="k">Opening</div><div class="v">${s.openingLine}</div></div>
+      <div class="card-stat"><div class="k">Current</div><div class="v">${s.currentLine}</div></div>
+      <div class="card-stat"><div class="k">Snapshots</div><div class="v">${s.snapshots}</div></div>
+      <div class="card-stat"><div class="k">Hours</div><div class="v">${s.hoursTracked}h</div></div>
+    </div></div>`;
+  }).join('');
+}
+
+// ============ KELLY ============
+async function calcKelly() {
+  const bankroll = document.getElementById('kellyBankroll').value;
+  const edge = document.getElementById('kellyEdge').value / 100;
+  const odds = document.getElementById('kellyOdds').value;
+  const fraction = document.getElementById('kellyFraction').value;
+  const d = await fetchJSON(`/api/sharp/kelly?bankroll=${bankroll}&edge=${edge}&odds=${odds}&fraction=${fraction}`);
+  if (!d) return;
+  const el = document.getElementById('kellyResult');
+  el.innerHTML = `<div class="kelly-result">
+    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:12px;">
+      <div class="card-stat"><div class="k">Recommended Bet</div><div class="v" style="color:var(--green);font-size:20px;">$${d.recommendedBet}</div></div>
+      <div class="card-stat"><div class="k">Risk %</div><div class="v">${d.riskPercent}%</div></div>
+      <div class="card-stat"><div class="k">Potential Win</div><div class="v" style="color:var(--green)">+$${d.potentialWin}</div></div>
+      <div class="card-stat"><div class="k">Potential Loss</div><div class="v" style="color:var(--red)">-$${d.potentialLoss}</div></div>
+      <div class="card-stat"><div class="k">Full Kelly %</div><div class="v">${d.kellyFullPercent}%</div></div>
+      <div class="card-stat"><div class="k">Adjusted Kelly %</div><div class="v">${d.kellyAdjustedPercent}%</div></div>
+    </div>
+    <div style="margin-top:14px;padding:12px;background:var(--bg-elevated);border-radius:8px;font-size:13px;color:var(--text-secondary);">${d.advice}${d.wasCapped ? ' <span style="color:var(--amber)">(Capped at 5% max)</span>' : ''}</div>
+  </div>`;
+}
+
+// ============ CORRELATIONS ============
+async function loadCorrelations() {
+  const d = await fetchJSON('/api/sharp/correlations');
+  if (!d) return;
+  const el = document.getElementById('corrList');
+  let html = '<h4 style="color:var(--green);font-family:var(--font-display);font-weight:700;margin-bottom:12px;">✅ Positive Correlations (Use in Parlays)</h4>';
+  for (const c of d.positive) {
+    html += `<div class="corr-card"><div style="display:flex;justify-content:space-between;align-items:center;">
+      <div class="corr-name">${c.description}</div>
+      <span class="corr-strength" style="background:rgba(16,185,129,.15);color:var(--green)">r = +${c.strength}</span>
+    </div><div class="corr-reason">${c.reason}</div></div>`;
+  }
+  html += '<h4 style="color:var(--red);font-family:var(--font-display);font-weight:700;margin:20px 0 12px;">⛔ Negative Correlations (Avoid in Parlays)</h4>';
+  for (const c of d.negative) {
+    html += `<div class="corr-card"><div style="display:flex;justify-content:space-between;align-items:center;">
+      <div class="corr-name">${c.description}</div>
+      <span class="corr-strength" style="background:rgba(239,68,68,.15);color:var(--red)">r = ${c.strength}</span>
+    </div><div class="corr-reason">${c.reason}</div></div>`;
+  }
+  if (d.tips) {
+    html += '<div style="margin-top:20px;padding:16px;background:var(--bg-card);border:1px solid var(--border);border-radius:10px;">';
+    html += '<h4 style="font-family:var(--font-display);font-weight:700;margin-bottom:8px;">💡 Parlay Tips</h4>';
+    html += d.tips.map(t => `<div style="font-size:13px;color:var(--text-secondary);padding:4px 0;">• ${t}</div>`).join('');
+    html += '</div>';
+  }
+  el.innerHTML = html;
+}
+
+// ============ BET TRACKER ============
+let myBets = JSON.parse(localStorage.getItem('oracle_bets') || '[]');
+
+function saveBets() { localStorage.setItem('oracle_bets', JSON.stringify(myBets)); }
+
+function addBet() {
+  const bet = {
+    id: Date.now(),
+    date: new Date().toISOString().split('T')[0],
+    player: document.getElementById('betPlayer').value,
+    market: document.getElementById('betMarket').value,
+    line: parseFloat(document.getElementById('betLine').value) || 0,
+    direction: document.getElementById('betDirection').value,
+    odds: parseInt(document.getElementById('betOdds').value) || -110,
+    amount: parseFloat(document.getElementById('betAmount').value) || 0,
+    result: document.getElementById('betResult').value,
+  };
+  if (!bet.player) return;
+  myBets.unshift(bet);
+  saveBets();
+  renderTracker();
+  // Clear form
+  document.getElementById('betPlayer').value = '';
+  document.getElementById('betMarket').value = '';
+  document.getElementById('betLine').value = '';
+  document.getElementById('betAmount').value = '';
+}
+
+function updateBetResult(id, result) {
+  const bet = myBets.find(b => b.id === id);
+  if (bet) { bet.result = result; saveBets(); renderTracker(); }
+}
+
+function deleteBet(id) {
+  myBets = myBets.filter(b => b.id !== id);
+  saveBets();
+  renderTracker();
+}
+
+function renderTracker() {
+  // Stats
+  const graded = myBets.filter(b => b.result === 'hit' || b.result === 'miss');
+  const hits = graded.filter(b => b.result === 'hit').length;
+  const totalWon = myBets.filter(b => b.result === 'hit').reduce((s, b) => {
+    const payout = b.odds > 0 ? b.amount * (b.odds / 100) : b.amount * (100 / Math.abs(b.odds));
+    return s + payout;
+  }, 0);
+  const totalLost = myBets.filter(b => b.result === 'miss').reduce((s, b) => s + b.amount, 0);
+  const profit = totalWon - totalLost;
+
+  document.getElementById('statBets').textContent = myBets.length;
+  document.getElementById('statHitRate').textContent = graded.length > 0 ? ((hits / graded.length) * 100).toFixed(1) + '%' : '—';
+
+  document.getElementById('trackerStats').innerHTML = `
+    <div class="tracker-stat">Total: <strong>${myBets.length}</strong></div>
+    <div class="tracker-stat">Graded: <strong>${graded.length}</strong></div>
+    <div class="tracker-stat">Hits: <strong style="color:var(--green)">${hits}</strong></div>
+    <div class="tracker-stat">Misses: <strong style="color:var(--red)">${graded.length - hits}</strong></div>
+    <div class="tracker-stat">Hit Rate: <strong>${graded.length > 0 ? ((hits / graded.length) * 100).toFixed(1) + '%' : '—'}</strong></div>
+    <div class="tracker-stat">P/L: <strong style="color:${profit >= 0 ? 'var(--green)' : 'var(--red)'}">$${profit.toFixed(2)}</strong></div>
+  `;
+
+  if (myBets.length === 0) {
+    document.getElementById('trackerTable').innerHTML = `<div class="empty"><div class="icon">📋</div>No bets logged yet. Add your first bet above.</div>`;
+    return;
+  }
+
+  let html = `<table class="tracker-table"><thead><tr><th>Date</th><th>Player</th><th>Pick</th><th>Odds</th><th>Amt</th><th>Result</th><th></th></tr></thead><tbody>`;
+  for (const b of myBets.slice(0, 50)) {
+    const resultColors = { hit: 'var(--green)', miss: 'var(--red)', push: 'var(--amber)', pending: 'var(--text-muted)' };
+    const resultLabels = { hit: '✅', miss: '❌', push: '↔', pending: '⏳' };
+    html += `<tr>
+      <td style="font-family:var(--font-mono);font-size:11px;">${b.date}</td>
+      <td>${b.player}</td>
+      <td><span style="color:${b.direction==='OVER'?'var(--green)':'var(--red)'}">${b.direction}</span> ${b.line} ${b.market}</td>
+      <td style="font-family:var(--font-mono)">${b.odds > 0 ? '+' : ''}${b.odds}</td>
+      <td>$${b.amount}</td>
+      <td>
+        <select onchange="updateBetResult(${b.id},this.value)" style="background:var(--bg-elevated);color:${resultColors[b.result]};border:1px solid var(--border);border-radius:4px;padding:2px 6px;font-size:11px;">
+          <option value="pending" ${b.result==='pending'?'selected':''}>⏳ Pending</option>
+          <option value="hit" ${b.result==='hit'?'selected':''}>✅ Hit</option>
+          <option value="miss" ${b.result==='miss'?'selected':''}>❌ Miss</option>
+          <option value="push" ${b.result==='push'?'selected':''}>↔ Push</option>
+        </select>
+      </td>
+      <td><span style="cursor:pointer;color:var(--text-muted);font-size:11px;" onclick="deleteBet(${b.id})">✕</span></td>
+    </tr>`;
+  }
+  html += '</tbody></table>';
+  document.getElementById('trackerTable').innerHTML = html;
+}
+
+// ============ REFRESH ALL ============
+function refreshAll() {
+  document.querySelectorAll('.loading').forEach(l => l.style.display = 'block');
+  loadEV(); loadRLM(); loadSteam(); loadCLV(); loadCorrelations(); renderTracker();
+}
+
+// ============ INIT ============
+refreshAll();
+</script>
+</body>
+</html>
