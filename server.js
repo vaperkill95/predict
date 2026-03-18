@@ -402,6 +402,11 @@ app.get("/parlay", (req, res) => {
   res.sendFile(path.join(__dirname, "public", "parlay-builder.html"));
 });
 
+// === Privacy Policy (required for App Store) ===
+app.get("/privacy", (req, res) => {
+  res.sendFile(path.join(__dirname, "public", "privacy.html"));
+});
+
 // === React SPA routes (inject help + sharp buttons) ===
 const helpButtonPath = path.join(__dirname, "public", "help-button.html");
 let helpButtonHTML = "";
