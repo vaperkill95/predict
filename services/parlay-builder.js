@@ -242,10 +242,17 @@ function saveHistory() {
 }
 
 function recordPick(pick) {
+  // Dedup: don't record same player+market+date+line twice
+  const date = pick.date || new Date().toISOString().split('T')[0];
+  const existing = pickHistory.find(h =>
+    h.player === pick.player && h.market === pick.market && h.date === date && h.line === pick.line
+  );
+  if (existing) return; // Skip duplicate
+
   pickHistory.push({
     ...pick,
     timestamp: new Date().toISOString(),
-    date: new Date().toISOString().split('T')[0],
+    date,
   });
   saveHistory();
 }
@@ -412,22 +419,89 @@ router.get('/history/auto-record', async (req, res) => {
     const potd = await axios.get(`http://localhost:${PORT}/api/potd`, { timeout: 10000 });
     if (potd.data?.pickOfTheDay) {
       const p = potd.data.pickOfTheDay;
-      const existing = pickHistory.find(h =>
-        h.player === p.player && h.market === p.market && h.date === new Date().toISOString().split('T')[0]
-      );
-      if (!existing) {
-        recordPick({
-          player: p.player, market: p.market, pick: p.pick, line: p.line,
-          confidence: p.convergence, grade: p.convergence >= 80 ? 'A+' : p.convergence >= 70 ? 'A' : 'B+',
-          source: 'potd', result: 'pending',
-        });
-        return res.json({ recorded: true, player: p.player });
-      }
-      return res.json({ recorded: false, reason: 'Already recorded today' });
+      recordPick({
+        player: p.player, market: p.market, pick: p.pick, line: p.line,
+        confidence: p.convergence, grade: p.convergence >= 80 ? 'A+' : p.convergence >= 70 ? 'A' : 'B+',
+        source: 'potd', result: 'pending',
+      });
+      return res.json({ recorded: true, player: p.player });
     }
     res.json({ recorded: false, reason: 'No POTD available' });
   } catch (e) {
     res.json({ recorded: false, error: e.message });
+  }
+});
+
+// Auto-grade pending picks against ESPN box scores
+router.get('/history/auto-grade', async (req, res) => {
+  const pending = pickHistory.filter(p => p.result === 'pending');
+  if (pending.length === 0) return res.json({ graded: 0, message: 'No pending picks' });
+
+  let graded = 0;
+  const statMap = { 'Points': 'points', 'Rebounds': 'rebounds', 'Assists': 'assists', '3-Pointers': 'threePointersMade', '3-pointers Made': 'threePointersMade' };
+
+  try {
+    // Fetch today's completed games from ESPN
+    const espn = await axios.get(
+      'https://site.api.espn.com/apis/site/v2/sports/basketball/nba/scoreboard',
+      { timeout: 10000 }
+    );
+    const events = espn.data?.events || [];
+    const finishedGames = events.filter(e => e.status?.type?.name === 'STATUS_FINAL');
+
+    for (const pick of pending) {
+      const statKey = statMap[pick.market] || pick.market?.toLowerCase();
+      if (!statKey) continue;
+
+      // Try to find this player's box score in finished games
+      for (const game of finishedGames) {
+        const comp = game.competitions?.[0];
+        if (!comp) continue;
+
+        for (const team of (comp.competitors || [])) {
+          // We need the box score - try fetching it
+          try {
+            const boxResp = await axios.get(
+              `https://site.api.espn.com/apis/site/v2/sports/basketball/nba/summary?event=${game.id}`,
+              { timeout: 8000 }
+            );
+            const boxScore = boxResp.data?.boxscore?.players || [];
+            for (const teamBox of boxScore) {
+              for (const player of (teamBox.statistics?.[0]?.athletes || [])) {
+                const pName = player.athlete?.displayName;
+                if (!pName || pName.toLowerCase() !== pick.player?.toLowerCase()) continue;
+
+                // Found the player! Get their stat
+                const stats = player.stats || [];
+                const statLabels = teamBox.statistics?.[0]?.labels || [];
+                const statIndex = statLabels.findIndex(l => l.toLowerCase().includes(statKey.substring(0, 3)));
+
+                if (statIndex >= 0 && stats[statIndex] !== undefined) {
+                  const actual = parseFloat(stats[statIndex]);
+                  const hit = pick.pick === 'OVER' ? actual > pick.line : actual < pick.line;
+
+                  // Update the pick in history
+                  const idx = pickHistory.findIndex(h =>
+                    h.player === pick.player && h.market === pick.market && h.date === pick.date && h.result === 'pending'
+                  );
+                  if (idx >= 0) {
+                    pickHistory[idx].result = hit ? 'hit' : 'miss';
+                    pickHistory[idx].actual = actual;
+                    pickHistory[idx].gradedAt = new Date().toISOString();
+                    graded++;
+                  }
+                }
+              }
+            }
+          } catch (e) { /* Skip this game */ }
+        }
+      }
+    }
+
+    if (graded > 0) saveHistory();
+    res.json({ graded, pending: pending.length, message: `Graded ${graded} of ${pending.length} pending picks` });
+  } catch (e) {
+    res.json({ graded: 0, error: e.message });
   }
 });
 
