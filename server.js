@@ -310,12 +310,7 @@ app.get("/sharp", (req, res) => {
   res.sendFile(path.join(__dirname, "public", "sharp-dashboard.html"));
 });
 
-// === Static files ===
-app.use(express.static(path.join(__dirname, "public")));
-app.use("/app", express.static(path.join(__dirname, "dist")));
-app.use("/assets", express.static(path.join(__dirname, "dist", "assets")));
-
-// === React SPA routes (inject help button) ===
+// === React SPA routes (inject help + sharp buttons) ===
 const helpButtonPath = path.join(__dirname, "public", "help-button.html");
 let helpButtonHTML = "";
 try {
@@ -341,7 +336,17 @@ function serveAppWithHelp(req, res) {
 }
 
 app.get("/app", serveAppWithHelp);
-app.get("/app/*", serveAppWithHelp);
+app.get("/app/", serveAppWithHelp);
+app.get("/app/*", (req, res, next) => {
+  // Only serve index.html for non-asset requests
+  if (req.path.includes('.')) return next();
+  serveAppWithHelp(req, res);
+});
+
+// === Static files ===
+app.use(express.static(path.join(__dirname, "public")));
+app.use("/app", express.static(path.join(__dirname, "dist")));
+app.use("/assets", express.static(path.join(__dirname, "dist", "assets")));
 
 // === Fallback static ===
 app.use(express.static(path.join(__dirname, "dist")));

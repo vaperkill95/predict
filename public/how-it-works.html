@@ -138,6 +138,7 @@ a:hover { text-decoration: underline; }
     <a class="toc-item" href="#signals"><span class="num">07</span> Demons, Goblins & Edges</a>
     <a class="toc-item" href="#sports"><span class="num">08</span> Sports Coverage</a>
     <a class="toc-item" href="#accuracy"><span class="num">09</span> Accuracy & Grading</a>
+    <a class="toc-item" href="#sharp-dashboard"><span class="num">09b</span> The Sharp Dashboard</a>
     <a class="toc-item" href="#tips"><span class="num">10</span> Tips for Best Results</a>
   </div>
 </div>
@@ -682,6 +683,48 @@ a:hover { text-decoration: underline; }
 
   <h3>Backtesting</h3>
   <p>You can test the model's historical accuracy for any player using the backtest endpoint. It runs the prediction model against every game in the season and reports how often it would have been right. This is how we validate and improve the model over time.</p>
+</div>
+
+<!-- Section 9.5: Sharp Dashboard -->
+<div class="section" id="sharp-dashboard">
+  <div class="section-label">09b — The Pro Interface</div>
+  <h2>The Sharp Dashboard</h2>
+  <p>The Sharp Dashboard at <a href="/sharp">/sharp</a> is a dedicated page for serious bettors. It puts all of ORACLE's most powerful tools in one place. Here's what each tab does:</p>
+
+  <div class="term">
+    <div class="term-header"><span class="term-emoji">💰</span><span class="term-name">+EV Bets Tab</span></div>
+    <p>Shows every bet that has positive expected value right now. ORACLE scans all props across all sportsbooks every 10 minutes, removes the vig to find the true probability, and flags any book offering better odds than the math says they should. Each card shows the exact edge percentage, how much you'd make per $100 bet, which sportsbook has the edge, and the optimal Kelly bet size. Best during pre-game hours (11 AM - 7 PM ET) when lines are most active.</p>
+  </div>
+
+  <div class="term">
+    <div class="term-header"><span class="term-emoji">🔄</span><span class="term-name">RLM Alerts Tab</span></div>
+    <p>Shows where professional bettors are putting their money — by detecting when lines move in the opposite direction of where the public is betting. If 80% of people bet OVER but the line moves UP (making OVER harder), that means big sharp money is on UNDER. Each alert shows the public side, the sharp side, the movement amount, and how strong the signal is. This is the single most reliable signal in sports betting.</p>
+  </div>
+
+  <div class="term">
+    <div class="term-header"><span class="term-emoji">💨</span><span class="term-name">Steam Moves Tab</span></div>
+    <p>Catches moments when a line moves 1+ point across multiple sportsbooks within minutes. This happens when coordinated professional money hits the market simultaneously. Each alert shows the direction, how fast it moved, how many books shifted, and which side the sharp money is on. Act fast when you see these — the value disappears as books adjust.</p>
+  </div>
+
+  <div class="term">
+    <div class="term-header"><span class="term-emoji">🏦</span><span class="term-name">Kelly Calculator Tab</span></div>
+    <p>An interactive calculator that tells you exactly how much to bet based on your bankroll, your edge, and the odds. Enter your numbers and it instantly shows the recommended bet amount, your risk percentage, potential win/loss, and whether the edge is strong enough to bet on. Uses quarter-Kelly by default (the safest option), with a 5% bankroll cap to prevent overexposure. No more guessing bet sizes.</p>
+  </div>
+
+  <div class="term">
+    <div class="term-header"><span class="term-emoji">📋</span><span class="term-name">Bet Tracker Tab</span></div>
+    <p>A personal bet logging system. Enter every bet you make — player, market, line, direction, odds, amount — and track your results over time. Mark each bet as Hit, Miss, or Push. The tracker automatically calculates your total profit/loss, hit rate, and shows your complete betting history. All data is saved in your browser so it persists between visits. This is how you know if you're actually profitable.</p>
+  </div>
+
+  <div class="term">
+    <div class="term-header"><span class="term-emoji">🔗</span><span class="term-name">Correlations Tab</span></div>
+    <p>Shows which props tend to hit together (positive correlation) and which ones work against each other (negative correlation). Use this to build smarter parlays. The strongest correlation: game total OVER + player points OVER (r=0.72). The biggest trap: betting on both opposing team stars to go OVER points (r=-0.30). Includes 5 actionable parlay tips.</p>
+  </div>
+
+  <div class="term">
+    <div class="term-header"><span class="term-emoji">📐</span><span class="term-name">CLV Tab</span></div>
+    <p>Shows all lines being tracked for Closing Line Value. ORACLE snapshots every prop line every 15 minutes. After games start, it compares where the line was when you could have bet vs where it closed. If the line moved in your direction after you bet, you had CLV — the market confirmed your read. This is the single best predictor of long-term profitability according to professional bettors.</p>
+  </div>
 </div>
 
 <!-- Section 10: Tips -->
