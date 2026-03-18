@@ -289,7 +289,7 @@ app.get("/", (req, res) => {
   const fs = require("fs");
   try {
     let html = fs.readFileSync(landingPath, "utf8");
-    const navLinks = '<a href="/how-it-works" style="color:#94a3b8;font-size:14px;font-weight:500;text-decoration:none;padding:10px 16px;border-radius:8px;transition:all 0.2s;">How It Works</a>\n    <a href="/sharp" style="color:#94a3b8;font-size:14px;font-weight:500;text-decoration:none;padding:10px 16px;border-radius:8px;transition:all 0.2s;">⚡ Sharp Tools</a>';
+    const navLinks = '<a href="/start" style="color:#10b981;font-size:14px;font-weight:700;text-decoration:none;padding:10px 16px;border-radius:8px;transition:all 0.2s;background:rgba(16,185,129,0.1);">🎯 Start Here</a>\n    <a href="/how-it-works" style="color:#94a3b8;font-size:14px;font-weight:500;text-decoration:none;padding:10px 16px;border-radius:8px;transition:all 0.2s;">How It Works</a>\n    <a href="/sharp" style="color:#94a3b8;font-size:14px;font-weight:500;text-decoration:none;padding:10px 16px;border-radius:8px;transition:all 0.2s;">⚡ Sharp Tools</a>';
     html = html.replace(
       '<a href="/app/" class="nav-cta">',
       navLinks + '\n    <a href="/app/" class="nav-cta">'
@@ -308,6 +308,11 @@ app.get("/how-it-works", (req, res) => {
 // === Sharp Dashboard ===
 app.get("/sharp", (req, res) => {
   res.sendFile(path.join(__dirname, "public", "sharp-dashboard.html"));
+});
+
+// === First Bet Walkthrough ===
+app.get("/start", (req, res) => {
+  res.sendFile(path.join(__dirname, "public", "first-bet.html"));
 });
 
 // === React SPA routes (inject help + sharp buttons) ===

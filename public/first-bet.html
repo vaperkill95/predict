@@ -1,0 +1,450 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Your First Bet — ORACLE</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;600;800;900&family=DM+Sans:wght@400;500;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg-deep:#060a14;--bg-base:#0a0f1a;--bg-card:#111827;--bg-elevated:#1a2236;
+  --border:#1e293b;--text-primary:#f1f5f9;--text-secondary:#94a3b8;--text-muted:#64748b;
+  --accent:#38bdf8;--green:#10b981;--red:#ef4444;--amber:#f59e0b;--purple:#a78bfa;
+  --font-display:"Outfit",sans-serif;--font-body:"DM Sans",sans-serif;--font-mono:"JetBrains Mono",monospace;
+}
+*{margin:0;padding:0;box-sizing:border-box;}
+body{background:var(--bg-deep);color:var(--text-primary);font-family:var(--font-body);line-height:1.7;}
+a{color:var(--accent);text-decoration:none;}
+a:hover{text-decoration:underline;}
+.container{max-width:780px;margin:0 auto;padding:0 20px;}
+
+.nav{padding:16px 0;border-bottom:1px solid var(--border);background:var(--bg-base);position:sticky;top:0;z-index:100;backdrop-filter:blur(12px);}
+.nav-inner{display:flex;align-items:center;justify-content:space-between;max-width:780px;margin:0 auto;padding:0 20px;}
+.nav-logo{font-family:var(--font-display);font-weight:900;font-size:18px;letter-spacing:2px;}
+.nav-logo span{color:var(--accent);}
+.nav-links{display:flex;gap:8px;}
+.nav-links a{font-size:13px;color:var(--text-secondary);font-weight:500;padding:6px 12px;border-radius:6px;transition:all .2s;}
+.nav-links a:hover,.nav-links a.active{background:var(--bg-elevated);color:var(--text-primary);text-decoration:none;}
+
+.hero{padding:60px 0 40px;text-align:center;}
+.hero h1{font-family:var(--font-display);font-weight:900;font-size:clamp(28px,5vw,42px);margin-bottom:12px;}
+.hero h1 span{background:linear-gradient(135deg,var(--green),var(--accent));-webkit-background-clip:text;-webkit-text-fill-color:transparent;}
+.hero p{color:var(--text-secondary);font-size:16px;max-width:550px;margin:0 auto;}
+
+/* Progress bar */
+.progress-bar{display:flex;gap:4px;margin:30px 0;padding:0 20px;}
+.progress-step{flex:1;height:6px;border-radius:3px;background:var(--bg-elevated);transition:all .4s;}
+.progress-step.done{background:var(--green);}
+.progress-step.active{background:var(--accent);}
+
+/* Steps */
+.step{display:none;animation:fadeIn .4s ease;}
+.step.active{display:block;}
+@keyframes fadeIn{from{opacity:0;transform:translateY(10px);}to{opacity:1;transform:translateY(0);}}
+
+.step-header{margin-bottom:24px;}
+.step-num{font-family:var(--font-mono);font-size:12px;color:var(--accent);letter-spacing:2px;text-transform:uppercase;margin-bottom:6px;}
+.step-title{font-family:var(--font-display);font-weight:800;font-size:24px;}
+.step-desc{color:var(--text-secondary);font-size:15px;margin-top:8px;}
+
+/* Callout boxes */
+.callout{border-radius:12px;padding:20px 24px;margin:20px 0;}
+.callout-blue{background:rgba(56,189,248,.08);border:1px solid rgba(56,189,248,.2);}
+.callout-green{background:rgba(16,185,129,.08);border:1px solid rgba(16,185,129,.2);}
+.callout-amber{background:rgba(245,158,11,.08);border:1px solid rgba(245,158,11,.2);}
+.callout-purple{background:rgba(167,139,250,.08);border:1px solid rgba(167,139,250,.2);}
+.callout h3{font-family:var(--font-display);font-weight:700;font-size:16px;margin-bottom:8px;}
+.callout p{font-size:14px;color:var(--text-secondary);margin:0;}
+
+/* Visual example */
+.visual{background:var(--bg-card);border:1px solid var(--border);border-radius:14px;padding:24px;margin:20px 0;overflow-x:auto;}
+.visual-label{font-family:var(--font-mono);font-size:10px;color:var(--text-muted);letter-spacing:1px;text-transform:uppercase;margin-bottom:12px;}
+.prop-row{display:flex;align-items:center;gap:16px;padding:14px 18px;background:var(--bg-elevated);border-radius:10px;margin:8px 0;flex-wrap:wrap;}
+.prop-player{font-weight:700;font-size:15px;min-width:140px;}
+.prop-market{font-size:12px;color:var(--text-muted);min-width:60px;}
+.prop-line{font-family:var(--font-mono);font-weight:700;font-size:18px;color:var(--accent);min-width:50px;}
+.prop-badge{padding:3px 10px;border-radius:6px;font-family:var(--font-mono);font-size:10px;font-weight:600;}
+.prop-stat{font-size:12px;color:var(--text-secondary);}
+.prop-stat strong{color:var(--text-primary);}
+
+/* Odds explainer */
+.odds-visual{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin:16px 0;}
+.odds-card{padding:16px;border-radius:10px;text-align:center;}
+.odds-card.over{background:rgba(16,185,129,.1);border:1px solid rgba(16,185,129,.2);}
+.odds-card.under{background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.2);}
+.odds-card .dir{font-family:var(--font-display);font-weight:800;font-size:18px;margin-bottom:4px;}
+.odds-card .meaning{font-size:12px;color:var(--text-secondary);}
+
+/* Sportsbook steps */
+.app-steps{counter-reset:appstep;}
+.app-step{display:flex;gap:16px;align-items:flex-start;margin:16px 0;counter-increment:appstep;}
+.app-step::before{content:counter(appstep);font-family:var(--font-display);font-weight:800;font-size:14px;background:var(--accent);color:#000;width:28px;height:28px;border-radius:50%;display:flex;align-items:center;justify-content:center;flex-shrink:0;margin-top:2px;}
+.app-step-text{font-size:14px;color:var(--text-secondary);}
+.app-step-text strong{color:var(--text-primary);}
+
+/* Navigation buttons */
+.step-nav{display:flex;justify-content:space-between;margin:40px 0 20px;gap:12px;}
+.btn{padding:12px 28px;border-radius:10px;font-family:var(--font-display);font-weight:700;font-size:14px;cursor:pointer;border:none;transition:all .2s;}
+.btn-next{background:var(--accent);color:#000;}
+.btn-next:hover{transform:translateY(-2px);box-shadow:0 6px 20px rgba(56,189,248,.25);}
+.btn-back{background:var(--bg-elevated);color:var(--text-secondary);border:1px solid var(--border);}
+.btn-back:hover{color:var(--text-primary);}
+.btn-cta{background:var(--green);color:#000;font-size:16px;padding:14px 32px;}
+.btn-cta:hover{transform:translateY(-2px);box-shadow:0 6px 20px rgba(16,185,129,.25);}
+
+/* Live data card */
+.live-pick{background:linear-gradient(135deg,rgba(56,189,248,.05),rgba(167,139,250,.05));border:1px solid rgba(56,189,248,.2);border-radius:14px;padding:24px;margin:20px 0;}
+.live-pick .header{display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;}
+.live-pick .player-name{font-family:var(--font-display);font-weight:800;font-size:20px;}
+.live-pick .confidence{font-family:var(--font-mono);font-size:13px;padding:4px 12px;border-radius:6px;background:rgba(16,185,129,.15);color:var(--green);}
+.live-pick .pick-direction{font-family:var(--font-display);font-weight:900;font-size:28px;margin:8px 0;}
+.live-pick .details{display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:10px;}
+.live-pick .detail{padding:10px;background:var(--bg-card);border-radius:8px;}
+.live-pick .detail .k{font-size:10px;color:var(--text-muted);font-family:var(--font-mono);text-transform:uppercase;}
+.live-pick .detail .v{font-size:14px;font-weight:700;margin-top:2px;}
+
+.loading-msg{text-align:center;padding:30px;color:var(--text-muted);}
+
+.footer{text-align:center;padding:30px 0;color:var(--text-muted);font-size:11px;border-top:1px solid var(--border);margin-top:40px;}
+
+@media(max-width:640px){
+  .odds-visual{grid-template-columns:1fr;}
+  .prop-row{flex-direction:column;align-items:flex-start;gap:6px;}
+  .live-pick .details{grid-template-columns:1fr 1fr;}
+}
+</style>
+</head>
+<body>
+
+<nav class="nav">
+  <div class="nav-inner">
+    <div class="nav-logo">⟁ <span>ORACLE</span></div>
+    <div class="nav-links">
+      <a href="/">Home</a>
+      <a href="/app/">App</a>
+      <a href="/sharp">Sharp</a>
+      <a href="/how-it-works">Guide</a>
+      <a href="/start" class="active">Start Here</a>
+    </div>
+  </div>
+</nav>
+
+<div class="container">
+  <div class="hero">
+    <h1>Your <span>First Smart Bet</span></h1>
+    <p>Never bet before? No problem. This 5-minute walkthrough will take you from zero to your first data-backed pick — step by step.</p>
+  </div>
+
+  <div class="progress-bar" id="progressBar">
+    <div class="progress-step active"></div>
+    <div class="progress-step"></div>
+    <div class="progress-step"></div>
+    <div class="progress-step"></div>
+    <div class="progress-step"></div>
+    <div class="progress-step"></div>
+  </div>
+
+  <!-- ============ STEP 1: What is a Player Prop? ============ -->
+  <div class="step active" id="step1">
+    <div class="step-header">
+      <div class="step-num">Step 1 of 6</div>
+      <div class="step-title">What Is a Player Prop?</div>
+      <div class="step-desc">A player prop is a simple bet: will a player go OVER or UNDER a specific number?</div>
+    </div>
+
+    <div class="callout callout-blue">
+      <h3>Think of it like this</h3>
+      <p>Your friend asks: "Do you think Jalen Brunson will score more than 27 points tonight?" If you say yes — that's betting the OVER. If you say no — that's betting the UNDER. That's literally all a player prop is.</p>
+    </div>
+
+    <div class="visual">
+      <div class="visual-label">What a prop looks like</div>
+      <div class="prop-row">
+        <div class="prop-player">Jalen Brunson</div>
+        <div class="prop-market">Points</div>
+        <div class="prop-line">27.5</div>
+        <div>
+          <div class="prop-stat">Will he score <strong style="color:var(--green)">28+ points</strong> (OVER)?</div>
+          <div class="prop-stat">Or <strong style="color:var(--red)">27 or fewer</strong> (UNDER)?</div>
+        </div>
+      </div>
+    </div>
+
+    <p style="color:var(--text-secondary);font-size:14px;">The ".5" is there so there's no tie — you can't score half a point. You either go over the number or stay under it. That's the whole bet.</p>
+
+    <div class="callout callout-green">
+      <h3>You can bet on any stat</h3>
+      <p>Points, rebounds, assists, 3-pointers made, steals, blocks — any stat a player records in a game. Points are the most common, but rebounds are actually the easiest to predict (they're the most consistent stat from game to game).</p>
+    </div>
+
+    <div class="step-nav">
+      <div></div>
+      <button class="btn btn-next" onclick="goStep(2)">Got it, what's next? →</button>
+    </div>
+  </div>
+
+  <!-- ============ STEP 2: Understanding Odds ============ -->
+  <div class="step" id="step2">
+    <div class="step-header">
+      <div class="step-num">Step 2 of 6</div>
+      <div class="step-title">Understanding the Odds</div>
+      <div class="step-desc">Odds tell you two things: how much you can win, and which side the sportsbook thinks is more likely.</div>
+    </div>
+
+    <div class="odds-visual">
+      <div class="odds-card over">
+        <div class="dir" style="color:var(--green)">OVER 27.5</div>
+        <div style="font-family:var(--font-mono);font-weight:700;font-size:22px;margin:8px 0;">-110</div>
+        <div class="meaning">Bet $110 to win $100</div>
+        <div class="meaning" style="margin-top:4px;">Sportsbook thinks this is close to 50/50</div>
+      </div>
+      <div class="odds-card under">
+        <div class="dir" style="color:var(--red)">UNDER 27.5</div>
+        <div style="font-family:var(--font-mono);font-weight:700;font-size:22px;margin:8px 0;">+105</div>
+        <div class="meaning">Bet $100 to win $105</div>
+        <div class="meaning" style="margin-top:4px;">Slightly less likely according to the book</div>
+      </div>
+    </div>
+
+    <div class="callout callout-amber">
+      <h3>The simple rule</h3>
+      <p><strong>Minus (-) odds:</strong> That's how much you need to bet to win $100. So -110 means you risk $110 to win $100. You can bet any amount — $5, $10, $50 — the ratio stays the same.</p>
+      <p style="margin-top:8px;"><strong>Plus (+) odds:</strong> That's how much you win on a $100 bet. So +150 means you win $150 on a $100 bet. Again, scale to any amount — a $10 bet at +150 wins you $15.</p>
+    </div>
+
+    <div class="callout callout-purple">
+      <h3>Don't overthink odds</h3>
+      <p>Most player props are between -130 and +130. That means both sides are roughly equally likely. ORACLE's job is to figure out which side actually has the edge — so you don't have to do the math yourself.</p>
+    </div>
+
+    <div class="step-nav">
+      <button class="btn btn-back" onclick="goStep(1)">← Back</button>
+      <button class="btn btn-next" onclick="goStep(3)">Makes sense →</button>
+    </div>
+  </div>
+
+  <!-- ============ STEP 3: How to Read ORACLE ============ -->
+  <div class="step" id="step3">
+    <div class="step-header">
+      <div class="step-num">Step 3 of 6</div>
+      <div class="step-title">How to Read ORACLE's Signals</div>
+      <div class="step-desc">ORACLE does the research for you. Here's what to look for when picking a bet.</div>
+    </div>
+
+    <div class="visual">
+      <div class="visual-label">What each signal means</div>
+
+      <div class="prop-row">
+        <div class="prop-badge" style="background:rgba(245,158,11,.15);color:var(--amber);">🔥 DEMON</div>
+        <div class="prop-stat"><strong>Best signal.</strong> 6+ sportsbooks agree AND there's a big gap in lines. When this many books line up on the same number, the line is probably right — and the outlier book is giving away value.</div>
+      </div>
+
+      <div class="prop-row">
+        <div class="prop-badge" style="background:rgba(16,185,129,.15);color:var(--green);">⚡ EDGE</div>
+        <div class="prop-stat"><strong>Value detected.</strong> There's a 1.5+ point difference between books. One book has a significantly different number, creating an opportunity for you to get a better line.</div>
+      </div>
+
+      <div class="prop-row">
+        <div class="prop-badge" style="background:rgba(56,189,248,.15);color:var(--accent);">📊 HIT RATE: 72%</div>
+        <div class="prop-stat"><strong>Historical data.</strong> This player has gone OVER this line in 72% of games this season. The higher the hit rate, the more confident you can be.</div>
+      </div>
+
+      <div class="prop-row">
+        <div class="prop-badge" style="background:rgba(167,139,250,.15);color:var(--purple);">🔥 L5: 31.2</div>
+        <div class="prop-stat"><strong>Recent form.</strong> The player's average over their last 5 games. If L5 is well above the line, they're hot. If below, they're cold.</div>
+      </div>
+
+      <div class="prop-row">
+        <div class="prop-badge" style="background:rgba(16,185,129,.15);color:var(--green);">95% CONFIDENCE</div>
+        <div class="prop-stat"><strong>Model strength.</strong> ORACLE's 7-factor prediction model rates this pick at 95% confidence. Focus on picks above 70%.</div>
+      </div>
+    </div>
+
+    <div class="callout callout-green">
+      <h3>The beginner's shortcut</h3>
+      <p>If you don't want to learn all the signals right away, just go to the <strong>"Top Picks"</strong> tab. ORACLE has already done the analysis and shows you the 8 best picks of the day, ranked by confidence. Start there.</p>
+    </div>
+
+    <div class="step-nav">
+      <button class="btn btn-back" onclick="goStep(2)">← Back</button>
+      <button class="btn btn-next" onclick="goStep(4)">Show me a real pick →</button>
+    </div>
+  </div>
+
+  <!-- ============ STEP 4: Live Pick (Real Data) ============ -->
+  <div class="step" id="step4">
+    <div class="step-header">
+      <div class="step-num">Step 4 of 6</div>
+      <div class="step-title">Here's a Real Pick From Right Now</div>
+      <div class="step-desc">This is a live pick from ORACLE's prediction model, using today's actual data.</div>
+    </div>
+
+    <div id="livePick"><div class="loading-msg">Loading today's best pick...</div></div>
+
+    <div class="callout callout-blue" style="margin-top:20px;">
+      <h3>Why this pick was selected</h3>
+      <div id="pickReasoning"><p>Loading reasoning...</p></div>
+    </div>
+
+    <div class="step-nav">
+      <button class="btn btn-back" onclick="goStep(3)">← Back</button>
+      <button class="btn btn-next" onclick="goStep(5)">How do I actually place this bet? →</button>
+    </div>
+  </div>
+
+  <!-- ============ STEP 5: How to Place the Bet ============ -->
+  <div class="step" id="step5">
+    <div class="step-header">
+      <div class="step-num">Step 5 of 6</div>
+      <div class="step-title">How to Place Your Bet</div>
+      <div class="step-desc">Here's exactly what to do on the sportsbook app. We'll use DraftKings as an example (same process on FanDuel, BetMGM, etc.)</div>
+    </div>
+
+    <div class="callout callout-amber">
+      <h3>⚠️ Before you start</h3>
+      <p>You need to be 21+ and in a legal sports betting state. You'll need a sportsbook account — DraftKings, FanDuel, and BetMGM all offer free sign-up bonuses for new users. Download the app from your phone's app store.</p>
+    </div>
+
+    <div class="visual">
+      <div class="visual-label">Step by step on the sportsbook app</div>
+      <div class="app-steps">
+        <div class="app-step"><div class="app-step-text"><strong>Open the sportsbook app</strong> (DraftKings, FanDuel, BetMGM, etc.)</div></div>
+        <div class="app-step"><div class="app-step-text"><strong>Tap "NBA"</strong> (or whatever sport you're betting on)</div></div>
+        <div class="app-step"><div class="app-step-text"><strong>Find the game</strong> that matches your pick (e.g., Knicks vs Celtics)</div></div>
+        <div class="app-step"><div class="app-step-text"><strong>Tap "Player Props"</strong> — usually listed under the game or in a tab called "Props" or "SGP"</div></div>
+        <div class="app-step"><div class="app-step-text"><strong>Find the player</strong> (e.g., Jalen Brunson) and the stat (e.g., Points)</div></div>
+        <div class="app-step"><div class="app-step-text"><strong>Tap OVER or UNDER</strong> based on ORACLE's pick — it'll be added to your bet slip</div></div>
+        <div class="app-step"><div class="app-step-text"><strong>Enter your bet amount</strong> — start small! $5 or $10 is perfect for your first bet</div></div>
+        <div class="app-step"><div class="app-step-text"><strong>Review and confirm</strong> — double-check the player, stat, line, and direction before tapping "Place Bet"</div></div>
+      </div>
+    </div>
+
+    <div class="callout callout-green">
+      <h3>💡 Pro tip: Line shop first</h3>
+      <p>ORACLE shows you the line at every sportsbook. Before placing your bet, check which book has the best line for your pick. Even a 0.5 point difference can make a huge difference over time. If DraftKings has OVER 27.5 and FanDuel has OVER 26.5 for the same player, use FanDuel — it's easier to hit.</p>
+    </div>
+
+    <div class="step-nav">
+      <button class="btn btn-back" onclick="goStep(4)">← Back</button>
+      <button class="btn btn-next" onclick="goStep(6)">What happens after? →</button>
+    </div>
+  </div>
+
+  <!-- ============ STEP 6: After the Bet ============ -->
+  <div class="step" id="step6">
+    <div class="step-header">
+      <div class="step-num">Step 6 of 6</div>
+      <div class="step-title">After You Place the Bet</div>
+      <div class="step-desc">Here's what happens next and how to track your results.</div>
+    </div>
+
+    <div class="visual">
+      <div class="visual-label">The three possible outcomes</div>
+      <div class="prop-row">
+        <div class="prop-badge" style="background:rgba(16,185,129,.15);color:var(--green);">✅ HIT</div>
+        <div class="prop-stat"><strong>You win!</strong> The player went in the direction you bet. Your winnings are automatically added to your sportsbook account. You can withdraw or use them for your next bet.</div>
+      </div>
+      <div class="prop-row">
+        <div class="prop-badge" style="background:rgba(239,68,68,.15);color:var(--red);">❌ MISS</div>
+        <div class="prop-stat"><strong>You lose.</strong> The player went the other direction. You lose the amount you bet. This is totally normal — even the best bettors lose 40-45% of their bets. The key is winning more than you lose over time.</div>
+      </div>
+      <div class="prop-row">
+        <div class="prop-badge" style="background:rgba(245,158,11,.15);color:var(--amber);">↔ PUSH</div>
+        <div class="prop-stat"><strong>Tie.</strong> The player hit the exact number (rare with .5 lines). Your money is returned in full. No win, no loss.</div>
+      </div>
+    </div>
+
+    <div class="callout callout-purple">
+      <h3>Track everything</h3>
+      <p>Use ORACLE's <a href="/sharp">Bet Tracker</a> (in Sharp Tools → Bet Tracker tab) to log every bet you make. It automatically calculates your hit rate and profit/loss. After 20+ bets, you'll see your real performance — and you can adjust your strategy based on what's working.</p>
+    </div>
+
+    <div class="callout callout-blue">
+      <h3>The golden rules for beginners</h3>
+      <p>1. <strong>Start with $5-$10 bets.</strong> Never bet money you can't afford to lose.</p>
+      <p style="margin-top:6px;">2. <strong>Only bet ORACLE's top picks (70%+ confidence).</strong> Skip everything below that.</p>
+      <p style="margin-top:6px;">3. <strong>Don't chase losses.</strong> If you lose 3 in a row, stop for the day. Come back tomorrow.</p>
+      <p style="margin-top:6px;">4. <strong>Check the +EV tab on the Sharp Dashboard.</strong> Even if you lose a +EV bet, you made the right decision. Over time, +EV bets always profit.</p>
+      <p style="margin-top:6px;">5. <strong>Learn one thing at a time.</strong> Start with the basics, then explore the How It Works guide and Sharp Tools as you get comfortable.</p>
+    </div>
+
+    <div style="text-align:center;margin:40px 0;">
+      <p style="color:var(--text-secondary);margin-bottom:16px;">Ready to find your first pick?</p>
+      <a href="/app/" class="btn btn-cta" style="display:inline-block;text-decoration:none;">Open ORACLE →</a>
+      <div style="margin-top:12px;display:flex;gap:16px;justify-content:center;">
+        <a href="/how-it-works" style="font-size:13px;color:var(--text-muted);">📖 Full Guide</a>
+        <a href="/sharp" style="font-size:13px;color:var(--text-muted);">⚡ Sharp Tools</a>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="footer">⟁ ORACLE — For entertainment & research only. Not financial or gambling advice. Must be 21+ in a legal sports betting state.</div>
+
+<script>
+let currentStep = 1;
+
+function goStep(n) {
+  document.getElementById('step' + currentStep).classList.remove('active');
+  document.getElementById('step' + n).classList.add('active');
+  currentStep = n;
+
+  // Update progress bar
+  document.querySelectorAll('.progress-step').forEach((s, i) => {
+    s.className = 'progress-step';
+    if (i < n - 1) s.classList.add('done');
+    else if (i === n - 1) s.classList.add('active');
+  });
+
+  // Load live pick on step 4
+  if (n === 4) loadLivePick();
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+async function loadLivePick() {
+  try {
+    const resp = await fetch('/api/picks/nba');
+    const data = await resp.json();
+    const picks = data.picks || [];
+
+    if (picks.length === 0) {
+      document.getElementById('livePick').innerHTML = '<div class="callout callout-amber"><h3>No games right now</h3><p>There are no NBA games scheduled at this moment. Check back when games are on the schedule — ORACLE generates fresh picks every 15 minutes on game days.</p></div>';
+      document.getElementById('pickReasoning').innerHTML = '<p>Come back during game day to see a live example with real data!</p>';
+      return;
+    }
+
+    // Pick the highest confidence one
+    const best = picks.sort((a, b) => (b.confidence || 0) - (a.confidence || 0))[0];
+    const dirColor = best.pick === 'OVER' ? 'var(--green)' : 'var(--red)';
+
+    document.getElementById('livePick').innerHTML = `
+      <div class="live-pick">
+        <div class="header">
+          <div class="player-name">${best.player}</div>
+          <div class="confidence">${best.confidence || '—'}% confidence</div>
+        </div>
+        <div class="pick-direction" style="color:${dirColor}">${best.pick} ${best.line} ${best.market || 'Points'}</div>
+        <div style="font-size:13px;color:var(--text-secondary);margin-bottom:16px;">${best.game || ''}</div>
+        <div class="details">
+          <div class="detail"><div class="k">Season Avg</div><div class="v">${best.seasonAvg || '—'}</div></div>
+          <div class="detail"><div class="k">Projection</div><div class="v" style="color:var(--accent)">${best.projection || '—'}</div></div>
+          <div class="detail"><div class="k">Hit Rate</div><div class="v">${best.hitRate ? best.hitRate + '%' : '—'}</div></div>
+          <div class="detail"><div class="k">Best Book</div><div class="v">${best.bestBook || best.book || '—'}</div></div>
+          <div class="detail"><div class="k">Grade</div><div class="v" style="color:var(--green)">${best.grade || 'A'}</div></div>
+          <div class="detail"><div class="k">Line</div><div class="v">${best.line || '—'}</div></div>
+        </div>
+      </div>
+    `;
+
+    const reasoning = best.reasoning || best.analysis || '';
+    document.getElementById('pickReasoning').innerHTML = reasoning
+      ? `<p>${reasoning}</p>`
+      : `<p>ORACLE's 7-factor model analyzed ${best.player}'s recent performance, injury status, pace of tonight's game, and betting lines across 8 sportsbooks. The model projects ${best.projection || 'a value'} ${best.market || 'points'}, which is ${best.pick === 'OVER' ? 'above' : 'below'} the line of ${best.line}. With ${best.confidence || 'high'}% confidence, this is one of today's strongest picks.</p>`;
+  } catch (e) {
+    document.getElementById('livePick').innerHTML = '<div class="callout callout-amber"><h3>Could not load live data</h3><p>ORACLE\'s API might be updating. Refresh the page or check back in a few minutes.</p></div>';
+  }
+}
+</script>
+</body>
+</html>
