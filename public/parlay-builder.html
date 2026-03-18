@@ -1,0 +1,302 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Parlay Builder — ORACLE</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;600;800;900&family=DM+Sans:wght@400;500;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<style>
+:root{--bg-deep:#060a14;--bg-base:#0a0f1a;--bg-card:#111827;--bg-elevated:#1a2236;--border:#1e293b;--text-primary:#f1f5f9;--text-secondary:#94a3b8;--text-muted:#64748b;--accent:#38bdf8;--green:#10b981;--red:#ef4444;--amber:#f59e0b;--purple:#a78bfa;--font-display:"Outfit",sans-serif;--font-body:"DM Sans",sans-serif;--font-mono:"JetBrains Mono",monospace;}
+*{margin:0;padding:0;box-sizing:border-box;}body{background:var(--bg-deep);color:var(--text-primary);font-family:var(--font-body);line-height:1.6;}a{color:var(--accent);text-decoration:none;}.container{max-width:900px;margin:0 auto;padding:0 20px;}
+.nav{padding:14px 0;border-bottom:1px solid var(--border);background:var(--bg-base);position:sticky;top:0;z-index:100;backdrop-filter:blur(12px);}.nav-inner{display:flex;align-items:center;justify-content:space-between;max-width:900px;margin:0 auto;padding:0 20px;}.nav-logo{font-family:var(--font-display);font-weight:900;font-size:18px;letter-spacing:2px;}.nav-logo span{color:var(--accent);}.nav-links{display:flex;gap:6px;}.nav-links a{font-size:12px;color:var(--text-secondary);font-weight:500;padding:5px 10px;border-radius:6px;transition:all .2s;}.nav-links a:hover,.nav-links a.active{background:var(--bg-elevated);color:var(--text-primary);text-decoration:none;}
+.hero{padding:40px 0 24px;text-align:center;}.hero h1{font-family:var(--font-display);font-weight:900;font-size:clamp(26px,4vw,36px);}.hero h1 span{background:linear-gradient(135deg,var(--purple),var(--accent));-webkit-background-clip:text;-webkit-text-fill-color:transparent;}.hero p{color:var(--text-secondary);font-size:14px;margin-top:8px;}
+.tab-bar{display:flex;gap:4px;margin-bottom:20px;overflow-x:auto;}.tab{padding:8px 16px;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;color:var(--text-muted);background:transparent;border:1px solid transparent;transition:all .2s;white-space:nowrap;}.tab:hover{color:var(--text-secondary);background:var(--bg-card);}.tab.active{color:var(--text-primary);background:var(--bg-card);border-color:var(--border);}
+.panel{display:none;}.panel.active{display:block;}
+.card{background:var(--bg-card);border:1px solid var(--border);border-radius:12px;padding:20px;margin:12px 0;transition:all .2s;}.card:hover{border-color:rgba(56,189,248,.2);}
+.btn{padding:10px 20px;border-radius:8px;font-family:var(--font-display);font-weight:700;font-size:13px;cursor:pointer;border:none;transition:all .2s;}.btn-primary{background:var(--accent);color:#000;}.btn-primary:hover{transform:translateY(-1px);}.btn-green{background:var(--green);color:#000;}.btn-danger{background:var(--red);color:#fff;}.btn-outline{background:transparent;border:1px solid var(--border);color:var(--text-secondary);}.btn-outline:hover{border-color:var(--accent);color:var(--text-primary);}
+input,select{padding:8px 12px;background:var(--bg-elevated);border:1px solid var(--border);border-radius:6px;color:var(--text-primary);font-family:var(--font-mono);font-size:12px;}input:focus,select:focus{outline:none;border-color:var(--accent);}
+.stat-row{display:grid;grid-template-columns:repeat(auto-fill,minmax(110px,1fr));gap:8px;margin:12px 0;}.stat{padding:10px;background:var(--bg-elevated);border-radius:8px;text-align:center;}.stat .k{font-size:9px;color:var(--text-muted);font-family:var(--font-mono);text-transform:uppercase;}.stat .v{font-family:var(--font-display);font-weight:700;font-size:15px;margin-top:2px;}
+.empty{text-align:center;padding:40px;color:var(--text-muted);font-size:14px;}
+table{width:100%;border-collapse:collapse;font-size:12px;}th{text-align:left;padding:8px;background:var(--bg-elevated);font-family:var(--font-mono);font-size:10px;color:var(--text-muted);text-transform:uppercase;}td{padding:8px;border-bottom:1px solid var(--border);}
+.share-card{background:linear-gradient(135deg,#0a0f1a,#111827);border:2px solid var(--accent);border-radius:16px;padding:24px;text-align:center;max-width:400px;margin:0 auto;}.share-card .logo{font-family:var(--font-display);font-weight:900;font-size:14px;color:var(--accent);margin-bottom:12px;}.share-card .pick-text{font-family:var(--font-display);font-weight:900;font-size:22px;margin:8px 0;}.share-card .details{font-size:12px;color:var(--text-secondary);}.share-card .conf{font-family:var(--font-mono);padding:4px 12px;border-radius:20px;display:inline-block;margin-top:8px;}
+.footer{text-align:center;padding:30px 0;color:var(--text-muted);font-size:11px;border-top:1px solid var(--border);margin-top:40px;}
+@media(max-width:640px){.stat-row{grid-template-columns:1fr 1fr;}}
+</style>
+</head>
+<body>
+<nav class="nav"><div class="nav-inner"><div class="nav-logo">⟁ <span>ORACLE</span></div><div class="nav-links"><a href="/">Home</a><a href="/pick">POTD</a><a href="/app/">App</a><a href="/sharp">Sharp</a><a href="/parlay" class="active">Parlay</a><a href="/how-it-works">Guide</a></div></div></nav>
+
+<div class="container">
+<div class="hero"><h1>🎲 <span>Parlay Builder</span></h1><p>Build smart parlays with correlation analysis, track live picks, and view ORACLE's complete accuracy history.</p></div>
+
+<div class="tab-bar">
+  <div class="tab active" data-tab="builder">🎲 Build Parlay</div>
+  <div class="tab" data-tab="live">📡 Live Tracker</div>
+  <div class="tab" data-tab="history">📊 Accuracy Record</div>
+  <div class="tab" data-tab="share">📤 Share Pick</div>
+  <div class="tab" data-tab="alerts">🔔 Alerts</div>
+</div>
+
+<!-- PARLAY BUILDER -->
+<div class="panel active" id="panel-builder">
+  <div class="card">
+    <h3 style="font-family:var(--font-display);font-weight:700;margin-bottom:12px;">Add Legs to Your Parlay</h3>
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr 80px 90px auto;gap:8px;align-items:end;margin-bottom:12px;" id="legForm">
+      <div><label style="font-size:10px;color:var(--text-muted);">Player</label><input type="text" id="legPlayer" placeholder="Brunson" style="width:100%"></div>
+      <div><label style="font-size:10px;color:var(--text-muted);">Market</label><select id="legMarket" style="width:100%"><option>Points</option><option>Rebounds</option><option>Assists</option><option>3-Pointers</option></select></div>
+      <div><label style="font-size:10px;color:var(--text-muted);">Game</label><input type="text" id="legGame" placeholder="NYK vs BOS" style="width:100%"></div>
+      <div><label style="font-size:10px;color:var(--text-muted);">Line</label><input type="number" id="legLine" placeholder="27.5" step="0.5" style="width:100%"></div>
+      <div><label style="font-size:10px;color:var(--text-muted);">Direction</label><select id="legDir" style="width:100%"><option value="OVER">OVER</option><option value="UNDER">UNDER</option></select></div>
+      <button class="btn btn-primary" onclick="addLeg()" style="height:34px;">+ Add</button>
+    </div>
+    <div id="parlayLegs"></div>
+  </div>
+  <div id="parlayAnalysis"></div>
+</div>
+
+<!-- LIVE TRACKER -->
+<div class="panel" id="panel-live">
+  <div class="card"><h3 style="font-family:var(--font-display);font-weight:700;margin-bottom:4px;">📡 Live Game Tracker</h3><p style="font-size:12px;color:var(--text-muted);margin-bottom:16px;">Real-time scores for today's games. Refreshes every 30 seconds.</p><div id="liveGames"><div class="empty">Loading live games...</div></div></div>
+</div>
+
+<!-- ACCURACY RECORD -->
+<div class="panel" id="panel-history">
+  <div class="card"><h3 style="font-family:var(--font-display);font-weight:700;margin-bottom:4px;">📊 ORACLE's Public Accuracy Record</h3><p style="font-size:12px;color:var(--text-muted);margin-bottom:16px;">Every pick ORACLE has made, graded against final box scores. Full transparency.</p><div id="historyStats"></div><div id="historyTable" style="margin-top:16px;"></div></div>
+</div>
+
+<!-- SHARE PICK -->
+<div class="panel" id="panel-share">
+  <div class="card">
+    <h3 style="font-family:var(--font-display);font-weight:700;margin-bottom:8px;">📤 Create Share Card</h3>
+    <p style="font-size:12px;color:var(--text-muted);margin-bottom:16px;">Generate a beautiful share card for Twitter/Instagram. Screenshot it and post!</p>
+    <div style="display:grid;grid-template-columns:1fr 1fr 80px 80px;gap:8px;margin-bottom:16px;">
+      <input type="text" id="sharePlayer" placeholder="Player name">
+      <select id="shareMarket"><option>Points</option><option>Rebounds</option><option>Assists</option><option>3-Pointers</option></select>
+      <input type="number" id="shareLine" placeholder="Line" step="0.5">
+      <select id="shareDir"><option value="OVER">OVER</option><option value="UNDER">UNDER</option></select>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:16px;">
+      <input type="number" id="shareConf" placeholder="Confidence %" value="85">
+      <input type="text" id="shareGrade" placeholder="Grade" value="A+">
+      <button class="btn btn-green" onclick="generateShareCard()">Generate Card</button>
+    </div>
+    <div id="shareOutput"></div>
+  </div>
+</div>
+
+<!-- ALERTS -->
+<div class="panel" id="panel-alerts">
+  <div class="card">
+    <h3 style="font-family:var(--font-display);font-weight:700;margin-bottom:8px;">🔔 Custom Alerts</h3>
+    <p style="font-size:12px;color:var(--text-muted);margin-bottom:16px;">Set alerts for specific conditions. (Alerts are stored in your browser.)</p>
+    <div style="display:grid;grid-template-columns:1fr 1fr 100px auto;gap:8px;margin-bottom:16px;">
+      <select id="alertType"><option value="ev">+EV Edge ≥</option><option value="convergence">POTD Convergence ≥</option><option value="hitrate">Hit Rate ≥</option><option value="middle">Middle Gap ≥</option></select>
+      <input type="number" id="alertThreshold" placeholder="Threshold" value="5">
+      <select id="alertSport"><option value="nba">NBA</option><option value="nhl">NHL</option><option value="mlb">MLB</option></select>
+      <button class="btn btn-primary" onclick="addAlert()">+ Add Alert</button>
+    </div>
+    <div id="alertsList"></div>
+  </div>
+</div>
+</div>
+
+<div class="footer">⟁ ORACLE — For entertainment & research only. Not financial or gambling advice.</div>
+
+<script>
+// Tab switching
+document.querySelectorAll('.tab').forEach(tab => {
+  tab.addEventListener('click', () => {
+    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+    document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+    tab.classList.add('active');
+    document.getElementById('panel-' + tab.dataset.tab).classList.add('active');
+  });
+});
+
+// ========== PARLAY BUILDER ==========
+let parlayLegs = [];
+
+function addLeg() {
+  const leg = {
+    player: document.getElementById('legPlayer').value,
+    market: document.getElementById('legMarket').value,
+    game: document.getElementById('legGame').value,
+    line: parseFloat(document.getElementById('legLine').value) || 0,
+    direction: document.getElementById('legDir').value,
+    odds: -110,
+  };
+  if (!leg.player || !leg.line) return;
+  parlayLegs.push(leg);
+  document.getElementById('legPlayer').value = '';
+  document.getElementById('legLine').value = '';
+  renderParlay();
+}
+
+function removeLeg(i) { parlayLegs.splice(i, 1); renderParlay(); }
+
+function renderParlay() {
+  const el = document.getElementById('parlayLegs');
+  if (parlayLegs.length === 0) { el.innerHTML = '<div class="empty">Add 2+ legs to analyze your parlay</div>'; document.getElementById('parlayAnalysis').innerHTML = ''; return; }
+
+  el.innerHTML = parlayLegs.map((l, i) => `<div style="display:flex;justify-content:space-between;align-items:center;padding:10px 14px;background:var(--bg-elevated);border-radius:8px;margin:6px 0;">
+    <div><strong>${l.player}</strong> <span style="color:${l.direction==='OVER'?'var(--green)':'var(--red)'}">${l.direction}</span> ${l.line} ${l.market} <span style="color:var(--text-muted);font-size:11px;">${l.game}</span></div>
+    <span style="cursor:pointer;color:var(--text-muted);font-size:12px;" onclick="removeLeg(${i})">✕</span>
+  </div>`).join('');
+
+  if (parlayLegs.length >= 2) analyzeCurrentParlay();
+}
+
+async function analyzeCurrentParlay() {
+  try {
+    const resp = await fetch('/api/parlay/build', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ legs: parlayLegs }) });
+    const d = await resp.json();
+    if (d.error) { document.getElementById('parlayAnalysis').innerHTML = `<div class="card">${d.error}</div>`; return; }
+
+    const gradeColors = { 'A': 'var(--green)', 'B+': 'var(--accent)', 'B': 'var(--accent)', 'C+': 'var(--amber)', 'C': 'var(--text-muted)', 'D': 'var(--red)' };
+    const gc = gradeColors[d.grade] || 'var(--text-secondary)';
+
+    let corrHTML = d.correlations.map(c => {
+      const cc = c.type === 'positive' ? 'var(--green)' : c.type === 'negative' ? 'var(--red)' : 'var(--text-muted)';
+      return `<div style="padding:8px 12px;background:var(--bg-elevated);border-radius:6px;margin:4px 0;font-size:12px;">
+        <span style="color:${cc};font-weight:700;">${c.correlation > 0 ? '+' : ''}${c.correlation}</span> ${c.legs}: ${c.reason}
+      </div>`;
+    }).join('');
+
+    document.getElementById('parlayAnalysis').innerHTML = `<div class="card">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
+        <h3 style="font-family:var(--font-display);font-weight:700;">Parlay Analysis</h3>
+        <div style="padding:6px 16px;border-radius:8px;background:${gc}22;color:${gc};font-family:var(--font-mono);font-weight:700;">Grade: ${d.grade}</div>
+      </div>
+      <div class="stat-row">
+        <div class="stat"><div class="k">Combined Odds</div><div class="v">${d.combinedOdds}</div></div>
+        <div class="stat"><div class="k">Payout / $100</div><div class="v" style="color:var(--green)">$${d.payoutOn100}</div></div>
+        <div class="stat"><div class="k">Adj. Probability</div><div class="v">${d.adjustedProbability}</div></div>
+        <div class="stat"><div class="k">EV</div><div class="v" style="color:${d.isPositiveEV?'var(--green)':'var(--red)'}">${d.ev > 0 ? '+' : ''}$${d.ev}</div></div>
+        <div class="stat"><div class="k">+ Correlations</div><div class="v" style="color:var(--green)">${d.positiveCorrelations}</div></div>
+        <div class="stat"><div class="k">- Correlations</div><div class="v" style="color:var(--red)">${d.negativeCorrelations}</div></div>
+      </div>
+      <div style="padding:12px;background:var(--bg-elevated);border-radius:8px;margin:12px 0;font-size:13px;color:var(--text-secondary);">${d.advice}</div>
+      <h4 style="font-family:var(--font-display);font-weight:700;font-size:14px;margin:16px 0 8px;">Correlation Checks</h4>
+      ${corrHTML}
+    </div>`;
+  } catch (e) { document.getElementById('parlayAnalysis').innerHTML = ''; }
+}
+
+// ========== LIVE TRACKER ==========
+async function loadLive() {
+  try {
+    const d = await (await fetch('/api/parlay/live')).json();
+    const el = document.getElementById('liveGames');
+    if (!d.games || d.games.length === 0) { el.innerHTML = '<div class="empty">No games right now</div>'; return; }
+    el.innerHTML = d.games.map(g => {
+      const statusColor = g.status === 'LIVE' ? 'var(--green)' : g.status === 'FINAL' ? 'var(--text-muted)' : 'var(--accent)';
+      return `<div style="display:flex;justify-content:space-between;align-items:center;padding:12px 16px;background:var(--bg-elevated);border-radius:8px;margin:6px 0;">
+        <div><strong>${g.awayTeam}</strong> ${g.awayScore} — <strong>${g.homeTeam}</strong> ${g.homeScore}</div>
+        <div style="font-family:var(--font-mono);font-size:12px;color:${statusColor}">${g.status}${g.status==='LIVE'?' Q'+g.period+' '+g.clock:''}</div>
+      </div>`;
+    }).join('');
+  } catch (e) {}
+}
+
+// ========== ACCURACY RECORD ==========
+async function loadHistory() {
+  try {
+    const d = await (await fetch('/api/parlay/history')).json();
+    const s = d.overall;
+    document.getElementById('historyStats').innerHTML = `
+      <div class="stat-row">
+        <div class="stat"><div class="k">Total Picks</div><div class="v">${s.total}</div></div>
+        <div class="stat"><div class="k">Hits</div><div class="v" style="color:var(--green)">${s.hits}</div></div>
+        <div class="stat"><div class="k">Misses</div><div class="v" style="color:var(--red)">${s.misses}</div></div>
+        <div class="stat"><div class="k">Hit Rate</div><div class="v">${s.hitRate}%</div></div>
+        <div class="stat"><div class="k">Last 7 Days</div><div class="v">${d.last7Days?.hitRate || 0}%</div></div>
+        <div class="stat"><div class="k">Pending</div><div class="v">${s.pending}</div></div>
+      </div>
+      <h4 style="font-family:var(--font-display);font-weight:700;font-size:14px;margin:16px 0 8px;">By Grade</h4>
+      <div class="stat-row">
+        ${Object.entries(d.byGrade||{}).map(([g, v]) => `<div class="stat"><div class="k">${g}</div><div class="v">${v.hitRate}% <span style="font-size:10px;color:var(--text-muted)">(${v.total})</span></div></div>`).join('')}
+      </div>
+    `;
+
+    const picks = d.recentPicks || [];
+    if (picks.length > 0) {
+      document.getElementById('historyTable').innerHTML = `<table><thead><tr><th>Date</th><th>Player</th><th>Pick</th><th>Grade</th><th>Result</th></tr></thead><tbody>
+        ${picks.map(p => {
+          const rc = p.result === 'hit' ? 'var(--green)' : p.result === 'miss' ? 'var(--red)' : 'var(--text-muted)';
+          return `<tr><td style="font-family:var(--font-mono);font-size:11px;">${p.date||''}</td><td>${p.player||''}</td><td><span style="color:${p.pick==='OVER'?'var(--green)':'var(--red)'}">${p.pick||''}</span> ${p.line||''} ${p.market||''}</td><td>${p.grade||''}</td><td style="color:${rc}">${p.result==='hit'?'✅ Hit':p.result==='miss'?'❌ Miss':'⏳ Pending'}</td></tr>`;
+        }).join('')}
+      </tbody></table>`;
+    } else {
+      document.getElementById('historyTable').innerHTML = '<div class="empty">No graded picks yet. History accumulates as games finish and picks are graded.</div>';
+    }
+  } catch (e) {}
+}
+
+// ========== SHARE CARD ==========
+function generateShareCard() {
+  const player = document.getElementById('sharePlayer').value || 'Player Name';
+  const market = document.getElementById('shareMarket').value;
+  const line = document.getElementById('shareLine').value || '27.5';
+  const dir = document.getElementById('shareDir').value;
+  const conf = document.getElementById('shareConf').value || '85';
+  const grade = document.getElementById('shareGrade').value || 'A+';
+  const dirColor = dir === 'OVER' ? '#10b981' : '#ef4444';
+  const confColor = parseInt(conf) >= 80 ? '#10b981' : parseInt(conf) >= 60 ? '#38bdf8' : '#f59e0b';
+
+  document.getElementById('shareOutput').innerHTML = `
+    <div class="share-card" id="shareCardEl">
+      <div class="logo">⟁ ORACLE — AI SPORTS PREDICTION</div>
+      <div style="font-size:12px;color:var(--text-muted);">Pick of the Day</div>
+      <div class="pick-text">${player}</div>
+      <div style="font-family:var(--font-display);font-weight:900;font-size:28px;color:${dirColor}">${dir} ${line}</div>
+      <div class="details">${market}</div>
+      <div class="conf" style="background:${confColor}22;color:${confColor}">${conf}% Confidence — Grade ${grade}</div>
+      <div style="margin-top:12px;font-size:10px;color:var(--text-muted);">oracle-predict.up.railway.app/pick</div>
+    </div>
+    <p style="text-align:center;color:var(--text-muted);font-size:12px;margin-top:12px;">📸 Screenshot this card and share on social media!</p>
+  `;
+}
+
+// ========== ALERTS ==========
+let myAlerts = JSON.parse(localStorage.getItem('oracle_alerts') || '[]');
+
+function addAlert() {
+  const alert = {
+    id: Date.now(),
+    type: document.getElementById('alertType').value,
+    threshold: parseFloat(document.getElementById('alertThreshold').value) || 5,
+    sport: document.getElementById('alertSport').value,
+    active: true,
+    createdAt: new Date().toISOString(),
+  };
+  myAlerts.push(alert);
+  localStorage.setItem('oracle_alerts', JSON.stringify(myAlerts));
+  renderAlerts();
+}
+
+function removeAlert(id) {
+  myAlerts = myAlerts.filter(a => a.id !== id);
+  localStorage.setItem('oracle_alerts', JSON.stringify(myAlerts));
+  renderAlerts();
+}
+
+function renderAlerts() {
+  const el = document.getElementById('alertsList');
+  if (myAlerts.length === 0) { el.innerHTML = '<div class="empty">No alerts set. Add one above.</div>'; return; }
+  const typeLabels = { ev: '+EV Edge', convergence: 'POTD Convergence', hitrate: 'Hit Rate', middle: 'Middle Gap' };
+  el.innerHTML = myAlerts.map(a => `<div style="display:flex;justify-content:space-between;align-items:center;padding:10px 14px;background:var(--bg-elevated);border-radius:8px;margin:6px 0;">
+    <div style="font-size:13px;"><strong>${typeLabels[a.type]||a.type}</strong> ≥ ${a.threshold}% <span style="color:var(--text-muted);font-size:11px;">(${a.sport.toUpperCase()})</span></div>
+    <span style="cursor:pointer;color:var(--text-muted);font-size:12px;" onclick="removeAlert(${a.id})">✕</span>
+  </div>`).join('');
+}
+
+// ========== INIT ==========
+renderParlay();
+loadLive();
+loadHistory();
+renderAlerts();
+setInterval(loadLive, 30000);
+</script>
+</body>
+</html>

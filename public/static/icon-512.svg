@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
+  <rect width="512" height="512" rx="76.8" fill="#060a14"/>
+  <rect x="25.6" y="25.6" width="460.8" height="460.8" rx="61.44" fill="#0a0f1a" stroke="#1e293b" stroke-width="5.12"/>
+  <text x="256" y="215.04" text-anchor="middle" font-family="Arial" font-weight="900" font-size="92.16" fill="#38bdf8">⟁</text>
+  <text x="256" y="348.16" text-anchor="middle" font-family="Arial" font-weight="900" font-size="71.68" fill="#f1f5f9">ORACLE</text>
+</svg>

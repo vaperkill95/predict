@@ -124,6 +124,13 @@ try {
   console.log("accuracy-boost not found, skipping additional accuracy factors");
 }
 
+let parlayBuilder = null;
+try {
+  parlayBuilder = require("./services/parlay-builder");
+} catch (e) {
+  console.log("parlay-builder not found, skipping parlay/history features");
+}
+
 const app = express();
 const PORT = process.env.PORT || 3001;
 
@@ -213,6 +220,9 @@ if (predV2) {
 }
 if (accuracyBoost) {
   app.use("/api/accuracy", accuracyBoost.router);
+}
+if (parlayBuilder) {
+  app.use("/api/parlay", parlayBuilder.router);
 }
 
 // === Start services ===
@@ -331,6 +341,7 @@ app.get("/api/health", (req, res) => {
       advanced_tools: advancedTools ? "active" : "not loaded",
       prediction_v2: predV2 ? "active" : "not loaded",
       accuracy_boost: accuracyBoost ? "active" : "not loaded",
+      parlay_builder: parlayBuilder ? "active" : "not loaded",
       enrichment: enrichment ? "active" : "not loaded",
     },
   });
@@ -371,6 +382,11 @@ app.get("/start", (req, res) => {
 // === Pick of the Day ===
 app.get("/pick", (req, res) => {
   res.sendFile(path.join(__dirname, "public", "pick-of-the-day.html"));
+});
+
+// === Parlay Builder ===
+app.get("/parlay", (req, res) => {
+  res.sendFile(path.join(__dirname, "public", "parlay-builder.html"));
 });
 
 // === React SPA routes (inject help + sharp buttons) ===
