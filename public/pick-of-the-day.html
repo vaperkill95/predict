@@ -1,0 +1,249 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Pick of the Day — ORACLE</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;600;800;900&family=DM+Sans:wght@400;500;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<style>
+:root{--bg-deep:#060a14;--bg-base:#0a0f1a;--bg-card:#111827;--bg-elevated:#1a2236;--border:#1e293b;--text-primary:#f1f5f9;--text-secondary:#94a3b8;--text-muted:#64748b;--accent:#38bdf8;--green:#10b981;--red:#ef4444;--amber:#f59e0b;--purple:#a78bfa;--font-display:"Outfit",sans-serif;--font-body:"DM Sans",sans-serif;--font-mono:"JetBrains Mono",monospace;}
+*{margin:0;padding:0;box-sizing:border-box;}
+body{background:var(--bg-deep);color:var(--text-primary);font-family:var(--font-body);line-height:1.7;}
+a{color:var(--accent);text-decoration:none;}
+.container{max-width:800px;margin:0 auto;padding:0 20px;}
+
+.nav{padding:16px 0;border-bottom:1px solid var(--border);background:var(--bg-base);position:sticky;top:0;z-index:100;backdrop-filter:blur(12px);}
+.nav-inner{display:flex;align-items:center;justify-content:space-between;max-width:800px;margin:0 auto;padding:0 20px;}
+.nav-logo{font-family:var(--font-display);font-weight:900;font-size:18px;letter-spacing:2px;}
+.nav-logo span{color:var(--accent);}
+.nav-links{display:flex;gap:6px;}
+.nav-links a{font-size:12px;color:var(--text-secondary);font-weight:500;padding:6px 10px;border-radius:6px;transition:all .2s;}
+.nav-links a:hover,.nav-links a.active{background:var(--bg-elevated);color:var(--text-primary);text-decoration:none;}
+
+.hero{padding:50px 0 30px;text-align:center;}
+.hero-badge{display:inline-block;padding:4px 14px;border-radius:20px;font-family:var(--font-mono);font-size:11px;color:var(--amber);background:rgba(245,158,11,.1);border:1px solid rgba(245,158,11,.2);margin-bottom:16px;}
+.hero h1{font-family:var(--font-display);font-weight:900;font-size:clamp(30px,5vw,44px);}
+.hero h1 span{background:linear-gradient(135deg,var(--amber),var(--green));-webkit-background-clip:text;-webkit-text-fill-color:transparent;}
+.hero p{color:var(--text-secondary);font-size:15px;margin-top:10px;max-width:520px;margin-left:auto;margin-right:auto;}
+
+/* Main pick card */
+.potd-card{background:linear-gradient(135deg,rgba(245,158,11,.04),rgba(16,185,129,.04));border:2px solid rgba(245,158,11,.25);border-radius:20px;padding:32px;margin:30px 0;position:relative;overflow:hidden;}
+.potd-card::before{content:'';position:absolute;top:-50%;right:-20%;width:300px;height:300px;background:radial-gradient(circle,rgba(245,158,11,.06),transparent 70%);pointer-events:none;}
+.potd-top{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:20px;flex-wrap:wrap;gap:12px;}
+.potd-player{font-family:var(--font-display);font-weight:900;font-size:clamp(24px,4vw,32px);}
+.potd-game{font-size:13px;color:var(--text-muted);margin-top:2px;}
+.potd-convergence{text-align:center;}
+.potd-convergence .num{font-family:var(--font-display);font-weight:900;font-size:42px;background:linear-gradient(135deg,var(--amber),var(--green));-webkit-background-clip:text;-webkit-text-fill-color:transparent;}
+.potd-convergence .label{font-size:10px;color:var(--text-muted);font-family:var(--font-mono);text-transform:uppercase;letter-spacing:1px;}
+.potd-pick{display:flex;align-items:center;gap:16px;padding:20px;background:var(--bg-card);border-radius:14px;margin:20px 0;}
+.potd-direction{font-family:var(--font-display);font-weight:900;font-size:28px;}
+.potd-line{font-family:var(--font-mono);font-weight:700;font-size:28px;color:var(--accent);}
+.potd-market{font-size:14px;color:var(--text-secondary);}
+.potd-book{margin-top:4px;font-size:12px;color:var(--text-muted);}
+
+/* Signal bars */
+.signals{margin:24px 0;}
+.signals-title{font-family:var(--font-display);font-weight:700;font-size:16px;margin-bottom:14px;}
+.signal-row{display:flex;align-items:center;gap:12px;margin:8px 0;}
+.signal-name{width:110px;font-size:12px;color:var(--text-secondary);flex-shrink:0;}
+.signal-bar-bg{flex:1;height:8px;background:var(--bg-elevated);border-radius:4px;overflow:hidden;}
+.signal-bar-fill{height:100%;border-radius:4px;transition:width .6s ease;}
+.signal-value{width:50px;text-align:right;font-family:var(--font-mono);font-size:11px;color:var(--text-secondary);}
+
+/* Reasoning */
+.reasoning{background:var(--bg-card);border:1px solid var(--border);border-radius:14px;padding:24px;margin:20px 0;}
+.reasoning-title{font-family:var(--font-display);font-weight:700;font-size:16px;margin-bottom:12px;display:flex;align-items:center;gap:8px;}
+.reasoning-text{font-size:14px;color:var(--text-secondary);white-space:pre-line;line-height:1.8;}
+
+/* Runners up */
+.runners{margin:40px 0;}
+.runners-title{font-family:var(--font-display);font-weight:800;font-size:20px;margin-bottom:16px;}
+.runner-card{background:var(--bg-card);border:1px solid var(--border);border-radius:14px;padding:20px;margin:12px 0;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;transition:all .2s;}
+.runner-card:hover{border-color:rgba(56,189,248,.3);}
+.runner-left{display:flex;align-items:center;gap:16px;}
+.runner-rank{font-family:var(--font-display);font-weight:900;font-size:20px;color:var(--text-muted);width:28px;}
+.runner-player{font-weight:700;font-size:15px;}
+.runner-market{font-size:12px;color:var(--text-muted);}
+.runner-right{display:flex;align-items:center;gap:16px;}
+.runner-pick{font-family:var(--font-mono);font-weight:700;font-size:14px;}
+.runner-convergence{font-family:var(--font-mono);font-size:13px;padding:4px 12px;border-radius:6px;}
+
+/* Stats */
+.stats-row{display:grid;grid-template-columns:repeat(auto-fill,minmax(100px,1fr));gap:10px;margin:16px 0;}
+.stat{padding:12px;background:var(--bg-elevated);border-radius:8px;text-align:center;}
+.stat .k{font-size:9px;color:var(--text-muted);font-family:var(--font-mono);text-transform:uppercase;letter-spacing:.5px;}
+.stat .v{font-family:var(--font-display);font-weight:700;font-size:16px;margin-top:2px;}
+
+.loading{text-align:center;padding:60px 20px;color:var(--text-muted);}
+.spinner{display:inline-block;width:24px;height:24px;border:3px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:spin .6s linear infinite;}
+@keyframes spin{to{transform:rotate(360deg);}}
+
+.cta{text-align:center;margin:40px 0;}
+.cta-btn{display:inline-block;padding:14px 32px;background:var(--accent);color:#000;font-family:var(--font-display);font-weight:800;font-size:15px;border-radius:10px;transition:all .2s;text-decoration:none;}
+.cta-btn:hover{transform:translateY(-2px);box-shadow:0 8px 24px rgba(56,189,248,.2);text-decoration:none;}
+
+.footer{text-align:center;padding:30px 0;color:var(--text-muted);font-size:11px;border-top:1px solid var(--border);margin-top:40px;}
+@media(max-width:640px){.potd-pick{flex-wrap:wrap;}.stats-row{grid-template-columns:1fr 1fr 1fr;}.signal-name{width:80px;}}
+</style>
+</head>
+<body>
+
+<nav class="nav">
+  <div class="nav-inner">
+    <div class="nav-logo">⟁ <span>ORACLE</span></div>
+    <div class="nav-links">
+      <a href="/">Home</a>
+      <a href="/start">🎯 Start</a>
+      <a href="/app/">App</a>
+      <a href="/sharp">Sharp</a>
+      <a href="/how-it-works">Guide</a>
+      <a href="/pick" class="active">POTD</a>
+    </div>
+  </div>
+</nav>
+
+<div class="container">
+  <div class="hero">
+    <div class="hero-badge">🏆 Updated every 15 minutes</div>
+    <h1>Pick of the <span>Day</span></h1>
+    <p>One pick. Every signal. ORACLE analyzed all props and found the single bet where the most data points converge.</p>
+  </div>
+
+  <div id="content">
+    <div class="loading">
+      <div class="spinner"></div>
+      <div style="margin-top:12px;">Analyzing all props across every signal...</div>
+    </div>
+  </div>
+</div>
+
+<div class="footer">⟁ ORACLE — For entertainment & research only. Not financial or gambling advice.</div>
+
+<script>
+async function loadPOTD() {
+  try {
+    const resp = await fetch('/api/potd');
+    const data = await resp.json();
+
+    if (!data.available || !data.pickOfTheDay) {
+      document.getElementById('content').innerHTML = `
+        <div style="text-align:center;padding:60px 20px;">
+          <div style="font-size:40px;margin-bottom:12px;">🏀</div>
+          <h2 style="font-family:var(--font-display);font-weight:800;margin-bottom:8px;">No Games Right Now</h2>
+          <p style="color:var(--text-secondary);font-size:14px;">ORACLE generates the Pick of the Day when games are on the schedule.<br>Check back on game day — picks refresh every 15 minutes.</p>
+          <div style="margin-top:24px;"><a href="/app/" class="cta-btn">Browse All Props →</a></div>
+        </div>`;
+      return;
+    }
+
+    const pick = data.pickOfTheDay;
+    const dirColor = pick.pick === 'OVER' ? 'var(--green)' : 'var(--red)';
+    const convColor = pick.convergence >= 80 ? 'var(--green)' : pick.convergence >= 60 ? 'var(--accent)' : 'var(--amber)';
+
+    // Signal bars
+    let signalBars = '';
+    for (const sig of (pick.signals || [])) {
+      const pct = sig.max > 0 ? Math.round((sig.score / sig.max) * 100) : 0;
+      const barColor = pct >= 70 ? 'var(--green)' : pct >= 40 ? 'var(--accent)' : 'var(--text-muted)';
+      signalBars += `<div class="signal-row">
+        <div class="signal-name">${sig.name}</div>
+        <div class="signal-bar-bg"><div class="signal-bar-fill" style="width:${pct}%;background:${barColor}"></div></div>
+        <div class="signal-value" style="color:${barColor}">${sig.value}</div>
+      </div>`;
+    }
+
+    // Runners up
+    let runnersHTML = '';
+    if (data.runnersUp && data.runnersUp.length > 0) {
+      runnersHTML = `<div class="runners"><div class="runners-title">Runners Up</div>`;
+      data.runnersUp.forEach((r, i) => {
+        const rDir = r.pick === 'OVER' ? 'var(--green)' : 'var(--red)';
+        const rConv = r.convergence >= 70 ? 'rgba(16,185,129,.15)' : 'rgba(56,189,248,.15)';
+        const rConvC = r.convergence >= 70 ? 'var(--green)' : 'var(--accent)';
+        runnersHTML += `<div class="runner-card">
+          <div class="runner-left">
+            <div class="runner-rank">#${i + 2}</div>
+            <div><div class="runner-player">${r.player}</div><div class="runner-market">${r.market} — ${r.game || ''}</div></div>
+          </div>
+          <div class="runner-right">
+            <div class="runner-pick" style="color:${rDir}">${r.pick} ${r.line}</div>
+            <div class="runner-convergence" style="background:${rConv};color:${rConvC}">${r.convergence}%</div>
+          </div>
+        </div>`;
+      });
+      runnersHTML += `</div>`;
+    }
+
+    document.getElementById('content').innerHTML = `
+      <div class="potd-card">
+        <div class="potd-top">
+          <div>
+            <div class="potd-player">${pick.player}</div>
+            <div class="potd-game">${pick.game || ''}</div>
+          </div>
+          <div class="potd-convergence">
+            <div class="num">${pick.convergence}</div>
+            <div class="label">Convergence</div>
+          </div>
+        </div>
+
+        <div class="potd-pick">
+          <div class="potd-direction" style="color:${dirColor}">${pick.pick}</div>
+          <div class="potd-line">${pick.line}</div>
+          <div>
+            <div class="potd-market">${pick.market}</div>
+            <div class="potd-book">${pick.bestBook ? 'Best odds @ ' + pick.bestBook.book : ''}</div>
+          </div>
+        </div>
+
+        <div class="stats-row">
+          <div class="stat"><div class="k">Season Avg</div><div class="v">${pick.analytics?.seasonAvg || '—'}</div></div>
+          <div class="stat"><div class="k">Hit Rate</div><div class="v" style="color:var(--green)">${pick.analytics?.hitRate ? pick.analytics.hitRate + '%' : '—'}</div></div>
+          <div class="stat"><div class="k">L5 Avg</div><div class="v">${pick.analytics?.l5Avg || '—'}</div></div>
+          <div class="stat"><div class="k">Trend</div><div class="v">${pick.analytics?.trend === 'hot' ? '🔥 Hot' : pick.analytics?.trend === 'cold' ? '❄️ Cold' : '➡️ Steady'}</div></div>
+          <div class="stat"><div class="k">Signals</div><div class="v">${pick.signalCount}/${pick.totalSignals}</div></div>
+          <div class="stat"><div class="k">Line Type</div><div class="v">${pick.lineType === 'demon' ? '🔥 Demon' : pick.lineType === 'goblin' ? '👹 Goblin' : '—'}</div></div>
+        </div>
+      </div>
+
+      <div class="signals">
+        <div class="signals-title">Signal Breakdown</div>
+        ${signalBars}
+      </div>
+
+      <div class="reasoning">
+        <div class="reasoning-title">🧠 Why This Pick</div>
+        <div class="reasoning-text">${pick.reasoning || 'Multiple strong signals converge on this pick.'}</div>
+      </div>
+
+      ${runnersHTML}
+
+      <div style="text-align:center;padding:12px;margin:20px 0;background:var(--bg-card);border:1px solid var(--border);border-radius:10px;">
+        <div style="font-size:12px;color:var(--text-muted);font-family:var(--font-mono);">
+          ${data.totalAnalyzed} props analyzed • Last updated ${new Date(data.timestamp).toLocaleTimeString()}
+        </div>
+      </div>
+
+      <div class="cta">
+        <a href="/app/" class="cta-btn">See All Props in the App →</a>
+        <div style="margin-top:12px;">
+          <a href="/start" style="font-size:13px;color:var(--text-muted);">New to betting? Start here →</a>
+        </div>
+      </div>
+    `;
+  } catch (err) {
+    document.getElementById('content').innerHTML = `
+      <div style="text-align:center;padding:60px 20px;">
+        <h2 style="font-family:var(--font-display);">Could not load Pick of the Day</h2>
+        <p style="color:var(--text-secondary);margin-top:8px;">Try refreshing the page. ORACLE may be updating.</p>
+      </div>`;
+  }
+}
+
+loadPOTD();
+// Auto-refresh every 5 minutes
+setInterval(loadPOTD, 5 * 60 * 1000);
+</script>
+</body>
+</html>

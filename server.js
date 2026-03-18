@@ -96,6 +96,13 @@ try {
   console.log("sharp-tools not found, skipping pro bettor tools");
 }
 
+let potd = null;
+try {
+  potd = require("./services/pick-of-the-day");
+} catch (e) {
+  console.log("pick-of-the-day not found, skipping POTD engine");
+}
+
 const app = express();
 const PORT = process.env.PORT || 3001;
 
@@ -174,6 +181,9 @@ if (evEngine) {
 if (sharpTools) {
   app.use("/api/sharp", sharpTools.router);
 }
+if (potd) {
+  app.use("/api/potd", potd.router);
+}
 
 // === Start services ===
 dvp.startRefresh();
@@ -196,6 +206,9 @@ if (evEngine && evEngine.startScanning) {
 }
 if (sharpTools && sharpTools.startTracking) {
   sharpTools.startTracking();
+}
+if (potd && potd.startRefresh) {
+  potd.startRefresh();
 }
 
 // Start CDL stats scraper (every 30 min)
@@ -278,6 +291,7 @@ app.get("/api/health", (req, res) => {
       model_tuner: modelTuner ? "available" : "not loaded",
       ev_engine: evEngine ? "active" : "not loaded",
       sharp_tools: sharpTools ? "active" : "not loaded",
+      pick_of_the_day: potd ? "active" : "not loaded",
       enrichment: enrichment ? "active" : "not loaded",
     },
   });
@@ -289,7 +303,7 @@ app.get("/", (req, res) => {
   const fs = require("fs");
   try {
     let html = fs.readFileSync(landingPath, "utf8");
-    const navLinks = '<a href="/start" style="color:#10b981;font-size:14px;font-weight:700;text-decoration:none;padding:10px 16px;border-radius:8px;transition:all 0.2s;background:rgba(16,185,129,0.1);">🎯 Start Here</a>\n    <a href="/how-it-works" style="color:#94a3b8;font-size:14px;font-weight:500;text-decoration:none;padding:10px 16px;border-radius:8px;transition:all 0.2s;">How It Works</a>\n    <a href="/sharp" style="color:#94a3b8;font-size:14px;font-weight:500;text-decoration:none;padding:10px 16px;border-radius:8px;transition:all 0.2s;">⚡ Sharp Tools</a>';
+    const navLinks = '<a href="/pick" style="color:#f59e0b;font-size:14px;font-weight:700;text-decoration:none;padding:10px 16px;border-radius:8px;transition:all 0.2s;background:rgba(245,158,11,0.1);">🏆 Pick of the Day</a>\n    <a href="/start" style="color:#10b981;font-size:14px;font-weight:700;text-decoration:none;padding:10px 16px;border-radius:8px;transition:all 0.2s;background:rgba(16,185,129,0.1);">🎯 Start Here</a>\n    <a href="/how-it-works" style="color:#94a3b8;font-size:14px;font-weight:500;text-decoration:none;padding:10px 16px;border-radius:8px;transition:all 0.2s;">How It Works</a>\n    <a href="/sharp" style="color:#94a3b8;font-size:14px;font-weight:500;text-decoration:none;padding:10px 16px;border-radius:8px;transition:all 0.2s;">⚡ Sharp Tools</a>';
     html = html.replace(
       '<a href="/app/" class="nav-cta">',
       navLinks + '\n    <a href="/app/" class="nav-cta">'
@@ -313,6 +327,11 @@ app.get("/sharp", (req, res) => {
 // === First Bet Walkthrough ===
 app.get("/start", (req, res) => {
   res.sendFile(path.join(__dirname, "public", "first-bet.html"));
+});
+
+// === Pick of the Day ===
+app.get("/pick", (req, res) => {
+  res.sendFile(path.join(__dirname, "public", "pick-of-the-day.html"));
 });
 
 // === React SPA routes (inject help + sharp buttons) ===
