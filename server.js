@@ -131,6 +131,13 @@ try {
   console.log("parlay-builder not found, skipping parlay/history features");
 }
 
+let stability = null;
+try {
+  stability = require("./services/stability");
+} catch (e) {
+  console.log("stability module not found, running without stability features");
+}
+
 const app = express();
 const PORT = process.env.PORT || 3001;
 
@@ -320,8 +327,13 @@ app.get("/manifest.json", (req, res) => {
 
 // === Health endpoint ===
 app.get("/api/health", (req, res) => {
+  const mem = process.memoryUsage();
   res.json({
     status: "ok", uptime: process.uptime(), timestamp: new Date().toISOString(),
+    memory: {
+      heapMB: Math.round(mem.heapUsed / 1024 / 1024),
+      rssMB: Math.round(mem.rss / 1024 / 1024),
+    },
     services: {
       espn: "active",
       anthropic: process.env.ANTHROPIC_API_KEY ? "configured" : "missing",
@@ -342,6 +354,7 @@ app.get("/api/health", (req, res) => {
       prediction_v2: predV2 ? "active" : "not loaded",
       accuracy_boost: accuracyBoost ? "active" : "not loaded",
       parlay_builder: parlayBuilder ? "active" : "not loaded",
+      stability: stability ? "active" : "not loaded",
       enrichment: enrichment ? "active" : "not loaded",
     },
   });
@@ -436,4 +449,9 @@ app.use((err, req, res, next) => {
   res.status(err.status || 500).json({ error: err.message || "Internal server error" });
 });
 
-app.listen(PORT, () => console.log(`ORACLE v2 running on port ${PORT}`));
+const server = app.listen(PORT, () => {
+  console.log(`ORACLE v3 running on port ${PORT} — 18-factor model`);
+  if (stability) {
+    stability.init(app, server);
+  }
+});
