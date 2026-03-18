@@ -146,6 +146,9 @@ a:hover{text-decoration:underline;}
     <div class="tab" data-tab="tracker">📋 Bet Tracker</div>
     <div class="tab" data-tab="corr">🔗 Correlations</div>
     <div class="tab" data-tab="clv">📐 CLV</div>
+    <div class="tab" data-tab="middles">🎯 Middles <span class="badge" style="background:rgba(167,139,250,.15);color:var(--purple)" id="middleBadge">0</span></div>
+    <div class="tab" data-tab="arbs">💎 Arbs <span class="badge" style="background:rgba(56,189,248,.15);color:var(--accent)" id="arbBadge">0</span></div>
+    <div class="tab" data-tab="altlines">📏 Alt Lines <span class="badge" style="background:rgba(245,158,11,.15);color:var(--amber)" id="altBadge">0</span></div>
   </div>
 
   <!-- +EV Panel -->
@@ -211,6 +214,30 @@ a:hover{text-decoration:underline;}
     <p style="color:var(--text-secondary);font-size:13px;margin-bottom:20px;">Lines being tracked for CLV. After games start, ORACLE compares opening vs closing lines to measure if you got value.</p>
     <div class="loading" id="clvLoading"><span class="spinner"></span>Loading tracked lines...</div>
     <div id="clvList"></div>
+  </div>
+
+  <!-- Middles Panel -->
+  <div class="panel" id="panel-middles">
+    <h3 style="font-family:var(--font-display);font-weight:700;margin-bottom:8px;">🎯 Middling Opportunities</h3>
+    <p style="color:var(--text-secondary);font-size:13px;margin-bottom:20px;">Bet BOTH sides at different books. If the result lands in the gap, both bets win. Even if it misses, you only lose the vig on one side.</p>
+    <div class="loading" id="middlesLoading"><span class="spinner"></span>Scanning for middles...</div>
+    <div id="middlesList"></div>
+  </div>
+
+  <!-- Arbs Panel -->
+  <div class="panel" id="panel-arbs">
+    <h3 style="font-family:var(--font-display);font-weight:700;margin-bottom:8px;">💎 Arbitrage Opportunities</h3>
+    <p style="color:var(--text-secondary);font-size:13px;margin-bottom:20px;">Guaranteed profit regardless of outcome. When two books disagree on odds enough, you can bet both sides and lock in profit. Arbs are rare and disappear fast.</p>
+    <div class="loading" id="arbsLoading"><span class="spinner"></span>Scanning for arbitrage...</div>
+    <div id="arbsList"></div>
+  </div>
+
+  <!-- Alt Lines Panel -->
+  <div class="panel" id="panel-altlines">
+    <h3 style="font-family:var(--font-display);font-weight:700;margin-bottom:8px;">📏 Alternate Line Value</h3>
+    <p style="color:var(--text-secondary);font-size:13px;margin-bottom:20px;">One book is offering a significantly easier line than everyone else. Same stat, way better number — that's free value.</p>
+    <div class="loading" id="altLoading"><span class="spinner"></span>Scanning for alt line value...</div>
+    <div id="altList"></div>
   </div>
 </div>
 
@@ -489,10 +516,93 @@ function renderTracker() {
   document.getElementById('trackerTable').innerHTML = html;
 }
 
+// ============ MIDDLES ============
+async function loadMiddles() {
+  const d = await fetchJSON('/api/advanced/middles');
+  document.getElementById('middlesLoading').style.display = 'none';
+  const el = document.getElementById('middlesList');
+  if (!d || !d.middles || d.middles.length === 0) {
+    el.innerHTML = '<div class="empty"><div class="icon">🎯</div>No middling opportunities found right now.<br>Middles appear when books disagree on lines by 2+ points.</div>';
+    document.getElementById('middleBadge').textContent = '0';
+    return;
+  }
+  document.getElementById('middleBadge').textContent = d.middles.length;
+  el.innerHTML = d.middles.map(m => `<div class="card">
+    <div class="card-header">
+      <div><div class="card-player">${m.player}</div><div class="card-market">${m.market} — ${m.gap} pt gap</div></div>
+      <div class="card-badge" style="background:rgba(167,139,250,.15);color:var(--purple)">${m.grade}</div>
+    </div>
+    <div class="card-body">
+      <div class="card-stat"><div class="k">OVER at</div><div class="v" style="color:var(--green)">${m.overLine} @ ${m.overBook}</div></div>
+      <div class="card-stat"><div class="k">UNDER at</div><div class="v" style="color:var(--red)">${m.underLine} @ ${m.underBook}</div></div>
+      <div class="card-stat"><div class="k">Middle Window</div><div class="v">${m.middleWindow}</div></div>
+      <div class="card-stat"><div class="k">If Middle Hits</div><div class="v" style="color:var(--green)">+$${m.profitIfMiddle}</div></div>
+      <div class="card-stat"><div class="k">If Misses</div><div class="v" style="color:var(--red)">$${m.lossIfMiss}</div></div>
+      <div class="card-stat"><div class="k">Middle Chance</div><div class="v">${m.middleChance}</div></div>
+    </div>
+    <div style="padding:0 18px 14px;font-size:12px;color:var(--text-secondary)">${m.strategy}</div>
+  </div>`).join('');
+}
+
+// ============ ARBS ============
+async function loadArbs() {
+  const d = await fetchJSON('/api/advanced/arbs');
+  document.getElementById('arbsLoading').style.display = 'none';
+  const el = document.getElementById('arbsList');
+  if (!d || !d.arbs || d.arbs.length === 0) {
+    el.innerHTML = '<div class="empty"><div class="icon">💎</div>No arbitrage opportunities found right now.<br>Arbs are rare — they appear when two books have opposing odds that sum to less than 100% implied probability.</div>';
+    document.getElementById('arbBadge').textContent = '0';
+    return;
+  }
+  document.getElementById('arbBadge').textContent = d.arbs.length;
+  el.innerHTML = d.arbs.map(a => `<div class="card">
+    <div class="card-header">
+      <div><div class="card-player">${a.player}</div><div class="card-market">${a.market} — Line ${a.line}</div></div>
+      <div class="card-badge" style="background:rgba(16,185,129,.15);color:var(--green)">${a.arbPercent}% arb</div>
+    </div>
+    <div class="card-body">
+      <div class="card-stat"><div class="k">OVER at</div><div class="v">${a.overBook} (${a.overOddsDisplay})</div></div>
+      <div class="card-stat"><div class="k">UNDER at</div><div class="v">${a.underBook} (${a.underOddsDisplay})</div></div>
+      <div class="card-stat"><div class="k">OVER Stake</div><div class="v">$${a.overStake}</div></div>
+      <div class="card-stat"><div class="k">UNDER Stake</div><div class="v">$${a.underStake}</div></div>
+      <div class="card-stat"><div class="k">Guaranteed</div><div class="v" style="color:var(--green)">+$${a.guaranteedProfit}</div></div>
+      <div class="card-stat"><div class="k">Budget</div><div class="v">$${a.totalBudget}</div></div>
+    </div>
+    <div style="padding:0 18px 14px;font-size:12px;color:var(--text-secondary)">${a.strategy}</div>
+  </div>`).join('');
+}
+
+// ============ ALT LINES ============
+async function loadAltLines() {
+  const d = await fetchJSON('/api/advanced/alt-lines');
+  document.getElementById('altLoading').style.display = 'none';
+  const el = document.getElementById('altList');
+  if (!d || !d.altLines || d.altLines.length === 0) {
+    el.innerHTML = '<div class="empty"><div class="icon">📏</div>No alternate line value found right now.<br>Alt line value appears when one book has a line 1.5+ points different from consensus.</div>';
+    document.getElementById('altBadge').textContent = '0';
+    return;
+  }
+  document.getElementById('altBadge').textContent = d.altLines.length;
+  el.innerHTML = d.altLines.map(a => `<div class="card">
+    <div class="card-header">
+      <div><div class="card-player">${a.player}</div><div class="card-market">${a.market} — ${a.diff} pts off</div></div>
+      <div class="card-badge" style="background:rgba(245,158,11,.15);color:var(--amber)">${a.grade}</div>
+    </div>
+    <div class="card-body">
+      <div class="card-stat"><div class="k">${a.book} Line</div><div class="v" style="color:var(--accent)">${a.bookLine}</div></div>
+      <div class="card-stat"><div class="k">Consensus</div><div class="v">${a.consensusLine}</div></div>
+      <div class="card-stat"><div class="k">Value Side</div><div class="v" style="color:${a.valueSide==='OVER'?'var(--green)':'var(--red)'}">${a.valueSide}</div></div>
+      <div class="card-stat"><div class="k">Odds</div><div class="v">${a.valueOddsDisplay}</div></div>
+    </div>
+    <div style="padding:0 18px 14px;font-size:12px;color:var(--text-secondary)">${a.advantage}</div>
+  </div>`).join('');
+}
+
 // ============ REFRESH ALL ============
 function refreshAll() {
   document.querySelectorAll('.loading').forEach(l => l.style.display = 'block');
   loadEV(); loadRLM(); loadSteam(); loadCLV(); loadCorrelations(); renderTracker();
+  loadMiddles(); loadArbs(); loadAltLines();
 }
 
 // ============ INIT ============

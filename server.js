@@ -103,6 +103,13 @@ try {
   console.log("pick-of-the-day not found, skipping POTD engine");
 }
 
+let advancedTools = null;
+try {
+  advancedTools = require("./services/advanced-tools");
+} catch (e) {
+  console.log("advanced-tools not found, skipping middling/arb scanner");
+}
+
 const app = express();
 const PORT = process.env.PORT || 3001;
 
@@ -184,6 +191,9 @@ if (sharpTools) {
 if (potd) {
   app.use("/api/potd", potd.router);
 }
+if (advancedTools) {
+  app.use("/api/advanced", advancedTools.router);
+}
 
 // === Start services ===
 dvp.startRefresh();
@@ -209,6 +219,9 @@ if (sharpTools && sharpTools.startTracking) {
 }
 if (potd && potd.startRefresh) {
   potd.startRefresh();
+}
+if (advancedTools && advancedTools.startScanning) {
+  advancedTools.startScanning();
 }
 
 // Start CDL stats scraper (every 30 min)
@@ -292,6 +305,7 @@ app.get("/api/health", (req, res) => {
       ev_engine: evEngine ? "active" : "not loaded",
       sharp_tools: sharpTools ? "active" : "not loaded",
       pick_of_the_day: potd ? "active" : "not loaded",
+      advanced_tools: advancedTools ? "active" : "not loaded",
       enrichment: enrichment ? "active" : "not loaded",
     },
   });
