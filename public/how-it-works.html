@@ -107,10 +107,11 @@ a:hover { text-decoration: underline; }
     <div class="nav-logo">⟁ <span>ORACLE</span></div>
     <div class="nav-links">
       <a href="/">Home</a>
-      <a href="/start">🎯 Start Here</a>
+      <a href="/pick">🏆 POTD</a>
       <a href="/app/">Open App</a>
-      <a href="/sharp">⚡ Sharp Tools</a>
-      <a href="/how-it-works" class="active">How It Works</a>
+      <a href="/parlay">🎲 Parlay</a>
+      <a href="/sharp">⚡ Sharp</a>
+      <a href="/how-it-works" class="active">Guide</a>
     </div>
   </div>
 </nav>
@@ -140,6 +141,8 @@ a:hover { text-decoration: underline; }
     <a class="toc-item" href="#sports"><span class="num">08</span> Sports Coverage</a>
     <a class="toc-item" href="#accuracy"><span class="num">09</span> Accuracy & Grading</a>
     <a class="toc-item" href="#sharp-dashboard"><span class="num">09b</span> The Sharp Dashboard</a>
+    <a class="toc-item" href="#parlay"><span class="num">09c</span> Parlay Builder & Live Tracker</a>
+    <a class="toc-item" href="#accuracy-factors"><span class="num">09d</span> 18 Prediction Factors (Full List)</a>
     <a class="toc-item" href="#tips"><span class="num">10</span> Tips for Best Results</a>
   </div>
 </div>
@@ -595,7 +598,7 @@ a:hover { text-decoration: underline; }
 
   <div class="term">
     <div class="term-header"><span class="term-emoji">🔥</span><span class="term-name">Top Picks</span></div>
-    <p>ORACLE's best picks of the day. The 7-factor prediction model analyzes every prop, scores them by confidence (0-95%), and surfaces the top 8 with the strongest signals. Each pick shows the projection, hit rate, reasoning, and a letter grade (A+ through C). Updated every 15 minutes.</p>
+    <p>ORACLE's best picks of the day. The 18-factor prediction model analyzes every prop, scores them by confidence (0-95%), and surfaces the top 8 with the strongest signals. Each pick shows the projection, hit rate, reasoning, and a letter grade (A+ through C). Updated every 15 minutes.</p>
   </div>
 
   <div class="term">
@@ -769,6 +772,70 @@ a:hover { text-decoration: underline; }
   <div class="term">
     <div class="term-header"><span class="term-emoji">📏</span><span class="term-name">Alt Lines Tab</span></div>
     <p>Sometimes one sportsbook sets a line that's way off from what every other book has. For example, if the consensus is OVER 27.5 but one book has OVER 24.5 — that book is giving you a 3-point easier number for the same bet. ORACLE finds these outlier lines automatically and tells you exactly which book has the value, which direction to bet, and how many points easier it is compared to the market.</p>
+  </div>
+</div>
+
+<!-- Section 09c: Parlay Builder -->
+<div class="section" id="parlay">
+  <div class="section-label">09c — Build Smarter</div>
+  <h2>Parlay Builder & Live Tracker</h2>
+  <p>Visit <a href="/parlay">/parlay</a> for the full interactive experience. Five tabs in one page:</p>
+
+  <div class="term">
+    <div class="term-header"><span class="term-emoji">🎲</span><span class="term-name">Build Parlay</span></div>
+    <p>Add legs one by one and ORACLE automatically checks correlation between every pair. Same-game legs in the same direction (both OVER) have positive correlation — this actually increases your real probability above what the naive math suggests. Opposing stars both going OVER is negatively correlated — avoid it. You get combined odds, payout per $100, adjusted probability, EV calculation, and a letter grade. Grade A = positively correlated + positive EV.</p>
+  </div>
+
+  <div class="term">
+    <div class="term-header"><span class="term-emoji">📡</span><span class="term-name">Live Tracker</span></div>
+    <p>Real-time scoreboard for every game today. Shows LIVE with quarter and clock, or FINAL with scores. Refreshes every 30 seconds so you can track your bets as they happen.</p>
+  </div>
+
+  <div class="term">
+    <div class="term-header"><span class="term-emoji">📊</span><span class="term-name">Accuracy Record</span></div>
+    <p>ORACLE's complete public track record. Every pick is graded against final box scores. See total hits/misses, hit rate overall and for the last 7 days, broken down by grade (A+ through C), by market (Points, Rebounds, Assists), and by direction (OVER vs UNDER). Full transparency — you can audit everything.</p>
+  </div>
+
+  <div class="term">
+    <div class="term-header"><span class="term-emoji">📤</span><span class="term-name">Share Cards</span></div>
+    <p>Generate a beautiful branded card for any pick — shows player name, direction, line, confidence, and grade on a dark ORACLE-branded background. Screenshot it and post to Twitter or Instagram. Free marketing that builds community.</p>
+  </div>
+
+  <div class="term">
+    <div class="term-header"><span class="term-emoji">🔔</span><span class="term-name">Custom Alerts</span></div>
+    <p>Set thresholds for conditions you care about: "+EV edge ≥ 5%", "POTD convergence ≥ 80%", "hit rate ≥ 70%", or "middle gap ≥ 3 points." Alerts are stored in your browser and checked against incoming data.</p>
+  </div>
+</div>
+
+<!-- Section 09d: Full 18-Factor List -->
+<div class="section" id="accuracy-factors">
+  <div class="section-label">09d — Under the Hood</div>
+  <h2>All 18 Prediction Factors</h2>
+  <p>ORACLE uses 18 distinct factors to generate projections — more than any tool on the market at any price. Here's every single one:</p>
+
+  <div class="example">
+    <div class="example-label">The Complete Factor List</div>
+    <table style="width:100%;border-collapse:collapse;font-size:13px;">
+      <tr style="border-bottom:1px solid var(--border);"><td style="padding:6px 0;font-weight:700;color:var(--accent);">1. Weighted Recency</td><td style="padding:6px 0;color:var(--text-secondary);">Last 3 games = 50%, games 4-10 = 30%, rest = 20%</td></tr>
+      <tr style="border-bottom:1px solid var(--border);"><td style="padding:6px 0;font-weight:700;color:var(--accent);">2. Recent Form (L5)</td><td style="padding:6px 0;color:var(--text-secondary);">Average of last 5 games — hot/cold streak detection</td></tr>
+      <tr style="border-bottom:1px solid var(--border);"><td style="padding:6px 0;font-weight:700;color:var(--accent);">3. Hit Rate</td><td style="padding:6px 0;color:var(--text-secondary);">% of games where player exceeds the specific line</td></tr>
+      <tr style="border-bottom:1px solid var(--border);"><td style="padding:6px 0;font-weight:700;color:var(--accent);">4. Injury Impact</td><td style="padding:6px 0;color:var(--text-secondary);">Teammate injuries redistribute usage to remaining players</td></tr>
+      <tr style="border-bottom:1px solid var(--border);"><td style="padding:6px 0;font-weight:700;color:var(--accent);">5. Vegas Environment</td><td style="padding:6px 0;color:var(--text-secondary);">Game total + spread predict scoring pace</td></tr>
+      <tr style="border-bottom:1px solid var(--border);"><td style="padding:6px 0;font-weight:700;color:var(--accent);">6. Pace/Tempo</td><td style="padding:6px 0;color:var(--text-secondary);">Team pace ratings (possessions per 48 min) affect all stats</td></tr>
+      <tr style="border-bottom:1px solid var(--border);"><td style="padding:6px 0;font-weight:700;color:var(--accent);">7. Regression to Mean</td><td style="padding:6px 0;color:var(--text-secondary);">Extreme hot/cold streaks revert toward the average</td></tr>
+      <tr style="border-bottom:1px solid var(--border);"><td style="padding:6px 0;font-weight:700;color:var(--accent);">8. Home / Away Venue</td><td style="padding:6px 0;color:var(--text-secondary);">15% weighted adjustment based on venue-specific history</td></tr>
+      <tr style="border-bottom:1px solid var(--border);"><td style="padding:6px 0;font-weight:700;color:var(--accent);">9. Consistency Score</td><td style="padding:6px 0;color:var(--text-secondary);">Low-variance players are more predictable → higher confidence</td></tr>
+      <tr style="border-bottom:1px solid var(--border);"><td style="padding:6px 0;font-weight:700;color:var(--green);">10. Minutes Projection ✦</td><td style="padding:6px 0;color:var(--text-secondary);">#1 predictor — spread (blowout risk), B2B fatigue, teammate injuries</td></tr>
+      <tr style="border-bottom:1px solid var(--border);"><td style="padding:6px 0;font-weight:700;color:var(--green);">11. Game Script ✦</td><td style="padding:6px 0;color:var(--text-secondary);">Total + spread → shootout vs defensive battle vs blowout</td></tr>
+      <tr style="border-bottom:1px solid var(--border);"><td style="padding:6px 0;font-weight:700;color:var(--green);">12. Opponent History ✦</td><td style="padding:6px 0;color:var(--text-secondary);">Player's historical stats vs tonight's specific opponent</td></tr>
+      <tr style="border-bottom:1px solid var(--border);"><td style="padding:6px 0;font-weight:700;color:var(--green);">13. Pace × Usage ✦</td><td style="padding:6px 0;color:var(--text-secondary);">High usage + fast pace = exponential stat boost</td></tr>
+      <tr style="border-bottom:1px solid var(--border);"><td style="padding:6px 0;font-weight:700;color:var(--green);">14. Rest Days ✦</td><td style="padding:6px 0;color:var(--text-secondary);">0 days = -4%, 2 days = +2%, 3-5 days = +4%</td></tr>
+      <tr style="border-bottom:1px solid var(--border);"><td style="padding:6px 0;font-weight:700;color:var(--green);">15. Garbage Time Filter ✦</td><td style="padding:6px 0;color:var(--text-secondary);">Blowout = starters sit Q4, bench gets 25% boost</td></tr>
+      <tr style="border-bottom:1px solid var(--border);"><td style="padding:6px 0;font-weight:700;color:var(--green);">16. Weather (NFL/MLB) ✦</td><td style="padding:6px 0;color:var(--text-secondary);">Cold, wind, rain impact outdoor sports stats</td></tr>
+      <tr style="border-bottom:1px solid var(--border);"><td style="padding:6px 0;font-weight:700;color:var(--green);">17. Travel Distance ✦</td><td style="padding:6px 0;color:var(--text-secondary);">Coast-to-coast (2000+ mi) = -3% fatigue penalty</td></tr>
+      <tr><td style="padding:6px 0;font-weight:700;color:var(--green);">18. Defensive Efficiency ✦</td><td style="padding:6px 0;color:var(--text-secondary);">Position-specific DvP — pts allowed per 100 possessions</td></tr>
+    </table>
+    <p style="margin-top:12px;font-size:12px;color:var(--text-muted);">✦ = New factors added in the latest update</p>
   </div>
 </div>
 

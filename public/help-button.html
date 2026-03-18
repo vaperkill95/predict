@@ -5,102 +5,67 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <link rel="apple-touch-icon" href="/static/icon-192.svg">
 <style>
-.oracle-help-btn {
+.oracle-fab-group {
   position: fixed;
   bottom: 20px;
   right: 20px;
   z-index: 9999;
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 10px 18px;
+  gap: 0;
   background: #111827;
   border: 1px solid #1e293b;
   border-radius: 50px;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.5);
+  overflow: hidden;
+}
+.oracle-fab-group a {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 16px;
   color: #94a3b8;
   font-family: "DM Sans", sans-serif;
-  font-size: 13px;
-  font-weight: 500;
+  font-size: 12px;
+  font-weight: 600;
   cursor: pointer;
   text-decoration: none;
   transition: all 0.2s ease;
-  box-shadow: 0 4px 20px rgba(0,0,0,0.4);
+  white-space: nowrap;
 }
-.oracle-help-btn:hover {
+.oracle-fab-group a:first-child {
+  border-right: 1px solid #1e293b;
+}
+.oracle-fab-group a:hover {
   background: #1a2236;
   color: #f1f5f9;
-  border-color: #38bdf8;
-  transform: translateY(-2px);
-  box-shadow: 0 6px 24px rgba(56,189,248,0.15);
   text-decoration: none;
 }
-.oracle-help-icon {
-  width: 22px;
-  height: 22px;
+.oracle-fab-icon {
+  width: 20px;
+  height: 20px;
   border-radius: 50%;
-  background: rgba(56,189,248,0.15);
-  color: #38bdf8;
   display: flex;
   align-items: center;
   justify-content: center;
   font-weight: 700;
-  font-size: 13px;
+  font-size: 11px;
+  flex-shrink: 0;
 }
-@media (max-width: 640px) {
-  .oracle-help-btn span { display: none; }
-  .oracle-help-btn { padding: 12px; border-radius: 50%; }
-}
-.oracle-sharp-btn {
-  position: fixed;
-  bottom: 20px;
-  right: 80px;
-  z-index: 9999;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 10px 18px;
-  background: #111827;
-  border: 1px solid #1e293b;
-  border-radius: 50px;
-  color: #94a3b8;
-  font-family: "DM Sans", sans-serif;
-  font-size: 13px;
-  font-weight: 500;
-  cursor: pointer;
-  text-decoration: none;
-  transition: all 0.2s ease;
-  box-shadow: 0 4px 20px rgba(0,0,0,0.4);
-}
-.oracle-sharp-btn:hover {
-  background: #1a2236;
-  color: #f1f5f9;
-  border-color: #a78bfa;
-  transform: translateY(-2px);
-  box-shadow: 0 6px 24px rgba(167,139,250,0.15);
-  text-decoration: none;
-}
-.oracle-sharp-icon {
-  width: 22px;
-  height: 22px;
-  border-radius: 50%;
+.oracle-fab-icon.sharp {
   background: rgba(167,139,250,0.15);
   color: #a78bfa;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-weight: 700;
-  font-size: 13px;
+}
+.oracle-fab-icon.help {
+  background: rgba(56,189,248,0.15);
+  color: #38bdf8;
 }
 @media (max-width: 640px) {
-  .oracle-sharp-btn span { display: none; }
-  .oracle-sharp-btn { padding: 12px; border-radius: 50%; right: 70px; }
+  .oracle-fab-group a span { display: none; }
+  .oracle-fab-group a { padding: 10px 12px; }
 }
 </style>
-<a href="/sharp" class="oracle-sharp-btn">
-  <div class="oracle-sharp-icon">⚡</div>
-  <span>Sharp Tools</span>
-</a>
-<a href="/how-it-works" class="oracle-help-btn">
-  <div class="oracle-help-icon">?</div>
-  <span>How It Works</span>
-</a>
+<div class="oracle-fab-group">
+  <a href="/sharp"><div class="oracle-fab-icon sharp">⚡</div><span>Sharp Tools</span></a>
+  <a href="/how-it-works"><div class="oracle-fab-icon help">?</div><span>How It Works</span></a>
+</div>
