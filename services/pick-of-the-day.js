@@ -172,10 +172,15 @@ async function generatePickOfTheDay() {
   // Fetch all data sources in parallel
   let props = [], evBets = [], dvpData = [];
   try {
-    const [propsResp, evResp] = await Promise.all([
-      axios.get(`http://localhost:${PORT}/api/props/nba`, { timeout: 15000 }),
-      axios.get(`http://localhost:${PORT}/api/ev/bets?minEdge=0`, { timeout: 10000 }).catch(() => ({ data: { bets: [] } })),
-    ]);
+    // Try enriched props first, fall back to regular props
+    let propsResp;
+    try {
+      propsResp = await axios.get(`http://localhost:${PORT}/api/enriched/props/nba`, { timeout: 20000 });
+    } catch (enrichErr) {
+      console.log('[POTD] Enriched endpoint unavailable, trying regular props...');
+      propsResp = await axios.get(`http://localhost:${PORT}/api/props/nba`, { timeout: 15000 });
+    }
+    const evResp = await axios.get(`http://localhost:${PORT}/api/ev/bets?minEdge=0`, { timeout: 10000 }).catch(() => ({ data: { bets: [] } }));
     props = propsResp.data?.props || [];
     evBets = evResp.data?.bets || [];
   } catch (e) {
@@ -185,11 +190,12 @@ async function generatePickOfTheDay() {
 
   if (props.length === 0) return null;
 
-  // Score every enriched prop
+  // Score every prop that has analytics (enriched) OR has enough book data
   const scored = [];
   for (const prop of props) {
-    if (!prop.enriched || !prop.analytics) continue;
-    if (!prop.analytics.hitRate) continue;
+    // Use enriched data if available, otherwise score with basic signals only
+    const hasAnalytics = prop.enriched && prop.analytics && prop.analytics.hitRate;
+    if (!hasAnalytics && prop.bookCount < 4) continue; // Need either analytics or good book coverage
 
     const scoring = scoreSignals(prop, evBets, dvpData);
 
