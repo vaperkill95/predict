@@ -165,27 +165,43 @@ app.use("/api/", rateLimit({ windowMs: 15 * 60 * 1000, max: 500, message: { erro
 // === API Routes ===
 app.use("/api/sports", sportsRoutes);
 
-// === Intercept game predictions — use ORACLE's engine instead of Anthropic API ===
+// === Intercept game predictions — ALWAYS use ORACLE's 18-factor engine ===
 app.post("/api/predictions/game", async (req, res, next) => {
-  // If Anthropic key exists, let the original handler run
-  if (process.env.ANTHROPIC_API_KEY) return next();
-
   const { sport, gameId, homeTeam, awayTeam } = req.body;
   if (!sport || !gameId) return res.json({ error: "sport and gameId are required" });
 
   try {
-    // Use ORACLE's game predictions engine
+    // Use ORACLE's game predictions engine — call Odds API directly to avoid rate limiter
     if (gamePredictions) {
       const axios = require("axios");
-      const PORT = process.env.PORT || 3001;
-      const gamesResp = await axios.get(`http://localhost:${PORT}/api/games/${sport}`, { timeout: 15000 }).catch(() => null);
-      const games = gamesResp?.data?.games || [];
+      const ODDS_KEY = process.env.ODDS_API_KEY;
+      const PROP_SPORTS = { nba: 'basketball_nba', nfl: 'americanfootball_nfl', mlb: 'baseball_mlb', nhl: 'icehockey_nhl', cdl: null };
+      const oddsSport = PROP_SPORTS[sport];
 
-      // Find this game
+      let games = [];
+      if (ODDS_KEY && oddsSport) {
+        try {
+          const oddsResp = await axios.get(`https://api.the-odds-api.com/v4/sports/${oddsSport}/odds`, {
+            params: { apiKey: ODDS_KEY, regions: 'us,us2', markets: 'spreads,totals,h2h', oddsFormat: 'american' },
+            timeout: 15000,
+          });
+          const rawGames = (oddsResp.data || []).map(g => ({
+            id: g.id, homeTeam: g.home_team, awayTeam: g.away_team, commenceTime: g.commence_time,
+            bookmakers: g.bookmakers?.map(b => ({ title: b.title, key: b.key, markets: b.markets })) || [],
+          }));
+          games = rawGames.map(g => gamePredictions.analyzeGame(g));
+          console.log(`[AI Predict] Got ${games.length} games for ${sport}, looking for ${homeTeam} / ${awayTeam}`);
+        } catch (oddsErr) {
+          console.error(`[AI Predict] Odds API error: ${oddsErr.message}`);
+        }
+      } else {
+        console.log(`[AI Predict] No ODDS_KEY or sport not supported: ${sport} / ${oddsSport}`);
+      }
+
+      // Find this game by matching team names
       const game = games.find(g =>
-        (g.homeTeam === homeTeam || g.awayTeam === awayTeam) ||
-        (homeTeam && g.homeTeam?.includes(homeTeam?.split(' ').pop())) ||
-        (awayTeam && g.awayTeam?.includes(awayTeam?.split(' ').pop()))
+        (homeTeam && (g.homeTeam === homeTeam || g.homeTeam?.includes(homeTeam?.split(' ').pop()))) ||
+        (awayTeam && (g.awayTeam === awayTeam || g.awayTeam?.includes(awayTeam?.split(' ').pop())))
       );
 
       if (game) {
@@ -236,7 +252,19 @@ app.post("/api/predictions/game", async (req, res, next) => {
       },
     });
   } catch (e) {
-    next();
+    // Never fall through to Anthropic — always return ORACLE response
+    return res.json({
+      gameId, sport,
+      prediction: {
+        homeTeam: homeTeam || "Home Team",
+        awayTeam: awayTeam || "Away Team",
+        homeWinProb: 50, awayWinProb: 50, confidence: 0,
+        keyFactors: ["ORACLE prediction engine encountered an issue — try again in a moment"],
+        hotTake: "Prediction temporarily unavailable. Visit /games for full game predictions.",
+        fallback: true,
+        poweredBy: 'ORACLE 18-Factor Model',
+      },
+    });
   }
 });
 
