@@ -72,7 +72,8 @@ async function loadGames(){
     var hc=allGames.filter(function(g){return g.predictions.spread.confidence>=70}).length;
     var bb=allGames.filter(function(g){return g.bestBet}).length;
     var mx=Math.max.apply(null,allGames.map(function(g){return g.bookCount}));
-    document.getElementById('topStats').innerHTML='<div class="stat"><div class="k">Games</div><div class="v">'+allGames.length+'</div></div><div class="stat"><div class="k">Avg Confidence</div><div class="v">'+ac+'%</div></div><div class="stat"><div class="k">Best Bets</div><div class="v" style="color:var(--green)">'+bb+'</div></div><div class="stat"><div class="k">High Conf</div><div class="v" style="color:var(--accent)">'+hc+'</div></div><div class="stat"><div class="k">Books</div><div class="v">'+mx+'</div></div>';
+    var src = allGames[0] && allGames[0].dataSource === 'espn-live' ? 'ESPN Live' : 'Static';
+    document.getElementById('topStats').innerHTML='<div class="stat"><div class="k">Games</div><div class="v">'+allGames.length+'</div></div><div class="stat"><div class="k">Avg Confidence</div><div class="v">'+ac+'%</div></div><div class="stat"><div class="k">Best Bets</div><div class="v" style="color:var(--green)">'+bb+'</div></div><div class="stat"><div class="k">High Conf</div><div class="v" style="color:var(--accent)">'+hc+'</div></div><div class="stat"><div class="k">Books</div><div class="v">'+mx+'</div></div><div class="stat"><div class="k">Data Source</div><div class="v" style="color:var(--green);font-size:12px">'+src+'</div></div>';
     renderAll();
   }catch(e){document.getElementById('gamesContainer').innerHTML='<div class="empty">Error: '+e.message+'</div>'}
 }
@@ -131,7 +132,7 @@ function rg(g){
     '</tbody></table></details>';
   }
 
-  return'<div class="game-card'+(g.bestBet?' has-best-bet':'')+'" id="game-'+g.id+'"><div class="game-header"><div class="teams"><span class="team-name">'+g.awayAbbr+'</span><span class="vs">@</span><span class="team-name">'+g.homeAbbr+'</span><span class="game-time">'+tm+'</span></div><div style="display:flex;align-items:center;gap:4px"><div class="env-badge" style="background:'+evc+'22;color:'+evc+'">'+g.environment+'</div>'+(g.bestBet?'<div class="best-bet-tag">⚡ BEST BET</div>':'')+'</div></div>'+ml+pg+ts+ls+'</div>';
+  return'<div class="game-card'+(g.bestBet?' has-best-bet':'')+'" id="game-'+g.id+'"><div class="game-header"><div class="teams"><span class="team-name">'+g.awayAbbr+'</span>'+(g.records&&g.records.away?' <span style="font-size:10px;color:var(--text-muted);font-family:var(--font-mono)">('+g.records.away+')</span>':'')+' <span class="vs">@</span> <span class="team-name">'+g.homeAbbr+'</span>'+(g.records&&g.records.home?' <span style="font-size:10px;color:var(--text-muted);font-family:var(--font-mono)">('+g.records.home+')</span>':'')+' <span class="game-time">'+tm+'</span></div><div style="display:flex;align-items:center;gap:4px">'+(g.dataSource==='espn-live'?'<div style="font-size:8px;padding:2px 5px;border-radius:3px;background:rgba(16,185,129,.1);color:var(--green);font-family:var(--font-mono)">LIVE DATA</div>':'')+'<div class="env-badge" style="background:'+evc+'22;color:'+evc+'">'+g.environment+'</div>'+(g.bestBet?'<div class="best-bet-tag">⚡ BEST BET</div>':'')+'</div></div>'+ml+pg+ts+ls+'</div>';
 }
 
 loadGames();
