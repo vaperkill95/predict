@@ -628,14 +628,17 @@ function serveWithNav(filePath, activeLink) {
   return (req, res) => {
     try {
       let html = fs.readFileSync(filePath, "utf8");
+      const activeNav = UNIVERSAL_NAV.replace(
+        `href="${activeLink}"`,
+        `href="${activeLink}" style="font-size:12px;color:#f1f5f9;font-weight:700;padding:5px 8px;border-radius:6px;text-decoration:none;background:#1a2236;"`
+      );
       // Replace existing nav with universal nav
       const navRegex = /<nav[^>]*>[\s\S]*?<\/nav>/i;
       if (navRegex.test(html)) {
-        const activeNav = UNIVERSAL_NAV.replace(
-          `href="${activeLink}"`,
-          `href="${activeLink}" style="font-size:12px;color:#f1f5f9;font-weight:700;padding:5px 8px;border-radius:6px;text-decoration:none;background:#1a2236;"`
-        );
         html = html.replace(navRegex, activeNav);
+      } else {
+        // No nav tag — inject after <body>
+        html = html.replace(/<body[^>]*>/i, (match) => match + '\n' + activeNav);
       }
       res.type("html").send(html);
     } catch (e) {
