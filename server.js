@@ -456,6 +456,15 @@ if (playerHeadshots) {
   app.use("/api/headshots", playerHeadshots.router);
 }
 
+// === ORACLE Bot API (Claude Haiku powered) ===
+let botApi = null;
+try {
+  botApi = require("./services/oracle-bot-api");
+  app.use("/api/bot", botApi.router);
+} catch (e) {
+  console.log("oracle-bot-api not found, bot will use fallback mode");
+}
+
 // === Start services ===
 dvp.startRefresh();
 analytics.startRefresh();
@@ -652,6 +661,11 @@ function serveWithNav(filePath, activeLink) {
         // No nav tag — inject after <body>
         html = html.replace(/<body[^>]*>/i, (match) => match + '\n' + activeNav);
       }
+      // Inject bot before </body>
+      try {
+        const botHTML = fs.readFileSync(path.join(__dirname, "public", "oracle-bot.html"), "utf8");
+        html = html.replace("</body>", botHTML + "\n</body>");
+      } catch(e) {}
       res.type("html").send(html);
     } catch (e) {
       res.sendFile(filePath);
@@ -702,12 +716,15 @@ try {
 
 function serveAppWithHelp(req, res) {
   const indexPath = path.join(__dirname, "dist", "index.html");
+  const botPath = path.join(__dirname, "public", "oracle-bot.html");
   const fs = require("fs");
   try {
     let html = fs.readFileSync(indexPath, "utf8");
-    // Read help button fresh each time (not cached)
+    // Read help button + bot fresh each time
     const helpHTML = fs.readFileSync(helpButtonPath, "utf8");
-    html = html.replace("</body>", helpHTML + "\n</body>");
+    let botHTML = "";
+    try { botHTML = fs.readFileSync(botPath, "utf8"); } catch(e) {}
+    html = html.replace("</body>", helpHTML + "\n" + botHTML + "\n</body>");
     res.type("html").send(html);
   } catch (e) {
     res.sendFile(indexPath);

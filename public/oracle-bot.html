@@ -1,0 +1,363 @@
+<!-- ORACLE AI Helper Bot — injected into every page -->
+<style>
+.oracle-bot-btn {
+  position: fixed;
+  bottom: 80px;
+  right: 20px;
+  z-index: 10000;
+  width: 52px;
+  height: 52px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #38bdf8, #a78bfa);
+  border: none;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 24px;
+  box-shadow: 0 4px 20px rgba(56,189,248,0.4);
+  transition: all 0.3s ease;
+  animation: botPulse 3s ease-in-out infinite;
+}
+.oracle-bot-btn:hover { transform: scale(1.1); box-shadow: 0 4px 30px rgba(56,189,248,0.6); }
+@keyframes botPulse { 0%,100%{box-shadow:0 4px 20px rgba(56,189,248,0.3)} 50%{box-shadow:0 4px 25px rgba(167,139,250,0.5)} }
+
+.oracle-bot-panel {
+  position: fixed;
+  bottom: 80px;
+  right: 20px;
+  z-index: 10001;
+  width: 380px;
+  max-height: 520px;
+  background: #0a0f1a;
+  border: 1px solid #1e293b;
+  border-radius: 16px;
+  box-shadow: 0 8px 40px rgba(0,0,0,0.6);
+  display: none;
+  flex-direction: column;
+  overflow: hidden;
+  font-family: "DM Sans", sans-serif;
+}
+.oracle-bot-panel.open { display: flex; }
+
+.bot-header {
+  padding: 14px 16px;
+  background: #111827;
+  border-bottom: 1px solid #1e293b;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.bot-header-left { display: flex; align-items: center; gap: 10px; }
+.bot-avatar {
+  width: 32px; height: 32px; border-radius: 50%;
+  background: linear-gradient(135deg, #38bdf8, #a78bfa);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 16px;
+}
+.bot-title { font-family: "Outfit", sans-serif; font-weight: 700; font-size: 14px; color: #f1f5f9; }
+.bot-subtitle { font-size: 10px; color: #64748b; }
+.bot-close { background: none; border: none; color: #64748b; cursor: pointer; font-size: 18px; padding: 4px; }
+.bot-close:hover { color: #f1f5f9; }
+
+.bot-messages {
+  flex: 1;
+  overflow-y: auto;
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  max-height: 360px;
+}
+.bot-msg {
+  padding: 10px 14px;
+  border-radius: 12px;
+  font-size: 13px;
+  line-height: 1.5;
+  max-width: 92%;
+  word-wrap: break-word;
+}
+.bot-msg.bot {
+  background: #111827;
+  color: #f1f5f9;
+  border: 1px solid #1e293b;
+  align-self: flex-start;
+}
+.bot-msg.user {
+  background: #1a2236;
+  color: #38bdf8;
+  align-self: flex-end;
+}
+.bot-msg .pick-card {
+  background: #1a2236;
+  border: 1px solid #1e293b;
+  border-radius: 8px;
+  padding: 10px;
+  margin-top: 8px;
+}
+.bot-msg .pick-card .pick-player { font-weight: 700; font-size: 14px; }
+.bot-msg .pick-card .pick-dir { font-weight: 700; margin-top: 4px; }
+.bot-msg .pick-card .pick-reason { font-size: 11px; color: #94a3b8; margin-top: 4px; }
+.bot-msg a { color: #38bdf8; text-decoration: underline; }
+
+.bot-quick-btns {
+  padding: 8px 12px;
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  border-top: 1px solid #1e293b;
+}
+.bot-quick {
+  padding: 5px 10px;
+  border-radius: 16px;
+  background: #111827;
+  border: 1px solid #1e293b;
+  color: #94a3b8;
+  font-size: 11px;
+  cursor: pointer;
+  font-family: "DM Sans", sans-serif;
+  transition: all 0.15s;
+  white-space: nowrap;
+}
+.bot-quick:hover { background: #1a2236; color: #f1f5f9; border-color: #38bdf8; }
+
+.bot-input-area {
+  padding: 10px 12px;
+  border-top: 1px solid #1e293b;
+  display: flex;
+  gap: 8px;
+}
+.bot-input {
+  flex: 1;
+  background: #111827;
+  border: 1px solid #1e293b;
+  border-radius: 8px;
+  padding: 8px 12px;
+  color: #f1f5f9;
+  font-size: 12px;
+  font-family: "DM Sans", sans-serif;
+  outline: none;
+}
+.bot-input:focus { border-color: #38bdf8; }
+.bot-send {
+  background: #38bdf8;
+  border: none;
+  border-radius: 8px;
+  color: #000;
+  padding: 8px 14px;
+  font-weight: 700;
+  font-size: 12px;
+  cursor: pointer;
+  font-family: "DM Sans", sans-serif;
+}
+.bot-send:hover { opacity: 0.85; }
+
+@media (max-width: 480px) {
+  .oracle-bot-panel { width: calc(100vw - 24px); right: 12px; bottom: 72px; }
+}
+</style>
+
+<button class="oracle-bot-btn" id="oracleBotBtn" onclick="toggleBot()">⟁</button>
+
+<div class="oracle-bot-panel" id="oracleBotPanel">
+  <div class="bot-header">
+    <div class="bot-header-left">
+      <div class="bot-avatar">⟁</div>
+      <div>
+        <div class="bot-title">ORACLE Assistant</div>
+        <div class="bot-subtitle">AI-powered betting guide</div>
+      </div>
+    </div>
+    <button class="bot-close" onclick="toggleBot()">✕</button>
+  </div>
+
+  <div class="bot-messages" id="botMessages"></div>
+
+  <div class="bot-quick-btns" id="botQuickBtns"></div>
+
+  <div class="bot-input-area">
+    <input class="bot-input" id="botInput" placeholder="Ask me anything..." onkeydown="if(event.key==='Enter')sendBotMsg()">
+    <button class="bot-send" onclick="sendBotMsg()">Send</button>
+  </div>
+</div>
+
+<script>
+(function() {
+  const panel = document.getElementById('oracleBotPanel');
+  const msgs = document.getElementById('botMessages');
+  const quickBtns = document.getElementById('botQuickBtns');
+  let isOpen = false;
+  let botData = {};
+
+  window.toggleBot = function() {
+    isOpen = !isOpen;
+    panel.classList.toggle('open', isOpen);
+    document.getElementById('oracleBotBtn').style.display = isOpen ? 'none' : 'flex';
+    if (isOpen && msgs.children.length === 0) initBot();
+  };
+
+  function addMsg(text, type = 'bot') {
+    const div = document.createElement('div');
+    div.className = `bot-msg ${type}`;
+    div.innerHTML = text;
+    msgs.appendChild(div);
+    msgs.scrollTop = msgs.scrollHeight;
+  }
+
+  function setQuickButtons(buttons) {
+    quickBtns.innerHTML = buttons.map(b =>
+      `<div class="bot-quick" onclick="handleQuick('${b.action}')">${b.label}</div>`
+    ).join('');
+  }
+
+  function detectPage() {
+    const path = window.location.pathname;
+    const hash = window.location.hash;
+    if (path.includes('/app')) {
+      const activeTab = document.querySelector('[class*="active"]')?.textContent?.toLowerCase() || '';
+      if (activeTab.includes('props') || activeTab.includes('player')) return 'props';
+      if (activeTab.includes('top') || activeTab.includes('pick')) return 'picks';
+      if (activeTab.includes('trend')) return 'trending';
+      if (activeTab.includes('history')) return 'history';
+      if (activeTab.includes('score')) return 'scores';
+      if (activeTab.includes('predict')) return 'predictor';
+      if (activeTab.includes('standing')) return 'standings';
+      return 'app';
+    }
+    if (path.includes('/games')) return 'games';
+    if (path.includes('/sharp')) return 'sharp';
+    if (path.includes('/parlay')) return 'parlay';
+    if (path.includes('/pick')) return 'potd';
+    if (path.includes('/player')) return 'player';
+    if (path.includes('/props')) return 'propsExplorer';
+    if (path.includes('/discrepancies')) return 'discrepancies';
+    if (path.includes('/how-it-works')) return 'guide';
+    if (path.includes('/start')) return 'start';
+    if (path === '/') return 'home';
+    return 'unknown';
+  }
+
+  async function initBot() {
+    const page = detectPage();
+    const greeting = getPageGreeting(page);
+    addMsg(greeting);
+    setQuickButtons(getQuickButtons(page));
+
+    // Pre-fetch data for suggestions
+    try {
+      const [picks, games] = await Promise.all([
+        fetch('/api/props/nba/picks').then(r => r.json()).catch(() => ({ picks: [] })),
+        fetch('/api/games/nba').then(r => r.json()).catch(() => ({ games: [] })),
+      ]);
+      botData.picks = picks.picks || [];
+      botData.games = games.games || [];
+    } catch(e) {}
+  }
+
+  function getPageGreeting(page) {
+    const greetings = {
+      props: "👋 You're looking at <strong>Player Props</strong> — odds for individual player stats from 20+ sportsbooks compared side by side. Each row is a player + stat (Points, Rebounds, etc.) with the consensus line and best odds.<br><br>🔥 <strong>Demons</strong> = 6+ books agree, high consensus edge<br>👹 <strong>Goblins</strong> = big line spread, could be a trap<br>⚡ <strong>Edges</strong> = line outlier at one book<br><br>Click any row to expand and see every book's line. Want me to suggest a pick?",
+      picks: "🔥 You're on <strong>Top Picks</strong> — ORACLE's 18-factor AI model analyzed every prop and surfaced the highest-confidence bets. Each pick shows a Grade (A+ to C), confidence %, projection, hit rate, and the reasoning behind it. Green = OVER, Red = UNDER. Want me to explain a specific pick or suggest the best one?",
+      trending: "📈 <strong>Trending Picks</strong> ranks props by combined signal strength — when Demons, line movement, AI confidence, and edge detection all point the same direction, the trending score goes up. This page populates as data accumulates throughout the day.",
+      scores: "⚡ <strong>Live Scores</strong> from ESPN. Click 'AI Predict' on any upcoming game to get ORACLE's winner prediction, spread pick, and over/under — powered by our 18-factor model. Works for NBA, NFL, MLB, NHL, and CDL.",
+      predictor: "🔮 The <strong>Predictor</strong> lets you click 'AI Predict' on any game. ORACLE analyzes the matchup using 18 factors and gives you a winner prediction, spread pick, and over/under call. No API key needed — it's all powered by ORACLE's own engine.",
+      games: "🏟️ <strong>Game Predictions</strong> — ORACLE predicts the winner, spread, and total for every game today. Each prediction includes confidence %, game environment (Shootout, Blowout, etc.), and a full <strong>Line Shopping</strong> table comparing odds across 18+ sportsbooks. Want me to find the best bet?",
+      sharp: "⚡ <strong>Sharp Dashboard</strong> — professional betting tools. <strong>+EV Bets</strong> finds mathematically profitable bets. <strong>RLM</strong> shows where sharp money disagrees with the public. <strong>Middles</strong> finds gaps between books where both sides can win. Best during pre-game hours (11am-7pm ET) when lines are active.",
+      parlay: "🎲 <strong>Parlay Builder</strong> — add legs and ORACLE checks correlations between them. Same-game OVER+OVER = positive correlation (both more likely). The <strong>Accuracy Record</strong> tab shows every pick ORACLE has made, graded against final box scores.",
+      potd: "🏆 <strong>Pick of the Day</strong> — ORACLE's single highest-conviction bet. It finds where the most signals converge: high book consensus + strong hit rate + AI confidence + line movement all pointing the same way. Updated every 15 minutes.",
+      player: "👤 <strong>Player Profile</strong> — search any NBA player to see their full game log, season stats, today's available props, hit rates at every line, and trend charts. Click the tabs to switch between views.",
+      propsExplorer: "📊 <strong>Props Explorer</strong> — a data-dense view of all props with ORACLE's projection, L5/L10 hit rates, streak, confidence, and OVER/UNDER recommendation in every row. Click any column header to sort. Click a player's name to see their full profile.",
+      discrepancies: "🔀 <strong>Discrepancies</strong> — shows props where sportsbooks disagree on the line. A bigger gap = bigger potential edge. If Book A says 25.5 and Book B says 28.5, there's value on one side.",
+      guide: "📖 <strong>How It Works</strong> — a complete guide explaining every feature, every term, and every prediction factor. 15 sections covering everything from what a player prop is to how the 18-factor model works.",
+      home: "👋 Welcome to <strong>ORACLE</strong> — a free AI sports prediction engine with 20+ sportsbooks compared, 18 prediction factors, game predictions, sharp tools, and more. What would you like to explore?",
+    };
+    return greetings[page] || "👋 I'm the ORACLE Assistant. I can explain what you're looking at, suggest picks, and help you find edges. What would you like to know?";
+  }
+
+  function getQuickButtons(page) {
+    const common = [
+      { label: '🎯 Suggest a pick', action: 'suggest' },
+      { label: '📖 What am I looking at?', action: 'explain' },
+    ];
+    const pageSpecific = {
+      props: [{ label: '🔥 Best Demon', action: 'demon' }, { label: '📊 Best hit rate', action: 'hitrate' }],
+      picks: [{ label: '🏆 #1 pick today', action: 'bestpick' }],
+      games: [{ label: '🏟️ Best game bet', action: 'bestgame' }, { label: '📊 Biggest spread', action: 'spread' }],
+      sharp: [{ label: '💰 Any +EV bets?', action: 'ev' }, { label: '🎯 Any middles?', action: 'middles' }],
+      parlay: [{ label: '📊 My accuracy', action: 'accuracy' }],
+      player: [{ label: '📈 Show trends', action: 'trends' }],
+    };
+    return [...common, ...(pageSpecific[page] || [])];
+  }
+
+  // Conversation history for context
+  let conversationHistory = [];
+
+  async function askBot(question) {
+    addMsg('<span style="color:#64748b;font-size:11px;">Thinking...</span>');
+    
+    try {
+      const resp = await fetch('/api/bot/ask', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          question,
+          page: detectPage(),
+          conversationHistory: conversationHistory.slice(-6),
+        }),
+      });
+      const data = await resp.json();
+      
+      // Remove "Thinking..." message
+      const lastMsg = msgs.lastChild;
+      if (lastMsg?.innerHTML?.includes('Thinking')) msgs.removeChild(lastMsg);
+      
+      if (data.answer) {
+        // Track conversation history for context
+        conversationHistory.push({ role: 'user', content: question });
+        conversationHistory.push({ role: 'assistant', content: data.answer });
+        
+        // Format the answer — convert newlines to <br>
+        const formatted = data.answer.replace(/\n/g, '<br>');
+        addMsg(formatted);
+      } else {
+        addMsg("I couldn't generate a response. Try asking differently!");
+      }
+    } catch(e) {
+      // Remove "Thinking..."
+      const lastMsg = msgs.lastChild;
+      if (lastMsg?.innerHTML?.includes('Thinking')) msgs.removeChild(lastMsg);
+      // Fallback to basic mode
+      addMsg("I'm having trouble connecting right now. Try one of the quick buttons below, or check out the <a href='/games'>Game Predictions</a> page!");
+    }
+  }
+
+  window.handleQuick = async function(action) {
+    const labels = {
+      suggest: 'Suggest a pick for me',
+      explain: 'What am I looking at on this page?',
+      demon: 'Show me the best Demon line right now',
+      hitrate: 'Which player has the best hit rate today?',
+      bestpick: "What's the #1 pick today?",
+      bestgame: "What's the best game bet today?",
+      spread: 'Which game has the biggest spread?',
+      ev: 'Are there any +EV bets right now?',
+      middles: 'Any middling opportunities?',
+      accuracy: 'Show me the accuracy record',
+      trends: 'Explain the trend charts to me',
+    };
+    const question = labels[action] || action;
+    addMsg(question, 'user');
+    await askBot(question);
+  };
+
+  window.sendBotMsg = async function() {
+    const input = document.getElementById('botInput');
+    const text = input.value.trim();
+    if (!text) return;
+    input.value = '';
+    addMsg(text, 'user');
+    await askBot(text);
+  };
+})();
+</script>
