@@ -39,6 +39,10 @@ const PORT = process.env.PORT || 3001;
 const SCAN_INTERVAL_MS = 10 * 60 * 1000; // 10 min
 const cache = { evBets: [], lastScan: null };
 
+// Optional: direct props fetcher to bypass HTTP/rate limiter
+let directPropsFetcher = null;
+function setDirectFetcher(fn) { directPropsFetcher = fn; }
+
 // ============================================================
 // Devigging Math
 // ============================================================
@@ -164,12 +168,24 @@ function calculateEV(fairProb, odds) {
 async function scanForEV(sport = 'nba') {
   let props = [];
   try {
-    const resp = await axios.get(`http://localhost:${PORT}/api/props/${sport}`, { timeout: 15000 });
-    props = resp.data?.props || [];
+    if (directPropsFetcher) {
+      // Use direct function call — bypasses HTTP and rate limiter
+      const data = await directPropsFetcher(sport);
+      props = data?.props || [];
+    } else {
+      const resp = await axios.get(`http://localhost:${PORT}/api/props/${sport}`, { timeout: 15000 });
+      props = resp.data?.props || [];
+    }
   } catch (e) {
     console.warn(`[EV] Props fetch failed for ${sport}: ${e.message}`);
     return [];
   }
+
+  if (props.length === 0) {
+    console.log(`[EV] No props available for ${sport}`);
+    return [];
+  }
+  console.log(`[EV] Scanning ${props.length} props for ${sport}...`);
 
   const evBets = [];
 
@@ -269,27 +285,30 @@ async function scanForEV(sport = 'nba') {
 function startScanning() {
   console.log('[EV Engine] +EV scanner started (every 10 min)');
 
-  // Initial scan after 45 seconds
-  setTimeout(async () => {
+  async function runScan() {
     try {
-      cache.evBets = await scanForEV('nba');
+      const sports = ['nba', 'nhl', 'mlb', 'nfl'];
+      let allBets = [];
+      for (const sport of sports) {
+        try {
+          const bets = await scanForEV(sport);
+          allBets = allBets.concat(bets);
+        } catch(e) { /* skip sport */ }
+      }
+      allBets.sort((a, b) => b.evPer100 - a.evPer100);
+      cache.evBets = allBets;
       cache.lastScan = new Date().toISOString();
-      console.log(`[EV Engine] Found ${cache.evBets.length} +EV bets`);
-    } catch (e) {
-      console.warn('[EV Engine] Initial scan failed:', e.message);
-    }
-  }, 45000);
-
-  // Recurring scan
-  setInterval(async () => {
-    try {
-      cache.evBets = await scanForEV('nba');
-      cache.lastScan = new Date().toISOString();
-      console.log(`[EV Engine] Found ${cache.evBets.length} +EV bets`);
+      console.log(`[EV Engine] Scan complete: ${allBets.length} +EV bets across all sports`);
     } catch (e) {
       console.warn('[EV Engine] Scan failed:', e.message);
     }
-  }, SCAN_INTERVAL_MS);
+  }
+
+  // Initial scan after 45 seconds (let props load first)
+  setTimeout(runScan, 45000);
+
+  // Recurring scan
+  setInterval(runScan, SCAN_INTERVAL_MS);
 }
 
 // ============================================================
@@ -402,4 +421,4 @@ router.get('/devig', (req, res) => {
   });
 });
 
-module.exports = { router, startScanning, scanForEV, calculateEV, devigPower, devigMultiplicative, devigWorstCase, americanToProb, probToAmerican };
+module.exports = { router, startScanning, scanForEV, calculateEV, devigPower, devigMultiplicative, devigWorstCase, americanToProb, probToAmerican, setDirectFetcher };

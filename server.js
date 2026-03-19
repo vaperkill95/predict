@@ -473,6 +473,17 @@ if (refData && refData.startRefresh) {
   refData.startRefresh();
 }
 if (evEngine && evEngine.startScanning) {
+  // Give EV engine direct access to props (bypasses HTTP rate limiter)
+  if (evEngine.setDirectFetcher) {
+    evEngine.setDirectFetcher(async (sport) => {
+      try {
+        const { getPlayerProps } = require("./services/props");
+        return await getPlayerProps(sport);
+      } catch(e) {
+        return { props: [] };
+      }
+    });
+  }
   evEngine.startScanning();
 }
 if (sharpTools && sharpTools.startTracking) {
