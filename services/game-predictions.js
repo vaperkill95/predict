@@ -56,101 +56,94 @@ async function fetchESPNTeams(sport) {
   if (!espnSport) return null;
 
   try {
-    var resp = await axios.get('https://site.api.espn.com/apis/site/v2/sports/' + espnSport + '/teams', {
-      params: { limit: 50 },
+    // Use standings endpoint — has wins, losses, home/away records, L10, streaks
+    var resp = await axios.get('https://site.api.espn.com/apis/v2/sports/' + espnSport + '/standings', {
       timeout: 10000,
     });
     var teams = {};
-    var teamsArr = (resp.data.sports || [{}])[0];
-    var leagues = teamsArr.leagues || [];
-    var teamsList = leagues[0] ? leagues[0].teams || [] : [];
+    var conferences = resp.data.children || [];
 
-    teamsList.forEach(function(t) {
-      var team = t.team || t;
-      var abbr = team.abbreviation;
-      var record = team.record ? (team.record.items || team.record) : null;
-      var wins = 0, losses = 0, winPct = 0.5;
-      
-      // Parse record
-      if (record) {
-        if (Array.isArray(record)) {
-          var overall = record.find(function(r) { return r.type === 'total' || r.description === 'Overall Record'; }) || record[0];
-          if (overall && overall.stats) {
-            var wStat = overall.stats.find(function(s) { return s.name === 'wins'; });
-            var lStat = overall.stats.find(function(s) { return s.name === 'losses'; });
-            var pctStat = overall.stats.find(function(s) { return s.name === 'winPercent' || s.name === 'winPct'; });
-            wins = wStat ? wStat.value : 0;
-            losses = lStat ? lStat.value : 0;
-            winPct = pctStat ? pctStat.value : (wins / Math.max(wins + losses, 1));
-          } else if (overall && overall.summary) {
-            var parts = overall.summary.split('-');
-            wins = parseInt(parts[0]) || 0;
-            losses = parseInt(parts[1]) || 0;
-            winPct = wins / Math.max(wins + losses, 1);
-          }
-        } else if (typeof record === 'string') {
-          var parts2 = record.split('-');
-          wins = parseInt(parts2[0]) || 0;
-          losses = parseInt(parts2[1]) || 0;
-          winPct = wins / Math.max(wins + losses, 1);
+    conferences.forEach(function(conf) {
+      var entries = conf.standings ? (conf.standings.entries || []) : [];
+      entries.forEach(function(entry) {
+        var team = entry.team || {};
+        var abbr = team.abbreviation;
+        if (!abbr) return;
+        var stats = entry.stats || [];
+
+        // Helper to find a stat by name
+        function getStat(name) {
+          var s = stats.find(function(st) { return st.name === name || st.abbreviation === name; });
+          return s ? s.value : null;
         }
-      }
-
-      // Home/Away splits
-      var homeWinPct = winPct, awayWinPct = winPct;
-      if (Array.isArray(record)) {
-        var homeRec = record.find(function(r) { return r.type === 'home' || (r.description && r.description.indexOf('Home') >= 0); });
-        var awayRec = record.find(function(r) { return r.type === 'road' || r.type === 'away' || (r.description && r.description.indexOf('Road') >= 0); });
-        if (homeRec && homeRec.summary) {
-          var hp = homeRec.summary.split('-');
-          var hw = parseInt(hp[0]) || 0, hl = parseInt(hp[1]) || 0;
-          homeWinPct = hw / Math.max(hw + hl, 1);
+        function getStatDisplay(name) {
+          var s = stats.find(function(st) { return st.name === name || st.abbreviation === name; });
+          return s ? (s.displayValue || s.summary || null) : null;
         }
-        if (awayRec && awayRec.summary) {
-          var ap = awayRec.summary.split('-');
-          var aw = parseInt(ap[0]) || 0, al = parseInt(ap[1]) || 0;
-          awayWinPct = aw / Math.max(aw + al, 1);
+
+        var wins = getStat('wins') || 0;
+        var losses = getStat('losses') || 0;
+        var winPct = getStat('winPercent') || (wins / Math.max(wins + losses, 1));
+        var ppg = getStat('avgPointsFor') || 0;
+        var oppg = getStat('avgPointsAgainst') || 0;
+        var ptDiff = getStat('pointDifferential') || (ppg - oppg);
+        var streak = getStatDisplay('streak') || '';
+
+        // Parse home/away records: "30-5" format
+        var homeStr = getStatDisplay('Home') || '';
+        var awayStr = getStatDisplay('Road') || '';
+        var l10Str = getStatDisplay('Last Ten Games') || '';
+
+        function parseRecord(str) {
+          if (!str) return { w: 0, l: 0, pct: 0.5 };
+          var parts = str.split('-');
+          var w = parseInt(parts[0]) || 0;
+          var l = parseInt(parts[1]) || 0;
+          return { w: w, l: l, pct: w / Math.max(w + l, 1) };
         }
-      }
 
-      // L10 record
-      var l10WinPct = winPct;
-      if (Array.isArray(record)) {
-        var l10Rec = record.find(function(r) { return r.type === 'last10' || (r.description && r.description.indexOf('Last 10') >= 0); });
-        if (l10Rec && l10Rec.summary) {
-          var lp = l10Rec.summary.split('-');
-          var lw = parseInt(lp[0]) || 0, ll = parseInt(lp[1]) || 0;
-          l10WinPct = lw / Math.max(lw + ll, 1);
-        }
-      }
+        var homeRec = parseRecord(homeStr);
+        var awayRec = parseRecord(awayStr);
+        var l10Rec = parseRecord(l10Str);
 
-      // Convert win% to power rating (1-10 scale)
-      // .750 win% = 8.5, .500 = 5.5, .250 = 2.5
-      var power = 2.5 + (winPct * 8);
-      power = Math.max(2, Math.min(9.5, power));
+        // Convert win% to power rating (1-10 scale)
+        // Also factor in point differential for more accuracy
+        // .750 win% = ~8.5, .500 = ~5.5, .250 = ~2.5
+        var basePower = 2.5 + (winPct * 8);
+        // Point diff adjustment: +10 ptDiff = +0.5 power, -10 = -0.5
+        var ptDiffAdj = (ptDiff / 20) * 1.0;
+        var power = basePower + ptDiffAdj;
+        power = Math.max(2, Math.min(9.5, power));
 
-      teams[abbr] = {
-        name: team.displayName || team.name,
-        abbr: abbr,
-        wins: wins,
-        losses: losses,
-        winPct: winPct,
-        homeWinPct: homeWinPct,
-        awayWinPct: awayWinPct,
-        l10WinPct: l10WinPct,
-        power: +power.toFixed(1),
-        // Recent form factor: if L10 is much better/worse than season, adjust
-        formFactor: l10WinPct - winPct,
-      };
+        teams[abbr] = {
+          name: team.displayName || team.name || abbr,
+          abbr: abbr,
+          wins: wins,
+          losses: losses,
+          winPct: +winPct.toFixed(3),
+          ppg: +ppg.toFixed(1),
+          oppg: +oppg.toFixed(1),
+          ptDiff: +ptDiff.toFixed(1),
+          homeRecord: homeStr,
+          awayRecord: awayStr,
+          l10Record: l10Str,
+          streak: streak,
+          homeWinPct: homeRec.pct,
+          awayWinPct: awayRec.pct,
+          l10WinPct: l10Rec.pct,
+          power: +power.toFixed(1),
+          formFactor: l10Rec.pct - winPct,
+        };
+      });
     });
 
     if (!espnCache[sport]) espnCache[sport] = {};
     espnCache[sport].teams = teams;
     espnCache[sport].fetchedAt = Date.now();
-    console.log('[Games] ESPN: Loaded ' + Object.keys(teams).length + ' ' + sport.toUpperCase() + ' teams with live records');
+    console.log('[Games] ESPN Standings: Loaded ' + Object.keys(teams).length + ' ' + sport.toUpperCase() + ' teams with live records');
     return teams;
   } catch (e) {
-    console.warn('[Games] ESPN teams fetch failed:', e.message);
+    console.warn('[Games] ESPN standings fetch failed:', e.message);
     return null;
   }
 }
@@ -418,7 +411,14 @@ function analyzeGame(game, sport, liveTeams, injuries) {
     id:game.id, homeTeam:game.homeTeam, awayTeam:game.awayTeam, homeAbbr:homeAbbr, awayAbbr:awayAbbr,
     commenceTime:game.commenceTime, sport:sport, environment:environment, bestBet:bestBet,
     dataSource: dataSource,
-    records: { home: homeRecord, away: awayRecord },
+    records: { home: homeRecord, away: awayRecord,
+      homeL10: liveTeams && liveTeams[homeAbbr] ? liveTeams[homeAbbr].l10Record : null,
+      awayL10: liveTeams && liveTeams[awayAbbr] ? liveTeams[awayAbbr].l10Record : null,
+      homeStreak: liveTeams && liveTeams[homeAbbr] ? liveTeams[homeAbbr].streak : null,
+      awayStreak: liveTeams && liveTeams[awayAbbr] ? liveTeams[awayAbbr].streak : null,
+      homePPG: liveTeams && liveTeams[homeAbbr] ? liveTeams[homeAbbr].ppg : null,
+      awayPPG: liveTeams && liveTeams[awayAbbr] ? liveTeams[awayAbbr].ppg : null,
+    },
     adjustments: {
       homePower: +homeAdj.toFixed(1), awayPower: +awayAdj.toFixed(1),
       homeForm: +homeFormAdj.toFixed(2), awayForm: +awayFormAdj.toFixed(2),
