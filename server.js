@@ -621,34 +621,48 @@ discordAlerts.start(fetchPropsInternal, fetchPicksInternal);
 // Start Discord auto-poster (posts picks, EV, games, POTD, results to channels)
 try {
   const discordPoster = require("./services/discord-poster");
-  const posterAxios = require("axios");
   discordPoster.startPosting(
     async (sport) => {
       try {
+        if (smartPicks && smartPicks.picksCache) {
+          var cached = smartPicks.picksCache[sport];
+          if (cached && cached.length > 0) return { picks: cached };
+        }
+        const posterAxios = require("axios");
         const r = await posterAxios.get(`http://localhost:${PORT}/api/props/${sport}/picks`, { timeout: 10000 });
         return r.data;
       } catch(e) { return { picks: [] }; }
     },
     async () => {
       try {
+        if (evEngine && evEngine.scanForEV) {
+          const bets = await evEngine.scanForEV('nba');
+          return { bets: bets || [], found: bets ? bets.length : 0 };
+        }
+        const posterAxios = require("axios");
         const r = await posterAxios.get(`http://localhost:${PORT}/api/ev/bets?minEdge=0`, { timeout: 10000 });
         return r.data;
       } catch(e) { return { bets: [] }; }
     },
     async () => {
       try {
+        const posterAxios = require("axios");
         const r = await posterAxios.get(`http://localhost:${PORT}/api/games/nba`, { timeout: 10000 });
         return r.data;
       } catch(e) { return { games: [] }; }
     },
     async () => {
       try {
+        const posterAxios = require("axios");
         const r = await posterAxios.get(`http://localhost:${PORT}/api/picks/potd`, { timeout: 10000 });
         return r.data;
       } catch(e) { return {}; }
     },
     async () => {
       try {
+        const { getHistoricalStats } = require("./services/parlay-builder");
+        if (getHistoricalStats) return getHistoricalStats();
+        const posterAxios = require("axios");
         const r = await posterAxios.get(`http://localhost:${PORT}/api/parlay/history`, { timeout: 10000 });
         return r.data;
       } catch(e) { return {}; }
