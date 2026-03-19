@@ -170,7 +170,10 @@ async function searchPlayer() {
     // 2. Search ESPN for player details
     const searchResp = await fetch(`https://site.web.api.espn.com/apis/common/v3/search?query=${encodeURIComponent(name)}&limit=5&type=player`);
     const searchData = await searchResp.json();
-    const playerResult = (searchData.results || []).find(r => r.sport === 'basketball' || r.league === 'nba') || searchData.results?.[0];
+    const allResults = searchData.items || searchData.results || [];
+    const playerResult = allResults.find(r =>
+      r.league?.slug === 'nba' || r.sport?.slug === 'basketball' || r.league === 'nba' || r.sport === 'basketball'
+    ) || allResults[0];
 
     if (!playerResult) {
       document.getElementById('tabContent').innerHTML = '<div class="empty"><div class="icon">❌</div>Player not found. Try a different name.</div>';
