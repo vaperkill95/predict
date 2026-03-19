@@ -621,40 +621,36 @@ discordAlerts.start(fetchPropsInternal, fetchPicksInternal);
 // Start Discord auto-poster (posts picks, EV, games, POTD, results to channels)
 try {
   const discordPoster = require("./services/discord-poster");
+  const posterAxios = require("axios");
   discordPoster.startPosting(
-    // getPicksFn — fetches top picks for a sport
     async (sport) => {
       try {
-        const resp = await fetch(`http://localhost:${PORT}/api/props/${sport}/picks`);
-        return await resp.json();
+        const r = await posterAxios.get(`http://localhost:${PORT}/api/props/${sport}/picks`, { timeout: 10000 });
+        return r.data;
       } catch(e) { return { picks: [] }; }
     },
-    // getEVFn — fetches +EV bets
     async () => {
       try {
-        const resp = await fetch(`http://localhost:${PORT}/api/ev/bets?minEdge=0`);
-        return await resp.json();
+        const r = await posterAxios.get(`http://localhost:${PORT}/api/ev/bets?minEdge=0`, { timeout: 10000 });
+        return r.data;
       } catch(e) { return { bets: [] }; }
     },
-    // getGamesFn — fetches game predictions
     async () => {
       try {
-        const resp = await fetch(`http://localhost:${PORT}/api/games/nba`);
-        return await resp.json();
+        const r = await posterAxios.get(`http://localhost:${PORT}/api/games/nba`, { timeout: 10000 });
+        return r.data;
       } catch(e) { return { games: [] }; }
     },
-    // getPOTDFn — fetches pick of the day
     async () => {
       try {
-        const resp = await fetch(`http://localhost:${PORT}/api/picks/potd`);
-        return await resp.json();
+        const r = await posterAxios.get(`http://localhost:${PORT}/api/picks/potd`, { timeout: 10000 });
+        return r.data;
       } catch(e) { return {}; }
     },
-    // getHistoryFn — fetches accuracy record
     async () => {
       try {
-        const resp = await fetch(`http://localhost:${PORT}/api/parlay/history`);
-        return await resp.json();
+        const r = await posterAxios.get(`http://localhost:${PORT}/api/parlay/history`, { timeout: 10000 });
+        return r.data;
       } catch(e) { return {}; }
     }
   );
