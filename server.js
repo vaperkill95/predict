@@ -615,6 +615,21 @@ async function getMovementInternal(sport) {
 // Start trending picks refresh (every 10 min)
 trendingPicks.startRefresh(fetchPropsInternal, fetchPicksInternal, getMovementInternal);
 
+// Pre-fetch games to populate cache for Discord poster (after 90 sec)
+if (gamePredictions) {
+  setTimeout(async () => {
+    try {
+      const posterAxios = require("axios");
+      for (const sp of ['nba', 'nhl']) {
+        try {
+          await posterAxios.get(`http://localhost:${PORT}/api/games/${sp}`, { timeout: 20000 });
+          console.log(`[Games] Pre-fetched ${sp.toUpperCase()} games into cache`);
+        } catch(e) { /* skip */ }
+      }
+    } catch(e) {}
+  }, 90 * 1000);
+}
+
 // Start Discord alerts (every 10 min)
 discordAlerts.start(fetchPropsInternal, fetchPicksInternal);
 
@@ -646,6 +661,10 @@ try {
     },
     async () => {
       try {
+        if (gamePredictions && gamePredictions.getCachedGames) {
+          var cached = gamePredictions.getCachedGames('nba') || gamePredictions.getCachedGames('nhl');
+          if (cached && cached.length > 0) return { games: cached };
+        }
         const posterAxios = require("axios");
         const r = await posterAxios.get(`http://localhost:${PORT}/api/games/nba`, { timeout: 10000 });
         return r.data;
