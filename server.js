@@ -675,9 +675,30 @@ try {
     },
     async () => {
       try {
-        if (potd && potd.generatePickOfTheDay) {
+        var potdData = null;
+        // Try cache first (populated by startRefresh at 90sec)
+        if (potd && potd.cache && potd.cache.picks && potd.cache.picks.pickOfTheDay) {
+          potdData = potd.cache.picks.pickOfTheDay;
+        }
+        // Fallback: generate fresh
+        if (!potdData && potd && potd.generatePickOfTheDay) {
           var potdResult = await potd.generatePickOfTheDay();
-          if (potdResult && potdResult.pickOfTheDay) return { pick: potdResult.pickOfTheDay };
+          potdData = potdResult ? potdResult.pickOfTheDay : null;
+        }
+        if (potdData) {
+          return { pick: {
+            player: potdData.player,
+            market: potdData.market,
+            game: potdData.game,
+            line: potdData.line,
+            pick: potdData.pick,
+            grade: 'A+',
+            confidence: potdData.convergence || 0,
+            projection: potdData.analytics ? potdData.analytics.seasonAvg : null,
+            hitRate: potdData.analytics ? potdData.analytics.hitRate : null,
+            bestBook: potdData.bestBook ? potdData.bestBook.book : null,
+            reasoning: potdData.reasoning,
+          }};
         }
         return {};
       } catch(e) { console.warn('[Discord] POTD fetch error:', e.message); return {}; }

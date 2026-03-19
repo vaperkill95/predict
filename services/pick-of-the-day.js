@@ -319,4 +319,4 @@ router.get('/top10', async (req, res) => {
   });
 });
 
-module.exports = { router, startRefresh, generatePickOfTheDay };
+module.exports = { router, startRefresh, generatePickOfTheDay, cache };
