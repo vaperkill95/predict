@@ -188,15 +188,72 @@ function calcInjuryImpact(injuries, teamAbbr) {
   if (!injuries || (!injuries[teamAbbr] && !injuries[espnAbbr(teamAbbr)])) return 0;
   var teamInj = injuries[teamAbbr] || injuries[espnAbbr(teamAbbr)] || [];
   var impact = 0;
+  var outCount = 0;
   teamInj.forEach(function(inj) {
     if (inj.status === 'Out' || inj.status === 'Doubtful') {
-      impact -= 0.5; // Each key player out = -0.5 power
+      impact -= 0.5;
+      outCount++;
     } else if (inj.status === 'Questionable') {
       impact -= 0.2;
     }
   });
-  // Cap injury impact at -2.0
-  return Math.max(-2.0, impact);
+  // Cap injury impact at -2.5 (even a decimated team can still play)
+  return Math.max(-2.5, impact);
+}
+
+// ============================================================
+// Back-to-Back Detection (ESPN Scoreboard)
+// ============================================================
+var b2bCache = { data: null, fetchedAt: 0 };
+
+async function fetchYesterdayGames(sport) {
+  if (b2bCache.data && Date.now() - b2bCache.fetchedAt < ESPN_TTL) return b2bCache.data;
+
+  var espnSport = ESPN_SPORTS[sport];
+  if (!espnSport) return {};
+
+  try {
+    // Get yesterday's date in YYYYMMDD format
+    var yesterday = new Date();
+    yesterday.setDate(yesterday.getDate() - 1);
+    var dateStr = yesterday.getFullYear() +
+      ('0' + (yesterday.getMonth() + 1)).slice(-2) +
+      ('0' + yesterday.getDate()).slice(-2);
+
+    var resp = await axios.get('https://site.api.espn.com/apis/site/v2/sports/' + espnSport + '/scoreboard', {
+      params: { dates: dateStr },
+      timeout: 10000,
+    });
+
+    var teamsPlayedYesterday = {};
+    (resp.data.events || []).forEach(function(event) {
+      var competitions = event.competitions || [];
+      competitions.forEach(function(comp) {
+        (comp.competitors || []).forEach(function(team) {
+          var abbr = team.team ? team.team.abbreviation : null;
+          if (abbr) teamsPlayedYesterday[abbr] = true;
+        });
+      });
+    });
+
+    b2bCache.data = teamsPlayedYesterday;
+    b2bCache.fetchedAt = Date.now();
+    var count = Object.keys(teamsPlayedYesterday).length;
+    if (count > 0) console.log('[Games] B2B: ' + count + ' teams played yesterday');
+    return teamsPlayedYesterday;
+  } catch (e) {
+    return {};
+  }
+}
+
+// Back-to-back adjustment by sport
+var B2B_PENALTY = { nba: -2.0, nhl: -1.0, mlb: -0.3, nfl: 0 };
+
+function calcB2BAdjustment(b2bTeams, teamAbbr, sport) {
+  if (!b2bTeams) return 0;
+  var played = b2bTeams[teamAbbr] || b2bTeams[espnAbbr(teamAbbr)];
+  if (!played) return 0;
+  return B2B_PENALTY[sport] || 0;
 }
 
 // ============================================================
@@ -278,7 +335,7 @@ function lookupTeam(liveTeams, abbr) {
 // ============================================================
 // Analyze a single game with LIVE data
 // ============================================================
-function analyzeGame(game, sport, liveTeams, injuries) {
+function analyzeGame(game, sport, liveTeams, injuries, b2bTeams) {
   sport = sport || 'nba';
   var homeAbbr = abbrFromName(game.homeTeam);
   var awayAbbr = abbrFromName(game.awayTeam);
@@ -297,10 +354,8 @@ function analyzeGame(game, sport, liveTeams, injuries) {
     awayPower = at.power;
     homeRecord = ht.wins + '-' + ht.losses;
     awayRecord = at.wins + '-' + at.losses;
-    // Recent form adjustment: L10 win% vs season win% (±1.0 max)
     homeFormAdj = Math.max(-1.0, Math.min(1.0, ht.formFactor * 5));
     awayFormAdj = Math.max(-1.0, Math.min(1.0, at.formFactor * 5));
-    // Home/away splits adjustment (±0.5 max)
     homeHomeAdj = Math.max(-0.5, Math.min(0.5, (ht.homeWinPct - ht.winPct) * 3));
     awayAwayAdj = Math.max(-0.5, Math.min(0.5, (at.awayWinPct - at.winPct) * 3));
     dataSource = 'espn-live';
@@ -316,9 +371,13 @@ function analyzeGame(game, sport, liveTeams, injuries) {
   var homeInjImpact = calcInjuryImpact(injuries, homeAbbr);
   var awayInjImpact = calcInjuryImpact(injuries, awayAbbr);
 
+  // Back-to-back adjustment
+  var homeB2B = calcB2BAdjustment(b2bTeams, homeAbbr, sport);
+  var awayB2B = calcB2BAdjustment(b2bTeams, awayAbbr, sport);
+
   // Final adjusted power
-  var homeAdj = homePower + homeFormAdj + homeHomeAdj + homeInjImpact;
-  var awayAdj = awayPower + awayFormAdj + awayAwayAdj + awayInjImpact;
+  var homeAdj = homePower + homeFormAdj + homeHomeAdj + homeInjImpact + homeB2B;
+  var awayAdj = awayPower + awayFormAdj + awayAwayAdj + awayInjImpact + awayB2B;
   var homeAdv = HOME_ADV[sport] || 3.0;
 
   // Collect book data
@@ -460,6 +519,7 @@ function analyzeGame(game, sport, liveTeams, injuries) {
       homePower: +homeAdj.toFixed(1), awayPower: +awayAdj.toFixed(1),
       homeForm: +homeFormAdj.toFixed(2), awayForm: +awayFormAdj.toFixed(2),
       homeInjury: homeInjImpact, awayInjury: awayInjImpact,
+      homeB2B: homeB2B, awayB2B: awayB2B,
     },
     consensus: {spread:consensusSpread,total:consensusTotal},
     predictions: {
@@ -488,9 +548,10 @@ router.get('/:sport', async function(req, res) {
     var ODDS_KEY = process.env.ODDS_API_KEY;
     var oddsSport = PROP_SPORTS[sport];
 
-    var [liveTeams, injuries, oddsData] = await Promise.all([
+    var [liveTeams, injuries, b2bTeams, oddsData] = await Promise.all([
       fetchESPNTeams(sport),
       fetchESPNInjuries(sport),
+      fetchYesterdayGames(sport),
       (ODDS_KEY && oddsSport) ? axios.get('https://api.the-odds-api.com/v4/sports/'+oddsSport+'/odds', {
         params:{apiKey:ODDS_KEY,regions:'us,us2',markets:'spreads,totals,h2h',oddsFormat:'american'},
         timeout:15000,
@@ -504,7 +565,7 @@ router.get('/:sport', async function(req, res) {
 
     if (!games.length) return res.json({sport:sport,games:[],count:0,message:'No games with odds today'});
 
-    var predictions = games.map(function(g) { return analyzeGame(g, sport, liveTeams, injuries); });
+    var predictions = games.map(function(g) { return analyzeGame(g, sport, liveTeams, injuries, b2bTeams); });
     predictions.sort(function(a,b) { return b.predictions.spread.confidence - a.predictions.spread.confidence; });
 
     // Cache
@@ -537,4 +598,4 @@ router.get('/:sport/:gameId', async function(req, res) {
   } catch(err){res.json({error:err.message})}
 });
 
-module.exports = { router, analyzeGame, gamesCache, getCachedGames, fetchESPNTeams, fetchESPNInjuries };
+module.exports = { router, analyzeGame, gamesCache, getCachedGames, fetchESPNTeams, fetchESPNInjuries, fetchYesterdayGames };

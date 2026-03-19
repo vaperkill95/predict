@@ -655,14 +655,20 @@ try {
         if (gamePredictions && gamePredictions.analyzeGame && process.env.ODDS_API_KEY) {
           const posterAxios = require("axios");
           const ODDS_KEY = process.env.ODDS_API_KEY;
-          const oddsResp = await posterAxios.get('https://api.the-odds-api.com/v4/sports/basketball_nba/odds', {
-            params: { apiKey: ODDS_KEY, regions: 'us,us2', markets: 'spreads,totals,h2h', oddsFormat: 'american' },
-            timeout: 15000,
-          });
+          // Fetch ESPN data + odds in parallel
+          const [espnTeams, espnInjuries, b2bTeams, oddsResp] = await Promise.all([
+            gamePredictions.fetchESPNTeams ? gamePredictions.fetchESPNTeams('nba') : Promise.resolve(null),
+            gamePredictions.fetchESPNInjuries ? gamePredictions.fetchESPNInjuries('nba') : Promise.resolve({}),
+            gamePredictions.fetchYesterdayGames ? gamePredictions.fetchYesterdayGames('nba') : Promise.resolve({}),
+            posterAxios.get('https://api.the-odds-api.com/v4/sports/basketball_nba/odds', {
+              params: { apiKey: ODDS_KEY, regions: 'us,us2', markets: 'spreads,totals,h2h', oddsFormat: 'american' },
+              timeout: 15000,
+            }),
+          ]);
           const games = (oddsResp.data || []).map(g => gamePredictions.analyzeGame({
             id: g.id, homeTeam: g.home_team, awayTeam: g.away_team, commenceTime: g.commence_time,
             bookmakers: (g.bookmakers || []).map(b => ({ title: b.title, key: b.key, markets: b.markets })),
-          }, 'nba'));
+          }, 'nba', espnTeams, espnInjuries, b2bTeams));
           // Cache them for future use
           if (gamePredictions.gamesCache) {
             gamePredictions.gamesCache['nba'] = { games: games, timestamp: Date.now() };

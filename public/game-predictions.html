@@ -132,7 +132,28 @@ function rg(g){
     '</tbody></table></details>';
   }
 
-  return'<div class="game-card'+(g.bestBet?' has-best-bet':'')+'" id="game-'+g.id+'"><div class="game-header"><div class="teams"><span class="team-name">'+g.awayAbbr+'</span>'+(g.records&&g.records.away?' <span style="font-size:10px;color:var(--text-muted);font-family:var(--font-mono)">('+g.records.away+')</span>':'')+' <span class="vs">@</span> <span class="team-name">'+g.homeAbbr+'</span>'+(g.records&&g.records.home?' <span style="font-size:10px;color:var(--text-muted);font-family:var(--font-mono)">('+g.records.home+')</span>':'')+' <span class="game-time">'+tm+'</span></div><div style="display:flex;align-items:center;gap:4px">'+(g.dataSource==='espn-live'?'<div style="font-size:8px;padding:2px 5px;border-radius:3px;background:rgba(16,185,129,.1);color:var(--green);font-family:var(--font-mono)">LIVE DATA</div>':'')+'<div class="env-badge" style="background:'+evc+'22;color:'+evc+'">'+g.environment+'</div>'+(g.bestBet?'<div class="best-bet-tag">⚡ BEST BET</div>':'')+'</div></div>'+ml+pg+ts+ls+'</div>';
+  // Team insights bar (B2B, streaks, L10)
+  var insights = '';
+  if (g.records || g.adjustments) {
+    var items = [];
+    if (g.adjustments && g.adjustments.awayB2B < 0) items.push('<span style="color:var(--red)">⚠️ ' + g.awayAbbr + ' B2B</span>');
+    if (g.adjustments && g.adjustments.homeB2B < 0) items.push('<span style="color:var(--red)">⚠️ ' + g.homeAbbr + ' B2B</span>');
+    if (g.records && g.records.awayStreak) items.push('<span style="color:' + (g.records.awayStreak.charAt(0)==='W'?'var(--green)':'var(--red)') + '">' + g.awayAbbr + ' ' + g.records.awayStreak + '</span>');
+    if (g.records && g.records.homeStreak) items.push('<span style="color:' + (g.records.homeStreak.charAt(0)==='W'?'var(--green)':'var(--red)') + '">' + g.homeAbbr + ' ' + g.records.homeStreak + '</span>');
+    if (g.records && g.records.awayL10) items.push(g.awayAbbr + ' L10: ' + g.records.awayL10);
+    if (g.records && g.records.homeL10) items.push(g.homeAbbr + ' L10: ' + g.records.homeL10);
+    if (g.records && g.records.awayPPG) items.push(g.awayAbbr + ' ' + g.records.awayPPG + ' PPG');
+    if (g.records && g.records.homePPG) items.push(g.homeAbbr + ' ' + g.records.homePPG + ' PPG');
+    if (g.adjustments && (g.adjustments.homeInjury < 0 || g.adjustments.awayInjury < 0)) {
+      if (g.adjustments.homeInjury < 0) items.push('<span style="color:var(--amber)">🏥 ' + g.homeAbbr + ' injuries (' + g.adjustments.homeInjury + ')</span>');
+      if (g.adjustments.awayInjury < 0) items.push('<span style="color:var(--amber)">🏥 ' + g.awayAbbr + ' injuries (' + g.adjustments.awayInjury + ')</span>');
+    }
+    if (items.length > 0) {
+      insights = '<div style="display:flex;flex-wrap:wrap;gap:8px;padding:8px 10px;background:var(--bg-elevated);border-radius:6px;margin-bottom:10px;font-size:10px;font-family:var(--font-mono);color:var(--text-secondary)">' + items.join('<span style="color:var(--border)">|</span>') + '</div>';
+    }
+  }
+
+  return'<div class="game-card'+(g.bestBet?' has-best-bet':'')+'" id="game-'+g.id+'"><div class="game-header"><div class="teams"><span class="team-name">'+g.awayAbbr+'</span>'+(g.records&&g.records.away?' <span style="font-size:10px;color:var(--text-muted);font-family:var(--font-mono)">('+g.records.away+')</span>':'')+' <span class="vs">@</span> <span class="team-name">'+g.homeAbbr+'</span>'+(g.records&&g.records.home?' <span style="font-size:10px;color:var(--text-muted);font-family:var(--font-mono)">('+g.records.home+')</span>':'')+' <span class="game-time">'+tm+'</span></div><div style="display:flex;align-items:center;gap:4px">'+(g.dataSource==='espn-live'?'<div style="font-size:8px;padding:2px 5px;border-radius:3px;background:rgba(16,185,129,.1);color:var(--green);font-family:var(--font-mono)">LIVE DATA</div>':'')+'<div class="env-badge" style="background:'+evc+'22;color:'+evc+'">'+g.environment+'</div>'+(g.bestBet?'<div class="best-bet-tag">⚡ BEST BET</div>':'')+'</div></div>'+insights+ml+pg+ts+ls+'</div>';
 }
 
 loadGames();
