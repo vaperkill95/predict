@@ -1,219 +1,124 @@
-<!-- help-button.html — injected into /app/ pages -->
+<!-- ORACLE Injected UI — fab nav + fixes + headshots -->
 <link rel="manifest" href="/manifest.json">
 <meta name="theme-color" content="#38bdf8">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <link rel="apple-touch-icon" href="/static/icon-192.svg">
 <style>
-.oracle-fab-group {
-  position: fixed;
-  bottom: 20px;
-  right: 20px;
-  z-index: 9999;
-  display: flex;
-  align-items: center;
-  gap: 0;
-  background: #111827;
-  border: 1px solid #1e293b;
-  border-radius: 50px;
-  box-shadow: 0 4px 20px rgba(0,0,0,0.5);
-  overflow: hidden;
-}
-.oracle-fab-group a {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 10px 16px;
-  color: #94a3b8;
-  font-family: "DM Sans", sans-serif;
-  font-size: 12px;
-  font-weight: 600;
-  cursor: pointer;
-  text-decoration: none;
-  transition: all 0.2s ease;
-  white-space: nowrap;
-}
-.oracle-fab-group a:first-child {
-  border-right: 1px solid #1e293b;
-}
-.oracle-fab-group a {
-  border-right: 1px solid #1e293b;
-}
-.oracle-fab-group a:last-child {
-  border-right: none;
-}
-.oracle-fab-group a:hover {
-  background: #1a2236;
-  color: #f1f5f9;
-  text-decoration: none;
-}
-.oracle-fab-icon {
-  width: 20px;
-  height: 20px;
-  border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-weight: 700;
-  font-size: 11px;
-  flex-shrink: 0;
-}
-.oracle-fab-icon.sharp {
-  background: rgba(167,139,250,0.15);
-  color: #a78bfa;
-}
-.oracle-fab-icon.help {
-  background: rgba(56,189,248,0.15);
-  color: #38bdf8;
-}
-@media (max-width: 640px) {
-  .oracle-fab-group a span { display: none; }
-  .oracle-fab-group a { padding: 10px 12px; }
-}
+.oracle-fab-group{position:fixed;bottom:20px;right:20px;z-index:9999;display:flex;align-items:center;gap:0;background:#111827;border:1px solid #1e293b;border-radius:50px;box-shadow:0 4px 20px rgba(0,0,0,0.5);overflow:hidden;}
+.oracle-fab-group a{display:flex;align-items:center;gap:6px;padding:10px 16px;color:#94a3b8;font-family:"DM Sans",sans-serif;font-size:12px;font-weight:600;cursor:pointer;text-decoration:none;transition:all 0.2s;white-space:nowrap;border-right:1px solid #1e293b;}
+.oracle-fab-group a:last-child{border-right:none;}
+.oracle-fab-group a:hover{background:#1a2236;color:#f1f5f9;}
+.oracle-fab-icon{width:20px;height:20px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:11px;flex-shrink:0;}
+@media(max-width:640px){.oracle-fab-group a span{display:none;}.oracle-fab-group a{padding:10px 12px;}}
 </style>
 <div class="oracle-fab-group">
   <a href="/"><div class="oracle-fab-icon" style="background:rgba(56,189,248,0.15);color:#38bdf8;">⟁</div><span>Home</span></a>
   <a href="/games"><div class="oracle-fab-icon" style="background:rgba(16,185,129,0.15);color:#10b981;">🏟</div><span>Games</span></a>
   <a href="/player"><div class="oracle-fab-icon" style="background:rgba(245,158,11,0.15);color:#f59e0b;">👤</div><span>Players</span></a>
   <a href="/parlay"><div class="oracle-fab-icon" style="background:rgba(167,139,250,0.15);color:#a78bfa;">🎲</div><span>Parlay</span></a>
-  <a href="/sharp"><div class="oracle-fab-icon sharp">⚡</div><span>Sharp</span></a>
-  <a href="/how-it-works"><div class="oracle-fab-icon help">?</div><span>Guide</span></a>
+  <a href="/sharp"><div class="oracle-fab-icon" style="background:rgba(167,139,250,0.15);color:#a78bfa;">⚡</div><span>Sharp</span></a>
+  <a href="/how-it-works"><div class="oracle-fab-icon" style="background:rgba(56,189,248,0.15);color:#38bdf8;">?</div><span>Guide</span></a>
 </div>
 <script>
-// Hide "AI predictions require an Anthropic API key" and replace with ORACLE message
-(function fixAIPredictMessage() {
-  function replaceMessage() {
-    const allElements = document.querySelectorAll('*');
-    for (const el of allElements) {
-      if (el.children.length > 5) continue;
-      const text = el.textContent || '';
-      if (text.includes('Anthropic API key') || text.includes('ANTHROPIC_API_KEY')) {
-        // Check if this is the container with the error messages
-        if (el.innerText && el.innerText.includes('AI predictions require')) {
-          el.innerHTML = '<div style="padding:12px 16px;background:#111827;border:1px solid #1e293b;border-radius:10px;"><div style="font-size:14px;font-weight:700;color:#38bdf8;margin-bottom:4px;">🔮 ORACLE AI Predictions</div><div style="font-size:12px;color:#94a3b8;">Click "AI Predict" on any game for winner prediction, spread pick, and over/under — powered by ORACLE\'s 18-factor model.</div><div style="margin-top:8px;"><a href="/games" style="font-size:12px;color:#10b981;text-decoration:none;font-weight:600;">🏟️ View full Game Predictions page →</a></div></div>';
-          return true;
-        }
-      }
-    }
-    return false;
-  }
-
-  // Run immediately and also watch for tab changes
-  replaceMessage();
-  const observer = new MutationObserver(() => { replaceMessage(); fixSetupRequired(); });
-  observer.observe(document.body, { childList: true, subtree: true, characterData: true });
-  // Also run periodically for React re-renders
-  setInterval(() => { replaceMessage(); fixSetupRequired(); }, 2000);
-
-  // Fix "Setup Required" on Top Picks tab — force load picks from ORACLE's API
-  async function fixSetupRequired() {
-    const allEls = document.querySelectorAll('*');
-    for (const el of allEls) {
-      if (el.children.length > 3) continue;
-      const text = el.innerText || '';
-      if (text.includes('Setup Required') && text.includes('Failed to generate picks')) {
-        try {
-          const sport = document.querySelector('[class*="active"]')?.textContent?.toLowerCase() || 'nba';
-          const sportKey = ['nba','nfl','mlb','nhl'].find(s => sport.includes(s)) || 'nba';
-          const resp = await fetch(`/api/props/${sportKey}/picks`);
-          const data = await resp.json();
-          if (data.picks && data.picks.length > 0) {
-            let html = '<div style="padding:16px;">';
-            html += '<div style="font-size:16px;font-weight:700;color:#38bdf8;margin-bottom:12px;">🔥 ORACLE Top Picks</div>';
-            for (const p of data.picks.slice(0, 8)) {
-              const gradeColor = p.grade?.includes('A') ? '#10b981' : p.grade?.includes('B') ? '#38bdf8' : '#f59e0b';
-              html += `<div style="background:#111827;border:1px solid #1e293b;border-radius:10px;padding:12px;margin-bottom:8px;">
-                <div style="display:flex;justify-content:space-between;align-items:center;">
-                  <div>
-                    <span style="font-weight:700;color:#f1f5f9;">${p.player}</span>
-                    <span style="color:#64748b;font-size:12px;margin-left:8px;">${p.game || ''}</span>
-                  </div>
-                  <span style="background:${gradeColor}22;color:${gradeColor};padding:2px 8px;border-radius:4px;font-size:12px;font-weight:700;">${p.grade} ${p.confidence}%</span>
-                </div>
-                <div style="margin-top:6px;display:flex;gap:12px;font-size:13px;">
-                  <span style="color:${p.pick === 'OVER' ? '#10b981' : '#ef4444'};font-weight:600;">${p.pick} ${p.line} ${p.market}</span>
-                  <span style="color:#94a3b8;">Proj: ${p.projection?.toFixed(1) || '—'}</span>
-                  <span style="color:#94a3b8;">Hit: ${p.hitRate?.toFixed(0) || '—'}%</span>
-                  <span style="color:#94a3b8;">${p.bestBook || ''}</span>
-                </div>
-                <div style="margin-top:4px;font-size:11px;color:#64748b;">${p.reasoning || ''}</div>
-              </div>`;
-            }
-            html += '</div>';
-            // Find the parent container and replace
-            let container = el;
-            while (container && container.tagName !== 'MAIN' && container.parentElement) {
-              if (container.offsetHeight > 200) break;
-              container = container.parentElement;
-            }
-            container.innerHTML = html;
-          }
-        } catch (e) {}
+(function oracleInjectedScripts(){
+  // === 1. Replace Anthropic API error messages ===
+  function replaceAnthropicMsg(){
+    var els=document.querySelectorAll('*');
+    for(var i=0;i<els.length;i++){
+      var el=els[i];
+      if(el.children.length>5)continue;
+      var t=el.textContent||'';
+      if((t.indexOf('Anthropic API key')>=0||t.indexOf('ANTHROPIC_API_KEY')>=0)&&el.innerText&&el.innerText.indexOf('AI predictions require')>=0){
+        el.innerHTML='<div style="padding:12px 16px;background:#111827;border:1px solid #1e293b;border-radius:10px;"><div style="font-size:14px;font-weight:700;color:#38bdf8;margin-bottom:4px;">🔮 ORACLE AI Predictions</div><div style="font-size:12px;color:#94a3b8;">Click AI Predict on any game for winner prediction, spread pick, and over/under.</div><div style="margin-top:8px;"><a href="/games" style="font-size:12px;color:#10b981;text-decoration:none;font-weight:600;">🏟️ View Game Predictions →</a></div></div>';
         return;
       }
     }
   }
-})();
 
-// === Player Headshot Injection ===
-// Adds ESPN player headshot photos to props list rows
-(function injectHeadshots() {
-  const headshotCache = {};
-  const pendingLookups = new Set();
-  const injected = new WeakSet();
-
-  async function getHeadshot(name) {
-    if (headshotCache[name] !== undefined) return headshotCache[name];
-    if (pendingLookups.has(name)) return null;
-    pendingLookups.add(name);
-    try {
-      const resp = await fetch(`/api/headshots/nba/${encodeURIComponent(name)}`);
-      const data = await resp.json();
-      headshotCache[name] = data.headshot || null;
-    } catch (e) {
-      headshotCache[name] = null;
-    }
-    pendingLookups.delete(name);
-    return headshotCache[name];
-  }
-
-  async function addHeadshots() {
-    // Player names are in <span> elements that match "Firstname Lastname" pattern
-    const spans = document.querySelectorAll('span');
-    for (const span of spans) {
-      if (injected.has(span)) continue;
-      const text = span.textContent?.trim();
-      // Match player name pattern: "First Last" or "First Last Jr" etc
-      if (!text || text.length < 5 || text.length > 35) continue;
-      if (!/^[A-Z][a-z]+ [A-Z]/.test(text)) continue;
-      // Skip if contains non-name characters
-      if (/[·@\d%()$]/.test(text)) continue;
-      // Skip common non-player text
-      if (['Player Props', 'Top Picks', 'Sharp Tools', 'How It Works', 'Game Predictions'].some(s => text.includes(s))) continue;
-      // Must be a leaf or near-leaf node
-      if (span.children.length > 1) continue;
-      // Parent should be a div (React prop row structure)
-      const parent = span.parentElement;
-      if (!parent || parent.tagName === 'NAV' || parent.tagName === 'A') continue;
-      // Don't inject twice
-      if (parent.querySelector('.oracle-hs')) continue;
-
-      injected.add(span);
-      const headshot = await getHeadshot(text);
-      if (headshot) {
-        const img = document.createElement('img');
-        img.src = headshot;
-        img.className = 'oracle-hs';
-        img.style.cssText = 'width:32px;height:24px;border-radius:4px;object-fit:cover;margin-right:6px;vertical-align:middle;display:inline-block;';
-        img.onerror = function() { this.style.display = 'none'; };
-        span.insertBefore(img, span.firstChild);
+  // === 2. Replace "Setup Required" on Top Picks ===
+  function fixSetupRequired(){
+    var els=document.querySelectorAll('*');
+    for(var i=0;i<els.length;i++){
+      var el=els[i];
+      if(el.children.length>3)continue;
+      var t=el.innerText||'';
+      if(t.indexOf('Setup Required')>=0&&(t.indexOf('Failed to generate')>=0||t.indexOf('No props available')>=0)){
+        fetch('/api/props/nba/picks').then(function(r){return r.json();}).then(function(data){
+          if(!data.picks||!data.picks.length)return;
+          var html='<div style="padding:16px;"><div style="font-size:16px;font-weight:700;color:#38bdf8;margin-bottom:12px;">🔥 ORACLE Top Picks</div>';
+          data.picks.slice(0,8).forEach(function(p){
+            var gc=p.grade&&p.grade.indexOf('A')>=0?'#10b981':p.grade&&p.grade.indexOf('B')>=0?'#38bdf8':'#f59e0b';
+            var dc=p.pick==='OVER'?'#10b981':'#ef4444';
+            html+='<div style="background:#111827;border:1px solid #1e293b;border-radius:10px;padding:12px;margin-bottom:8px;">';
+            html+='<div style="display:flex;justify-content:space-between;align-items:center;"><div><span style="font-weight:700;color:#f1f5f9;">'+p.player+'</span> <span style="color:#64748b;font-size:12px;">'+(p.game||'')+'</span></div>';
+            html+='<span style="background:'+gc+'22;color:'+gc+';padding:2px 8px;border-radius:4px;font-size:12px;font-weight:700;">'+p.grade+' '+p.confidence+'%</span></div>';
+            html+='<div style="margin-top:6px;font-size:13px;"><span style="color:'+dc+';font-weight:600;">'+p.pick+' '+p.line+' '+p.market+'</span>';
+            html+=' <span style="color:#94a3b8;">Proj: '+(p.projection?p.projection.toFixed(1):'—')+'</span>';
+            html+=' <span style="color:#94a3b8;">'+(p.bestBook||'')+'</span></div>';
+            html+='<div style="margin-top:4px;font-size:11px;color:#64748b;">'+(p.reasoning||'')+'</div></div>';
+          });
+          html+='</div>';
+          var container=el;
+          while(container&&container.tagName!=='MAIN'&&container.parentElement){if(container.offsetHeight>200)break;container=container.parentElement;}
+          container.innerHTML=html;
+        }).catch(function(){});
+        return;
       }
     }
   }
 
-  // Run periodically
-  setInterval(addHeadshots, 4000);
-  // Initial run after page loads
-  setTimeout(addHeadshots, 3000);
+  // === 3. Player Headshot Injection ===
+  var hsCache={};
+  var hsPending={};
+  var hsInjected=new WeakSet();
+
+  function getHS(name,cb){
+    if(hsCache[name]!==undefined){cb(hsCache[name]);return;}
+    if(hsPending[name]){return;}
+    hsPending[name]=true;
+    fetch('/api/headshots/nba/'+encodeURIComponent(name)).then(function(r){return r.json();}).then(function(d){
+      hsCache[name]=d.headshot||null;
+      delete hsPending[name];
+      cb(hsCache[name]);
+    }).catch(function(){hsCache[name]=null;delete hsPending[name];cb(null);});
+  }
+
+  function addHeadshots(){
+    var spans=document.querySelectorAll('span');
+    for(var i=0;i<spans.length;i++){
+      var span=spans[i];
+      if(hsInjected.has(span))continue;
+      var t=span.textContent;
+      if(!t)continue;
+      t=t.trim();
+      if(t.length<5||t.length>35)continue;
+      if(!/^[A-Z][a-z]+ [A-Z]/.test(t))continue;
+      if(/[·@\d%()$]/.test(t))continue;
+      if(t.indexOf('Player Props')>=0||t.indexOf('Top Picks')>=0||t.indexOf('Sharp Tools')>=0||t.indexOf('Game Pred')>=0)continue;
+      if(span.children.length>1)continue;
+      var par=span.parentElement;
+      if(!par||par.tagName==='NAV'||par.tagName==='A')continue;
+      if(par.querySelector('.oracle-hs'))continue;
+      hsInjected.add(span);
+      (function(sp,nm){
+        getHS(nm,function(url){
+          if(!url)return;
+          var img=document.createElement('img');
+          img.src=url;img.className='oracle-hs';
+          img.style.cssText='width:32px;height:24px;border-radius:4px;object-fit:cover;margin-right:6px;vertical-align:middle;display:inline-block;';
+          img.onerror=function(){this.style.display='none';};
+          sp.insertBefore(img,sp.firstChild);
+        });
+      })(span,t);
+    }
+  }
+
+  // === Run everything ===
+  function runAll(){replaceAnthropicMsg();fixSetupRequired();addHeadshots();}
+  setTimeout(runAll,2000);
+  setInterval(runAll,3500);
+  var obs=new MutationObserver(function(){setTimeout(runAll,500);});
+  obs.observe(document.body,{childList:true,subtree:true});
 })();
 </script>
