@@ -618,6 +618,50 @@ trendingPicks.startRefresh(fetchPropsInternal, fetchPicksInternal, getMovementIn
 // Start Discord alerts (every 10 min)
 discordAlerts.start(fetchPropsInternal, fetchPicksInternal);
 
+// Start Discord auto-poster (posts picks, EV, games, POTD, results to channels)
+try {
+  const discordPoster = require("./services/discord-poster");
+  discordPoster.startPosting(
+    // getPicksFn — fetches top picks for a sport
+    async (sport) => {
+      try {
+        const resp = await fetch(`http://localhost:${PORT}/api/props/${sport}/picks`);
+        return await resp.json();
+      } catch(e) { return { picks: [] }; }
+    },
+    // getEVFn — fetches +EV bets
+    async () => {
+      try {
+        const resp = await fetch(`http://localhost:${PORT}/api/ev/bets?minEdge=0`);
+        return await resp.json();
+      } catch(e) { return { bets: [] }; }
+    },
+    // getGamesFn — fetches game predictions
+    async () => {
+      try {
+        const resp = await fetch(`http://localhost:${PORT}/api/games/nba`);
+        return await resp.json();
+      } catch(e) { return { games: [] }; }
+    },
+    // getPOTDFn — fetches pick of the day
+    async () => {
+      try {
+        const resp = await fetch(`http://localhost:${PORT}/api/picks/potd`);
+        return await resp.json();
+      } catch(e) { return {}; }
+    },
+    // getHistoryFn — fetches accuracy record
+    async () => {
+      try {
+        const resp = await fetch(`http://localhost:${PORT}/api/parlay/history`);
+        return await resp.json();
+      } catch(e) { return {}; }
+    }
+  );
+} catch(e) {
+  console.log("Discord poster not loaded:", e.message);
+}
+
 // === PWA Manifest ===
 app.get("/manifest.json", (req, res) => {
   res.sendFile(path.join(__dirname, "public", "manifest.json"));
