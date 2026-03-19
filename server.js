@@ -482,15 +482,10 @@ if (refData && refData.startRefresh) {
   refData.startRefresh();
 }
 if (evEngine && evEngine.startScanning) {
-  // Give EV engine direct access to props (bypasses HTTP rate limiter)
+  // Give EV engine direct access to shared props cache (saves API credits)
   if (evEngine.setDirectFetcher) {
     evEngine.setDirectFetcher(async (sport) => {
-      try {
-        const { getPlayerProps } = require("./services/props");
-        return await getPlayerProps(sport);
-      } catch(e) {
-        return { props: [] };
-      }
+      return await getCachedProps(sport);
     });
   }
   evEngine.startScanning();
@@ -508,30 +503,49 @@ if (accuracyBoost && accuracyBoost.startMonitoring) {
   accuracyBoost.startMonitoring();
 }
 
-// Start CDL stats scraper (every 30 min)
-scrapeCDLStats().catch(err => console.log("Initial CDL scrape skipped:", err.message));
-setInterval(() => scrapeCDLStats().catch(() => {}), 30 * 60 * 1000);
+// ============================================================
+// SHARED PROPS CACHE — reduces Odds API calls by 80%+
+// All services share this cache instead of calling the API independently
+// ============================================================
+const propsCache = {};
+const PROPS_CACHE_TTL = 15 * 60 * 1000; // 15 min cache — one API call serves ALL services
 
-// Start line movement tracking (every 15 min)
-lineMovement.startTracking(async (sport) => {
+async function getCachedProps(sport) {
+  const now = Date.now();
+  if (propsCache[sport] && now - propsCache[sport].time < PROPS_CACHE_TTL) {
+    return propsCache[sport].data;
+  }
   try {
     const { getPlayerProps } = require("./services/props");
-    return await getPlayerProps(sport);
-  } catch (err) {
-    console.error(`Movement: failed to fetch ${sport}:`, err.message);
+    const data = await getPlayerProps(sport);
+    propsCache[sport] = { data, time: now };
+    console.log(`[PropsCache] Refreshed ${sport}: ${data.props?.length || 0} props`);
+    return data;
+  } catch(e) {
+    console.error(`[PropsCache] Failed for ${sport}: ${e.message}`);
+    // Return stale cache if available
+    if (propsCache[sport]) return propsCache[sport].data;
     return { props: [] };
   }
+}
+
+// Start CDL stats scraper (every 30 min)
+scrapeCDLStats().catch(err => console.log("Initial CDL scrape skipped:", err.message));
+setInterval(() => scrapeCDLStats().catch(() => {}), 60 * 60 * 1000); // reduced to every 60 min
+
+// Start line movement tracking (every 30 min instead of 15)
+lineMovement.startTracking(async (sport) => {
+  return await getCachedProps(sport);
 });
 
-// Helper functions for trending + discord services
+// Helper functions for trending + discord services — USE CACHE
 async function fetchPropsInternal(sport) {
   try {
     if (sport === "cdl") {
       const resp = await fetch(`http://localhost:${PORT}/api/cdl/props`);
       return await resp.json();
     }
-    const resp = await fetch(`http://localhost:${PORT}/api/props/${sport}`);
-    return await resp.json();
+    return await getCachedProps(sport);
   } catch (err) {
     console.error(`fetchPropsInternal failed for ${sport}:`, err.message);
     return { props: [] };

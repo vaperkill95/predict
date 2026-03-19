@@ -13,7 +13,7 @@ const axios = require('axios');
 const router = express.Router();
 
 const PORT = process.env.PORT || 3001;
-const REFRESH_INTERVAL_MS = 15 * 60 * 1000;
+const REFRESH_INTERVAL_MS = 30 * 60 * 1000;
 const CACHE_TTL_MS = 10 * 60 * 1000;
 
 // IMPORTANT: Initialize cache with empty arrays so trending/line-movement never get undefined

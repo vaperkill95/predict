@@ -36,7 +36,7 @@ const axios = require('axios');
 const router = express.Router();
 
 const PORT = process.env.PORT || 3001;
-const SCAN_INTERVAL_MS = 10 * 60 * 1000; // 10 min
+const SCAN_INTERVAL_MS = 30 * 60 * 1000; // 30 min (reduced from 10 to save API credits)
 const cache = { evBets: [], lastScan: null };
 
 // Optional: direct props fetcher to bypass HTTP/rate limiter
