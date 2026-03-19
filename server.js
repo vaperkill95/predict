@@ -593,7 +593,7 @@ app.get("/", (req, res) => {
   const fs = require("fs");
   try {
     let html = fs.readFileSync(landingPath, "utf8");
-    const navLinks = '<a href="/pick" style="color:#f59e0b;font-size:14px;font-weight:700;text-decoration:none;padding:10px 16px;border-radius:8px;transition:all 0.2s;background:rgba(245,158,11,0.1);">🏆 POTD</a>\n    <a href="/games" style="color:#10b981;font-size:14px;font-weight:700;text-decoration:none;padding:10px 16px;border-radius:8px;transition:all 0.2s;background:rgba(16,185,129,0.1);">🏟️ Games</a>\n    <a href="/parlay" style="color:#a78bfa;font-size:14px;font-weight:700;text-decoration:none;padding:10px 16px;border-radius:8px;transition:all 0.2s;background:rgba(167,139,250,0.1);">🎲 Parlay</a>\n    <a href="/sharp" style="color:#94a3b8;font-size:14px;font-weight:500;text-decoration:none;padding:10px 16px;border-radius:8px;transition:all 0.2s;">⚡ Sharp</a>\n    <a href="/how-it-works" style="color:#94a3b8;font-size:14px;font-weight:500;text-decoration:none;padding:10px 16px;border-radius:8px;transition:all 0.2s;">Guide</a>';
+    const navLinks = '<a href="/pick" style="color:#f59e0b;font-size:14px;font-weight:700;text-decoration:none;padding:10px 16px;border-radius:8px;transition:all 0.2s;background:rgba(245,158,11,0.1);">🏆 POTD</a>\n    <a href="/games" style="color:#10b981;font-size:14px;font-weight:700;text-decoration:none;padding:10px 16px;border-radius:8px;transition:all 0.2s;background:rgba(16,185,129,0.1);">🏟️ Games</a>\n    <a href="/parlay" style="color:#a78bfa;font-size:14px;font-weight:700;text-decoration:none;padding:10px 16px;border-radius:8px;transition:all 0.2s;background:rgba(167,139,250,0.1);">🎲 Parlay</a>\n    <a href="/sharp" style="color:#94a3b8;font-size:14px;font-weight:500;text-decoration:none;padding:10px 16px;border-radius:8px;transition:all 0.2s;">⚡ Sharp</a>\n    <a href="/player" style="color:#94a3b8;font-size:14px;font-weight:500;text-decoration:none;padding:10px 16px;border-radius:8px;transition:all 0.2s;">👤 Players</a>\n    <a href="/how-it-works" style="color:#94a3b8;font-size:14px;font-weight:500;text-decoration:none;padding:10px 16px;border-radius:8px;transition:all 0.2s;">Guide</a>';
     html = html.replace(
       '<a href="/app/" class="nav-cta">',
       navLinks + '\n    <a href="/app/" class="nav-cta">'
@@ -619,6 +619,7 @@ const UNIVERSAL_NAV = `<nav class="nav" style="padding:14px 0;border-bottom:1px 
 <a href="/app/" style="font-size:12px;color:#94a3b8;font-weight:500;padding:5px 8px;border-radius:6px;text-decoration:none;">App</a>
 <a href="/parlay" style="font-size:12px;color:#94a3b8;font-weight:500;padding:5px 8px;border-radius:6px;text-decoration:none;">Parlay</a>
 <a href="/sharp" style="font-size:12px;color:#94a3b8;font-weight:500;padding:5px 8px;border-radius:6px;text-decoration:none;">Sharp</a>
+<a href="/player" style="font-size:12px;color:#94a3b8;font-weight:500;padding:5px 8px;border-radius:6px;text-decoration:none;">Players</a>
 <a href="/how-it-works" style="font-size:12px;color:#94a3b8;font-weight:500;padding:5px 8px;border-radius:6px;text-decoration:none;">Guide</a>
 <a href="/start" style="font-size:12px;color:#94a3b8;font-weight:500;padding:5px 8px;border-radius:6px;text-decoration:none;">Start</a>
 </div></div></nav>`;
@@ -665,6 +666,9 @@ app.get("/privacy", (req, res) => {
 
 // === Game Predictions ===
 app.get("/games", serveWithNav(path.join(__dirname, "public", "game-predictions.html"), "/games"));
+
+// === Player Profile ===
+app.get("/player", serveWithNav(path.join(__dirname, "public", "player-profile.html"), "/player"));
 
 // === React SPA routes (inject help + sharp buttons) ===
 const helpButtonPath = path.join(__dirname, "public", "help-button.html");

@@ -1,0 +1,481 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Player Profile — ORACLE</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;600;800;900&family=DM+Sans:wght@400;500;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<style>
+:root{--bg-deep:#060a14;--bg-base:#0a0f1a;--bg-card:#111827;--bg-elevated:#1a2236;--border:#1e293b;--text-primary:#f1f5f9;--text-secondary:#94a3b8;--text-muted:#64748b;--accent:#38bdf8;--green:#10b981;--red:#ef4444;--amber:#f59e0b;--purple:#a78bfa;--font-display:"Outfit",sans-serif;--font-body:"DM Sans",sans-serif;--font-mono:"JetBrains Mono",monospace;}
+*{margin:0;padding:0;box-sizing:border-box;}
+body{background:var(--bg-deep);color:var(--text-primary);font-family:var(--font-body);line-height:1.6;}
+a{color:var(--accent);text-decoration:none;}
+.container{max-width:1100px;margin:0 auto;padding:0 20px;}
+
+/* Search Section */
+.search-section{padding:40px 0 20px;text-align:center;}
+.search-title{font-family:var(--font-display);font-size:28px;font-weight:800;margin-bottom:6px;}
+.search-title span{color:var(--accent);}
+.search-sub{color:var(--text-muted);font-size:13px;margin-bottom:20px;}
+.search-box{display:flex;max-width:500px;margin:0 auto;gap:8px;}
+.search-box input{flex:1;background:var(--bg-card);border:1px solid var(--border);border-radius:10px;padding:12px 16px;color:var(--text-primary);font-size:14px;font-family:var(--font-body);outline:none;transition:border 0.2s;}
+.search-box input:focus{border-color:var(--accent);}
+.search-box button{background:var(--accent);color:#000;border:none;border-radius:10px;padding:12px 20px;font-weight:700;font-size:14px;cursor:pointer;font-family:var(--font-body);transition:opacity 0.2s;}
+.search-box button:hover{opacity:0.85;}
+
+/* Player Header */
+.player-header{display:flex;align-items:center;gap:20px;padding:30px;background:var(--bg-card);border:1px solid var(--border);border-radius:16px;margin-bottom:20px;}
+.player-photo{width:96px;height:70px;border-radius:10px;object-fit:cover;background:var(--bg-elevated);flex-shrink:0;}
+.player-info h1{font-family:var(--font-display);font-size:26px;font-weight:800;margin-bottom:2px;}
+.player-meta{color:var(--text-secondary);font-size:13px;display:flex;gap:12px;flex-wrap:wrap;}
+.player-meta span{display:flex;align-items:center;gap:4px;}
+
+/* Stats Row */
+.stats-row{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px;margin-bottom:20px;}
+.stat-card{background:var(--bg-card);border:1px solid var(--border);border-radius:12px;padding:14px;text-align:center;}
+.stat-card .label{font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:4px;}
+.stat-card .value{font-family:var(--font-mono);font-size:22px;font-weight:700;}
+.stat-card .sub{font-size:11px;color:var(--text-muted);margin-top:2px;}
+
+/* Tabs */
+.tabs{display:flex;gap:4px;margin-bottom:20px;overflow-x:auto;}
+.tab{padding:8px 16px;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;background:var(--bg-card);border:1px solid var(--border);color:var(--text-secondary);transition:all 0.2s;white-space:nowrap;}
+.tab.active{background:var(--accent);color:#000;border-color:var(--accent);}
+.tab:hover:not(.active){background:var(--bg-elevated);color:var(--text-primary);}
+
+/* Game Log Table */
+.game-log{width:100%;border-collapse:collapse;margin-bottom:20px;}
+.game-log th{font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;padding:8px 10px;text-align:left;border-bottom:1px solid var(--border);position:sticky;top:0;background:var(--bg-deep);}
+.game-log td{padding:8px 10px;font-size:13px;border-bottom:1px solid var(--border);font-family:var(--font-mono);}
+.game-log tr:hover{background:var(--bg-elevated);}
+.game-log .hit{color:var(--green);font-weight:600;}
+.game-log .miss{color:var(--red);}
+.game-log .date{font-family:var(--font-body);color:var(--text-secondary);}
+.game-log .opp{font-family:var(--font-body);}
+
+/* Props Section */
+.props-grid{display:grid;gap:10px;margin-bottom:20px;}
+.prop-card{background:var(--bg-card);border:1px solid var(--border);border-radius:12px;padding:14px 16px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;}
+.prop-card .prop-market{font-weight:700;font-size:14px;}
+.prop-card .prop-line{font-family:var(--font-mono);font-size:20px;font-weight:700;color:var(--accent);}
+.prop-card .prop-detail{font-size:12px;color:var(--text-secondary);}
+.prop-card .prop-direction{padding:4px 10px;border-radius:6px;font-size:12px;font-weight:700;}
+.prop-card .over{background:rgba(16,185,129,0.15);color:var(--green);}
+.prop-card .under{background:rgba(239,68,68,0.15);color:var(--red);}
+
+/* Hit Rate Bars */
+.hit-bars{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:10px;margin-bottom:20px;}
+.hit-bar{background:var(--bg-card);border:1px solid var(--border);border-radius:10px;padding:12px;}
+.hit-bar .bar-label{font-size:12px;color:var(--text-secondary);margin-bottom:6px;display:flex;justify-content:space-between;}
+.hit-bar .bar-track{height:8px;background:var(--bg-elevated);border-radius:4px;overflow:hidden;}
+.hit-bar .bar-fill{height:100%;border-radius:4px;transition:width 0.6s ease;}
+
+/* Chart */
+.chart-container{background:var(--bg-card);border:1px solid var(--border);border-radius:12px;padding:20px;margin-bottom:20px;overflow-x:auto;}
+.chart-container canvas{max-width:100%;}
+
+/* Loading / Empty States */
+.empty{text-align:center;padding:60px 20px;color:var(--text-muted);}
+.empty .icon{font-size:48px;margin-bottom:12px;}
+.loading{text-align:center;padding:40px;color:var(--text-muted);}
+
+/* Recent Games Mini Chart */
+.sparkline{display:flex;align-items:flex-end;gap:2px;height:30px;}
+.sparkline .bar{width:6px;border-radius:2px;min-height:3px;transition:height 0.3s;}
+
+@media(max-width:640px){
+  .player-header{flex-direction:column;text-align:center;padding:20px;}
+  .stats-row{grid-template-columns:repeat(3,1fr);}
+  .player-meta{justify-content:center;}
+}
+</style>
+</head>
+<body>
+<div class="container">
+
+<!-- Search Section -->
+<div class="search-section">
+  <div class="search-title">🔍 <span>Player Profile</span></div>
+  <div class="search-sub">Search any NBA player to see their full stats, game log, props, and projections</div>
+  <div class="search-box">
+    <input type="text" id="searchInput" placeholder="Search player (e.g. LeBron James, Luka Doncic)..." autofocus>
+    <button onclick="searchPlayer()">Search</button>
+  </div>
+</div>
+
+<!-- Player Profile Content -->
+<div id="profileContent" style="display:none;">
+
+  <!-- Player Header -->
+  <div class="player-header" id="playerHeader"></div>
+
+  <!-- Season Stats -->
+  <div class="stats-row" id="statsRow"></div>
+
+  <!-- Tabs -->
+  <div class="tabs" id="tabsContainer">
+    <div class="tab active" data-tab="gamelog">📋 Game Log</div>
+    <div class="tab" data-tab="props">🎯 Today's Props</div>
+    <div class="tab" data-tab="hitrates">📊 Hit Rates</div>
+    <div class="tab" data-tab="chart">📈 Trend Chart</div>
+  </div>
+
+  <!-- Tab Content -->
+  <div id="tabContent"></div>
+</div>
+
+<!-- Empty State -->
+<div id="emptyState" class="empty">
+  <div class="icon">🏀</div>
+  <div style="font-weight:700;font-size:16px;margin-bottom:8px;">Search for a player to get started</div>
+  <div style="font-size:13px;">View game logs, props, hit rates, trends, and ORACLE projections</div>
+</div>
+
+</div>
+
+<script>
+const searchInput = document.getElementById('searchInput');
+searchInput.addEventListener('keydown', e => { if (e.key === 'Enter') searchPlayer(); });
+
+let currentPlayer = null;
+let currentGameLog = [];
+let currentProps = [];
+let currentTab = 'gamelog';
+
+// Tab switching
+document.getElementById('tabsContainer').addEventListener('click', e => {
+  const tab = e.target.closest('.tab');
+  if (!tab) return;
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  tab.classList.add('active');
+  currentTab = tab.dataset.tab;
+  renderTabContent();
+});
+
+async function searchPlayer() {
+  const name = searchInput.value.trim();
+  if (!name) return;
+
+  document.getElementById('emptyState').style.display = 'none';
+  document.getElementById('profileContent').style.display = 'none';
+  document.getElementById('tabContent').innerHTML = '<div class="loading">🔍 Searching for ' + name + '...</div>';
+  document.getElementById('profileContent').style.display = 'block';
+
+  try {
+    // 1. Get player headshot + ESPN ID
+    const hsResp = await fetch(`/api/headshots/nba/${encodeURIComponent(name)}`);
+    const hsData = await hsResp.json();
+
+    // 2. Search ESPN for player details
+    const searchResp = await fetch(`https://site.web.api.espn.com/apis/common/v3/search?query=${encodeURIComponent(name)}&limit=5&type=player`);
+    const searchData = await searchResp.json();
+    const playerResult = (searchData.results || []).find(r => r.sport === 'basketball' || r.league === 'nba') || searchData.results?.[0];
+
+    if (!playerResult) {
+      document.getElementById('tabContent').innerHTML = '<div class="empty"><div class="icon">❌</div>Player not found. Try a different name.</div>';
+      return;
+    }
+
+    const playerId = playerResult.id;
+
+    // 3. Get player game log from ESPN
+    const logResp = await fetch(`https://site.web.api.espn.com/apis/common/v3/sports/basketball/nba/athletes/${playerId}/gamelog`);
+    const logData = await logResp.json();
+
+    // 4. Get player info
+    const infoResp = await fetch(`https://site.api.espn.com/apis/common/v3/sports/basketball/nba/athletes/${playerId}`);
+    const infoData = await infoResp.json();
+
+    // 5. Get today's props for this player
+    const propsResp = await fetch('/api/props/nba');
+    const propsData = await propsResp.json();
+    currentProps = (propsData.props || []).filter(p => p.player?.toLowerCase() === name.toLowerCase());
+
+    // Parse game log
+    currentGameLog = parseGameLog(logData);
+    currentPlayer = {
+      id: playerId,
+      name: infoData.athlete?.displayName || playerResult.displayName || name,
+      headshot: hsData.headshot || `https://a.espncdn.com/combiner/i?img=/i/headshots/nba/players/full/${playerId}.png&w=96&h=70`,
+      team: infoData.athlete?.team?.displayName || playerResult.team || '',
+      teamAbbr: infoData.athlete?.team?.abbreviation || '',
+      position: infoData.athlete?.position?.abbreviation || '',
+      jersey: infoData.athlete?.jersey || '',
+      height: infoData.athlete?.displayHeight || '',
+      weight: infoData.athlete?.displayWeight || '',
+      age: infoData.athlete?.age || '',
+    };
+
+    renderPlayerHeader();
+    renderStatsRow();
+    renderTabContent();
+  } catch (e) {
+    document.getElementById('tabContent').innerHTML = `<div class="empty"><div class="icon">⚠️</div>Error loading player: ${e.message}</div>`;
+  }
+}
+
+function parseGameLog(data) {
+  const games = [];
+  const categories = data.categories || data.seasonTypes?.[0]?.categories || [];
+  const events = data.events || data.seasonTypes?.[0]?.events || {};
+
+  // Get stat labels
+  const statCat = categories.find(c => c.name === 'offensive' || c.type === 'offensive') || categories[0];
+  const labels = (statCat?.labels || statCat?.names || []);
+
+  // Map event IDs to game info
+  const eventMap = {};
+  if (typeof events === 'object') {
+    for (const [id, ev] of Object.entries(events)) {
+      eventMap[id] = {
+        date: ev.gameDate || ev.date,
+        opponent: ev.opponent?.displayName || ev.opponent?.abbreviation || ev.atVs + ' ' + (ev.opponent?.abbreviation || ''),
+        homeAway: ev.homeAway || (ev.atVs === 'vs' ? 'home' : 'away'),
+        result: ev.gameResult || '',
+        score: ev.score || '',
+      };
+    }
+  }
+
+  // Parse stat rows
+  const statRows = statCat?.events || {};
+  for (const [eventId, stats] of Object.entries(statRows)) {
+    const game = eventMap[eventId];
+    if (!game) continue;
+
+    const statObj = {};
+    if (Array.isArray(stats)) {
+      labels.forEach((label, i) => { statObj[label] = stats[i]; });
+    } else if (stats.stats) {
+      labels.forEach((label, i) => { statObj[label] = stats.stats[i]; });
+    }
+
+    games.push({
+      date: game.date,
+      opponent: game.opponent,
+      homeAway: game.homeAway,
+      result: game.result,
+      score: game.score,
+      stats: {
+        min: parseFloat(statObj.MIN || statObj.minutes || 0),
+        pts: parseInt(statObj.PTS || statObj.points || 0),
+        reb: parseInt(statObj.REB || statObj.rebounds || 0),
+        ast: parseInt(statObj.AST || statObj.assists || 0),
+        stl: parseInt(statObj.STL || statObj.steals || 0),
+        blk: parseInt(statObj.BLK || statObj.blocks || 0),
+        threes: parseInt(statObj['3PM'] || statObj.threePointFieldGoalsMade || 0),
+        fgm: parseInt(statObj.FGM || statObj.fieldGoalsMade || 0),
+        fga: parseInt(statObj.FGA || statObj.fieldGoalsAttempted || 0),
+        to: parseInt(statObj.TO || statObj.turnovers || 0),
+      },
+    });
+  }
+
+  // Sort by date descending
+  games.sort((a, b) => new Date(b.date) - new Date(a.date));
+  return games;
+}
+
+function renderPlayerHeader() {
+  const p = currentPlayer;
+  document.getElementById('playerHeader').innerHTML = `
+    <img src="${p.headshot}" class="player-photo" onerror="this.style.display='none'">
+    <div class="player-info">
+      <h1>${p.name}</h1>
+      <div class="player-meta">
+        <span>🏀 ${p.team}</span>
+        ${p.position ? `<span>📍 ${p.position}</span>` : ''}
+        ${p.jersey ? `<span>#${p.jersey}</span>` : ''}
+        ${p.height ? `<span>📏 ${p.height}</span>` : ''}
+        ${p.age ? `<span>🎂 ${p.age} yrs</span>` : ''}
+      </div>
+    </div>
+  `;
+}
+
+function renderStatsRow() {
+  const games = currentGameLog;
+  if (!games.length) { document.getElementById('statsRow').innerHTML = ''; return; }
+
+  const avg = (key) => (games.reduce((s, g) => s + (g.stats[key] || 0), 0) / games.length).toFixed(1);
+  const l5 = games.slice(0, 5);
+  const l5avg = (key) => l5.length ? (l5.reduce((s, g) => s + (g.stats[key] || 0), 0) / l5.length).toFixed(1) : '—';
+
+  document.getElementById('statsRow').innerHTML = `
+    <div class="stat-card"><div class="label">PPG</div><div class="value">${avg('pts')}</div><div class="sub">L5: ${l5avg('pts')}</div></div>
+    <div class="stat-card"><div class="label">RPG</div><div class="value">${avg('reb')}</div><div class="sub">L5: ${l5avg('reb')}</div></div>
+    <div class="stat-card"><div class="label">APG</div><div class="value">${avg('ast')}</div><div class="sub">L5: ${l5avg('ast')}</div></div>
+    <div class="stat-card"><div class="label">3PM</div><div class="value">${avg('threes')}</div><div class="sub">L5: ${l5avg('threes')}</div></div>
+    <div class="stat-card"><div class="label">MIN</div><div class="value">${avg('min')}</div><div class="sub">L5: ${l5avg('min')}</div></div>
+    <div class="stat-card"><div class="label">Games</div><div class="value">${games.length}</div><div class="sub">Season</div></div>
+  `;
+}
+
+function renderTabContent() {
+  const container = document.getElementById('tabContent');
+  if (currentTab === 'gamelog') renderGameLog(container);
+  else if (currentTab === 'props') renderProps(container);
+  else if (currentTab === 'hitrates') renderHitRates(container);
+  else if (currentTab === 'chart') renderChart(container);
+}
+
+function renderGameLog(container) {
+  if (!currentGameLog.length) {
+    container.innerHTML = '<div class="empty">No game log data available</div>';
+    return;
+  }
+
+  let html = `<div style="overflow-x:auto;"><table class="game-log">
+    <thead><tr><th>Date</th><th>Opp</th><th>Result</th><th>MIN</th><th>PTS</th><th>REB</th><th>AST</th><th>3PM</th><th>STL</th><th>BLK</th><th>TO</th></tr></thead><tbody>`;
+
+  for (const g of currentGameLog.slice(0, 30)) {
+    const d = g.date ? new Date(g.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '—';
+    const s = g.stats;
+    html += `<tr>
+      <td class="date">${d}</td>
+      <td class="opp">${g.opponent || '—'}</td>
+      <td style="color:${g.result?.startsWith('W') ? 'var(--green)' : 'var(--red)'}">${g.result || '—'}</td>
+      <td>${s.min || '—'}</td>
+      <td style="font-weight:700;">${s.pts}</td>
+      <td>${s.reb}</td>
+      <td>${s.ast}</td>
+      <td>${s.threes}</td>
+      <td>${s.stl}</td>
+      <td>${s.blk}</td>
+      <td>${s.to}</td>
+    </tr>`;
+  }
+  html += '</tbody></table></div>';
+  container.innerHTML = html;
+}
+
+function renderProps(container) {
+  if (!currentProps.length) {
+    container.innerHTML = '<div class="empty"><div class="icon">🎯</div>No props available for this player today</div>';
+    return;
+  }
+
+  let html = '<div class="props-grid">';
+  for (const p of currentProps) {
+    const line = p.consensusLine || p.line || '—';
+    const over = p.overOdds || p.over || '';
+    const under = p.underOdds || p.under || '';
+    const books = p.bookCount || p.books || 0;
+    html += `<div class="prop-card">
+      <div>
+        <div class="prop-market">${p.marketLabel || p.market || '—'}</div>
+        <div class="prop-detail">${books} books · ${p.lineType === 'demon' ? '🔥 DEMON' : p.lineType === 'goblin' ? '👹 GOBLIN' : ''}</div>
+      </div>
+      <div style="text-align:center;">
+        <div class="prop-line">${line}</div>
+        <div style="display:flex;gap:8px;margin-top:4px;">
+          <span style="font-size:11px;color:var(--green);">O ${over}</span>
+          <span style="font-size:11px;color:var(--red);">U ${under}</span>
+        </div>
+      </div>
+    </div>`;
+  }
+  html += '</div>';
+  container.innerHTML = html;
+}
+
+function renderHitRates(container) {
+  const games = currentGameLog;
+  if (!games.length) { container.innerHTML = '<div class="empty">No data</div>'; return; }
+
+  // Calculate hit rates for common lines
+  const stats = ['pts', 'reb', 'ast', 'threes'];
+  const labels = { pts: 'Points', reb: 'Rebounds', ast: 'Assists', threes: '3PM' };
+
+  let html = '<div class="hit-bars">';
+  for (const stat of stats) {
+    const values = games.map(g => g.stats[stat] || 0);
+    const avg = values.reduce((a, b) => a + b, 0) / values.length;
+    const lines = [Math.floor(avg - 1.5), Math.floor(avg - 0.5), Math.floor(avg + 0.5), Math.floor(avg + 1.5), Math.floor(avg + 2.5)].filter(l => l > 0);
+
+    for (const line of lines) {
+      const hitRate = Math.round(values.filter(v => v > line).length / values.length * 100);
+      const color = hitRate >= 70 ? 'var(--green)' : hitRate >= 50 ? 'var(--accent)' : hitRate >= 30 ? 'var(--amber)' : 'var(--red)';
+      html += `<div class="hit-bar">
+        <div class="bar-label"><span>${labels[stat]} OVER ${line + 0.5}</span><span style="color:${color};font-weight:700;">${hitRate}%</span></div>
+        <div class="bar-track"><div class="bar-fill" style="width:${hitRate}%;background:${color};"></div></div>
+      </div>`;
+    }
+  }
+  html += '</div>';
+  container.innerHTML = html;
+}
+
+function renderChart(container) {
+  const games = currentGameLog.slice(0, 20).reverse();
+  if (!games.length) { container.innerHTML = '<div class="empty">No data</div>'; return; }
+
+  // Simple bar chart using divs
+  const pts = games.map(g => g.stats.pts || 0);
+  const max = Math.max(...pts, 1);
+  const avg = (pts.reduce((a, b) => a + b, 0) / pts.length).toFixed(1);
+
+  let html = `<div class="chart-container">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
+      <div style="font-weight:700;">Points — Last ${games.length} Games</div>
+      <div style="font-size:12px;color:var(--text-muted);">Avg: <span style="color:var(--accent);font-weight:700;">${avg}</span></div>
+    </div>
+    <div style="display:flex;align-items:flex-end;gap:3px;height:150px;padding-bottom:20px;position:relative;">
+      <!-- Avg line -->
+      <div style="position:absolute;left:0;right:0;bottom:${20 + (parseFloat(avg) / max) * 130}px;border-top:1px dashed var(--text-muted);z-index:1;"></div>`;
+
+  for (let i = 0; i < pts.length; i++) {
+    const h = (pts[i] / max) * 130;
+    const color = pts[i] >= parseFloat(avg) ? 'var(--green)' : 'var(--red)';
+    const d = games[i].date ? new Date(games[i].date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '';
+    html += `<div style="flex:1;display:flex;flex-direction:column;align-items:center;">
+      <div style="font-size:9px;color:var(--text-muted);margin-bottom:2px;">${pts[i]}</div>
+      <div style="width:100%;height:${h}px;background:${color};border-radius:3px 3px 0 0;min-height:3px;transition:height 0.3s;"></div>
+      <div style="font-size:8px;color:var(--text-muted);margin-top:4px;transform:rotate(-45deg);white-space:nowrap;">${d}</div>
+    </div>`;
+  }
+
+  html += `</div></div>`;
+
+  // Add rebounds and assists charts too
+  const rebAvg = (games.reduce((s, g) => s + (g.stats.reb || 0), 0) / games.length).toFixed(1);
+  const astAvg = (games.reduce((s, g) => s + (g.stats.ast || 0), 0) / games.length).toFixed(1);
+
+  html += `<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">`;
+
+  // Rebounds mini chart
+  const rebs = games.map(g => g.stats.reb || 0);
+  const rebMax = Math.max(...rebs, 1);
+  html += `<div class="chart-container"><div style="font-weight:600;font-size:13px;margin-bottom:10px;">Rebounds <span style="color:var(--text-muted);font-weight:400;">avg ${rebAvg}</span></div>
+    <div style="display:flex;align-items:flex-end;gap:2px;height:60px;">`;
+  for (const r of rebs) {
+    const h = (r / rebMax) * 55;
+    html += `<div style="flex:1;height:${h}px;background:${r >= parseFloat(rebAvg) ? 'var(--accent)' : 'var(--text-muted)'};border-radius:2px;min-height:2px;"></div>`;
+  }
+  html += `</div></div>`;
+
+  // Assists mini chart
+  const asts = games.map(g => g.stats.ast || 0);
+  const astMax = Math.max(...asts, 1);
+  html += `<div class="chart-container"><div style="font-weight:600;font-size:13px;margin-bottom:10px;">Assists <span style="color:var(--text-muted);font-weight:400;">avg ${astAvg}</span></div>
+    <div style="display:flex;align-items:flex-end;gap:2px;height:60px;">`;
+  for (const a of asts) {
+    const h = (a / astMax) * 55;
+    html += `<div style="flex:1;height:${h}px;background:${a >= parseFloat(astAvg) ? 'var(--purple)' : 'var(--text-muted)'};border-radius:2px;min-height:2px;"></div>`;
+  }
+  html += `</div></div></div>`;
+
+  container.innerHTML = html;
+}
+
+// Handle URL params
+const urlParams = new URLSearchParams(window.location.search);
+const playerParam = urlParams.get('name') || urlParams.get('player');
+if (playerParam) {
+  searchInput.value = playerParam;
+  searchPlayer();
+}
+</script>
+</body>
+</html>
