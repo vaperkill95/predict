@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Accuracy Record — ORACLE</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;600;800;900&family=DM+Sans:wght@400;500;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<style>
+:root{--bg-deep:#060a14;--bg-base:#0a0f1a;--bg-card:#111827;--bg-elevated:#1a2236;--border:#1e293b;--text-primary:#f1f5f9;--text-secondary:#94a3b8;--text-muted:#64748b;--accent:#38bdf8;--green:#10b981;--red:#ef4444;--amber:#f59e0b;--purple:#a78bfa;--font-display:"Outfit",sans-serif;--font-body:"DM Sans",sans-serif;--font-mono:"JetBrains Mono",monospace;}
+*{margin:0;padding:0;box-sizing:border-box;}body{background:var(--bg-deep);color:var(--text-primary);font-family:var(--font-body);line-height:1.6;}a{color:var(--accent);text-decoration:none;}
+.container{max-width:960px;margin:0 auto;padding:0 20px;}
+.hero{padding:28px 0 16px;text-align:center;}.hero h1{font-family:var(--font-display);font-weight:900;font-size:clamp(24px,4vw,32px);}.hero h1 span{background:linear-gradient(135deg,var(--green),var(--accent));-webkit-background-clip:text;-webkit-text-fill-color:transparent;}.hero p{color:var(--text-secondary);font-size:13px;margin-top:4px;}
+
+/* Big Record Card */
+.record-hero{background:var(--bg-card);border:1px solid var(--border);border-radius:16px;padding:30px;text-align:center;margin:20px 0;position:relative;overflow:hidden;}
+.record-hero::before{content:'';position:absolute;top:0;left:0;right:0;height:3px;background:linear-gradient(90deg,var(--green),var(--accent),var(--green));}
+.big-record{font-family:var(--font-display);font-weight:900;font-size:clamp(48px,10vw,72px);letter-spacing:-2px;margin:10px 0;}
+.big-record .hits{color:var(--green);}.big-record .sep{color:var(--text-muted);font-weight:400;}.big-record .misses{color:var(--red);}
+.hit-rate{font-family:var(--font-mono);font-size:clamp(20px,4vw,28px);font-weight:700;margin-bottom:6px;}
+.pending-badge{display:inline-block;padding:4px 12px;border-radius:6px;font-size:11px;font-family:var(--font-mono);background:rgba(56,189,248,.1);color:var(--accent);margin-top:8px;}
+
+/* Stat Grid */
+.stat-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:10px;margin:16px 0;}
+.stat-card{background:var(--bg-card);border:1px solid var(--border);border-radius:10px;padding:14px;text-align:center;transition:all .2s;}
+.stat-card:hover{border-color:var(--accent);transform:translateY(-1px);}
+.stat-label{font-size:9px;color:var(--text-muted);font-family:var(--font-mono);text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px;}
+.stat-value{font-family:var(--font-display);font-weight:800;font-size:20px;}
+.stat-sub{font-size:10px;color:var(--text-muted);font-family:var(--font-mono);margin-top:2px;}
+
+/* Section Headers */
+.section{margin:24px 0 12px;}.section h2{font-family:var(--font-display);font-weight:800;font-size:16px;color:var(--text-primary);display:flex;align-items:center;gap:8px;}
+
+/* Breakdown Grid */
+.breakdown-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:8px;margin:10px 0;}
+.break-card{background:var(--bg-card);border:1px solid var(--border);border-radius:10px;padding:12px;position:relative;overflow:hidden;}
+.break-card::after{content:'';position:absolute;bottom:0;left:0;height:3px;transition:width .5s;}
+.break-label{font-family:var(--font-display);font-weight:700;font-size:13px;margin-bottom:6px;}
+.break-stats{display:flex;justify-content:space-between;align-items:baseline;}
+.break-record{font-family:var(--font-mono);font-size:14px;font-weight:600;}
+.break-pct{font-family:var(--font-mono);font-size:18px;font-weight:700;}
+
+/* Recent Picks */
+.picks-table{width:100%;border-collapse:collapse;font-size:12px;margin:10px 0;}
+.picks-table th{text-align:left;padding:8px 10px;background:var(--bg-elevated);font-family:var(--font-mono);font-size:9px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.5px;}
+.picks-table td{padding:8px 10px;border-bottom:1px solid var(--border);font-family:var(--font-mono);}
+.picks-table tr:hover{background:var(--bg-elevated);}
+.result-hit{color:var(--green);font-weight:700;}.result-miss{color:var(--red);font-weight:700;}.result-pending{color:var(--text-muted);}
+.pick-over{color:var(--green);}.pick-under{color:var(--red);}
+
+/* Progress Bar */
+.progress-bar{height:8px;background:var(--bg-elevated);border-radius:4px;overflow:hidden;margin:6px 0;}
+.progress-fill{height:100%;border-radius:4px;transition:width .8s ease;}
+
+.empty{text-align:center;padding:40px;color:var(--text-muted);font-size:14px;}
+.footer{text-align:center;padding:24px 0;color:var(--text-muted);font-size:10px;border-top:1px solid var(--border);margin-top:30px;}
+.loading{display:flex;align-items:center;justify-content:center;gap:8px;padding:40px;color:var(--text-muted);}
+.loading::after{content:'';width:16px;height:16px;border:2px solid var(--accent);border-top-color:transparent;border-radius:50%;animation:spin .8s linear infinite;}
+@keyframes spin{to{transform:rotate(360deg)}}
+.disclaimer{text-align:center;padding:12px;background:rgba(245,158,11,.05);border:1px solid rgba(245,158,11,.15);border-radius:8px;font-size:11px;color:var(--amber);margin:16px 0;}
+@media(max-width:640px){.stat-grid{grid-template-columns:repeat(2,1fr);}.breakdown-grid{grid-template-columns:1fr 1fr;}.picks-table{font-size:10px;}.picks-table th,.picks-table td{padding:6px;}}
+</style>
+</head>
+<body>
+<div class="container">
+<div class="hero">
+  <h1>📊 <span>Accuracy Record</span></h1>
+  <p>ORACLE's complete, transparent pick history. Every prediction tracked and graded automatically.</p>
+</div>
+
+<div id="content"><div class="loading">Loading accuracy data</div></div>
+</div>
+<div class="footer">⟁ ORACLE — All picks are automatically graded using ESPN box scores. For entertainment & research only.</div>
+
+<script>
+function pctColor(pct) { return pct >= 60 ? 'var(--green)' : pct >= 50 ? 'var(--accent)' : pct >= 40 ? 'var(--amber)' : 'var(--red)'; }
+function pctBg(pct) { return pct >= 60 ? 'var(--green)' : pct >= 50 ? 'var(--accent)' : pct >= 40 ? 'var(--amber)' : 'var(--red)'; }
+
+async function loadRecord() {
+  try {
+    var resp = await fetch('/api/parlay/history');
+    var data = await resp.json();
+    var o = data.overall || { total: 0, hits: 0, misses: 0, hitRate: 0, pending: 0 };
+    var l7 = data.last7Days || { total: 0, hits: 0, hitRate: 0 };
+    var byGrade = data.byGrade || {};
+    var byMarket = data.byMarket || {};
+    var byDir = data.byDirection || {};
+    var bySport = data.bySport || {};
+    var recent = data.recentPicks || [];
+
+    var html = '';
+
+    // Big Record Card
+    html += '<div class="record-hero">';
+    html += '<div style="font-size:12px;color:var(--text-muted);font-family:var(--font-mono);text-transform:uppercase;letter-spacing:1px;">Overall Record</div>';
+    html += '<div class="big-record"><span class="hits">' + o.hits + '</span><span class="sep"> — </span><span class="misses">' + o.misses + '</span></div>';
+    html += '<div class="hit-rate" style="color:' + pctColor(o.hitRate) + '">' + (o.hitRate || 0).toFixed(1) + '% Hit Rate</div>';
+    html += '<div class="progress-bar"><div class="progress-fill" style="width:' + Math.max(o.hitRate, 5) + '%;background:' + pctBg(o.hitRate) + '"></div></div>';
+    if (o.pending > 0) html += '<div class="pending-badge">⏳ ' + o.pending + ' picks pending grading</div>';
+    html += '</div>';
+
+    // Quick Stats
+    html += '<div class="stat-grid">';
+    html += '<div class="stat-card"><div class="stat-label">Total Graded</div><div class="stat-value">' + o.total + '</div></div>';
+    html += '<div class="stat-card"><div class="stat-label">Hits</div><div class="stat-value" style="color:var(--green)">✅ ' + o.hits + '</div></div>';
+    html += '<div class="stat-card"><div class="stat-label">Misses</div><div class="stat-value" style="color:var(--red)">❌ ' + o.misses + '</div></div>';
+    html += '<div class="stat-card"><div class="stat-label">Last 7 Days</div><div class="stat-value" style="color:' + pctColor(l7.hitRate) + '">' + (l7.hitRate || 0).toFixed(0) + '%</div><div class="stat-sub">' + l7.total + ' picks</div></div>';
+    html += '<div class="stat-card"><div class="stat-label">Pending</div><div class="stat-value" style="color:var(--accent)">' + o.pending + '</div></div>';
+    html += '</div>';
+
+    // By Grade
+    var grades = Object.keys(byGrade).filter(function(g) { return byGrade[g].total > 0; });
+    if (grades.length > 0) {
+      html += '<div class="section"><h2>📈 By Grade</h2></div>';
+      html += '<div class="breakdown-grid">';
+      grades.forEach(function(g) {
+        var d = byGrade[g];
+        var pct = d.hitRate || 0;
+        html += '<div class="break-card" style="border-left:3px solid ' + pctColor(pct) + '"><div class="break-label">' + g + ' Picks</div><div class="break-stats"><div class="break-record">' + d.hits + '-' + (d.total - d.hits) + '</div><div class="break-pct" style="color:' + pctColor(pct) + '">' + pct.toFixed(0) + '%</div></div><div class="progress-bar"><div class="progress-fill" style="width:' + Math.max(pct, 5) + '%;background:' + pctBg(pct) + '"></div></div></div>';
+      });
+      html += '</div>';
+    }
+
+    // By Market
+    var markets = Object.keys(byMarket).filter(function(m) { return byMarket[m].total > 0; });
+    if (markets.length > 0) {
+      html += '<div class="section"><h2>🏀 By Market</h2></div>';
+      html += '<div class="breakdown-grid">';
+      markets.forEach(function(m) {
+        var d = byMarket[m];
+        var pct = d.hitRate || 0;
+        html += '<div class="break-card"><div class="break-label">' + m + '</div><div class="break-stats"><div class="break-record">' + d.hits + '-' + (d.total - d.hits) + '</div><div class="break-pct" style="color:' + pctColor(pct) + '">' + pct.toFixed(0) + '%</div></div><div class="progress-bar"><div class="progress-fill" style="width:' + Math.max(pct, 5) + '%;background:' + pctBg(pct) + '"></div></div></div>';
+      });
+      html += '</div>';
+    }
+
+    // By Direction (OVER vs UNDER)
+    var dirs = Object.keys(byDir).filter(function(d) { return byDir[d].total > 0; });
+    if (dirs.length > 0) {
+      html += '<div class="section"><h2>🎯 OVER vs UNDER</h2></div>';
+      html += '<div class="breakdown-grid">';
+      dirs.forEach(function(d) {
+        var dd = byDir[d];
+        var pct = dd.hitRate || 0;
+        var icon = d === 'OVER' ? '🟢' : '🔴';
+        html += '<div class="break-card"><div class="break-label">' + icon + ' ' + d + '</div><div class="break-stats"><div class="break-record">' + dd.hits + '-' + (dd.total - dd.hits) + '</div><div class="break-pct" style="color:' + pctColor(pct) + '">' + pct.toFixed(0) + '%</div></div><div class="progress-bar"><div class="progress-fill" style="width:' + Math.max(pct, 5) + '%;background:' + pctBg(pct) + '"></div></div></div>';
+      });
+      html += '</div>';
+    }
+
+    // Recent Picks
+    html += '<div class="section"><h2>📋 Recent Picks</h2></div>';
+    if (recent.length > 0) {
+      html += '<div style="overflow-x:auto"><table class="picks-table"><thead><tr><th>Player</th><th>Pick</th><th>Line</th><th>Market</th><th>Actual</th><th>Result</th><th>Date</th></tr></thead><tbody>';
+      recent.slice(0, 50).forEach(function(p) {
+        var resultClass = p.result === 'hit' ? 'result-hit' : p.result === 'miss' ? 'result-miss' : 'result-pending';
+        var resultIcon = p.result === 'hit' ? '✅' : p.result === 'miss' ? '❌' : '⏳';
+        var pickClass = p.pick === 'OVER' ? 'pick-over' : 'pick-under';
+        var date = p.gradedAt ? new Date(p.gradedAt).toLocaleDateString() : (p.createdAt ? new Date(p.createdAt).toLocaleDateString() : '—');
+        html += '<tr><td style="font-weight:600;font-family:var(--font-body)">' + (p.player || '—') + '</td>';
+        html += '<td class="' + pickClass + '">' + (p.pick || '—') + '</td>';
+        html += '<td>' + (p.line || '—') + '</td>';
+        html += '<td>' + (p.market || '—') + '</td>';
+        html += '<td>' + (p.actual !== undefined && p.actual !== null ? p.actual : '—') + '</td>';
+        html += '<td class="' + resultClass + '">' + resultIcon + '</td>';
+        html += '<td>' + date + '</td></tr>';
+      });
+      html += '</tbody></table></div>';
+    } else {
+      html += '<div class="empty">No graded picks yet. Picks are graded automatically after games complete using ESPN box scores. Check back after tonight\'s games!</div>';
+    }
+
+    // Disclaimer
+    html += '<div class="disclaimer">⚠️ All picks are automatically graded using ESPN box scores. Results are verified and cannot be edited. ORACLE tracks every prediction for full transparency.</div>';
+
+    document.getElementById('content').innerHTML = html;
+  } catch (e) {
+    document.getElementById('content').innerHTML = '<div class="empty">Error loading accuracy data: ' + e.message + '</div>';
+  }
+}
+
+loadRecord();
+// Auto-refresh every 5 minutes
+setInterval(loadRecord, 5 * 60 * 1000);
+</script>
+</body>
+</html>

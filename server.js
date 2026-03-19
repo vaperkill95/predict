@@ -728,6 +728,13 @@ app.get("/manifest.json", (req, res) => {
   res.sendFile(path.join(__dirname, "public", "manifest.json"));
 });
 
+// === Service Worker ===
+app.get("/sw.js", (req, res) => {
+  res.setHeader('Service-Worker-Allowed', '/');
+  res.setHeader('Content-Type', 'application/javascript');
+  res.sendFile(path.join(__dirname, "public", "sw.js"));
+});
+
 // === Health endpoint ===
 app.get("/api/health", (req, res) => {
   const mem = process.memoryUsage();
@@ -805,7 +812,7 @@ const UNIVERSAL_NAV = `<nav class="nav" style="padding:14px 0;border-bottom:1px 
 <a href="/sharp" style="font-size:12px;color:#94a3b8;font-weight:500;padding:5px 8px;border-radius:6px;text-decoration:none;">Sharp</a>
 <a href="/player" style="font-size:12px;color:#94a3b8;font-weight:500;padding:5px 8px;border-radius:6px;text-decoration:none;">Players</a>
 <a href="/how-it-works" style="font-size:12px;color:#94a3b8;font-weight:500;padding:5px 8px;border-radius:6px;text-decoration:none;">Guide</a>
-<a href="/start" style="font-size:12px;color:#94a3b8;font-weight:500;padding:5px 8px;border-radius:6px;text-decoration:none;">Start</a>
+<a href="/record" style="font-size:12px;color:#10b981;font-weight:600;padding:5px 8px;border-radius:6px;text-decoration:none;background:#10b98115;">Record</a>
 <a href="https://discord.gg/PxREjjgnmf" target="_blank" style="font-size:12px;color:#a78bfa;font-weight:600;padding:5px 8px;border-radius:6px;text-decoration:none;background:#a78bfa15;">Discord</a>
 </div></div></nav>`;
 
@@ -859,6 +866,12 @@ app.get("/privacy", (req, res) => {
 
 // === Game Predictions ===
 app.get("/games", serveWithNav(path.join(__dirname, "public", "game-predictions.html"), "/games"));
+
+// === Accuracy Record ===
+app.get("/record", serveWithNav(path.join(__dirname, "public", "accuracy-record.html"), "/record"));
+
+// === Share Pick Card (generates image) ===
+app.get("/share", serveWithNav(path.join(__dirname, "public", "share-card.html"), "/share"));
 
 // === Player Profile ===
 app.get("/player", serveWithNav(path.join(__dirname, "public", "player-profile.html"), "/player"));

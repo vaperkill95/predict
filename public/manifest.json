@@ -1,28 +1,53 @@
 {
-  "name": "ORACLE — AI Sports Prediction Engine",
+  "name": "ORACLE — AI Sports Predictions",
   "short_name": "ORACLE",
-  "description": "AI-powered player prop predictions with 7-factor analysis, injury tracking, and real-time odds from 8+ sportsbooks",
+  "description": "Free AI-powered sports predictions. Player props, game predictions, EV bets, and more across NBA, NHL, MLB, NFL.",
   "start_url": "/app/",
-  "display": "standalone",
-  "background_color": "#060a14",
-  "theme_color": "#38bdf8",
-  "orientation": "portrait-primary",
   "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "theme_color": "#38bdf8",
+  "background_color": "#060a14",
+  "categories": ["sports", "entertainment"],
+  "lang": "en-US",
   "icons": [
     {
-      "src": "/static/icon-192.png",
+      "src": "/icons/icon-192.png",
       "sizes": "192x192",
       "type": "image/png",
       "purpose": "any maskable"
     },
     {
-      "src": "/static/icon-512.png",
+      "src": "/icons/icon-512.png",
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "any maskable"
     }
   ],
-  "categories": ["sports", "entertainment"],
-  "screenshots": [],
-  "prefer_related_applications": false
+  "shortcuts": [
+    {
+      "name": "Today's Picks",
+      "short_name": "Picks",
+      "url": "/app/",
+      "description": "View today's AI-powered player prop picks"
+    },
+    {
+      "name": "Game Predictions",
+      "short_name": "Games",
+      "url": "/games",
+      "description": "Moneyline, spread, and total predictions"
+    },
+    {
+      "name": "Pick of the Day",
+      "short_name": "POTD",
+      "url": "/pick",
+      "description": "ORACLE's single best pick today"
+    },
+    {
+      "name": "Accuracy Record",
+      "short_name": "Record",
+      "url": "/record",
+      "description": "View ORACLE's W-L accuracy record"
+    }
+  ]
 }
