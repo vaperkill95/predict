@@ -78,3 +78,30 @@
   <a href="/sharp"><div class="oracle-fab-icon sharp">⚡</div><span>Sharp</span></a>
   <a href="/how-it-works"><div class="oracle-fab-icon help">?</div><span>Guide</span></a>
 </div>
+<script>
+// Hide "AI predictions require an Anthropic API key" and replace with ORACLE message
+(function fixAIPredictMessage() {
+  function replaceMessage() {
+    const allElements = document.querySelectorAll('*');
+    for (const el of allElements) {
+      if (el.children.length > 5) continue;
+      const text = el.textContent || '';
+      if (text.includes('Anthropic API key') || text.includes('ANTHROPIC_API_KEY')) {
+        // Check if this is the container with the error messages
+        if (el.innerText && el.innerText.includes('AI predictions require')) {
+          el.innerHTML = '<div style="padding:12px 16px;background:#111827;border:1px solid #1e293b;border-radius:10px;"><div style="font-size:14px;font-weight:700;color:#38bdf8;margin-bottom:4px;">🔮 ORACLE AI Predictions</div><div style="font-size:12px;color:#94a3b8;">Click "AI Predict" on any game for winner prediction, spread pick, and over/under — powered by ORACLE\'s 18-factor model.</div><div style="margin-top:8px;"><a href="/games" style="font-size:12px;color:#10b981;text-decoration:none;font-weight:600;">🏟️ View full Game Predictions page →</a></div></div>';
+          return true;
+        }
+      }
+    }
+    return false;
+  }
+
+  // Run immediately and also watch for tab changes
+  replaceMessage();
+  const observer = new MutationObserver(() => { replaceMessage(); });
+  observer.observe(document.body, { childList: true, subtree: true, characterData: true });
+  // Also run periodically for React re-renders
+  setInterval(replaceMessage, 2000);
+})();
+</script>
