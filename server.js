@@ -675,10 +675,12 @@ try {
     },
     async () => {
       try {
-        const posterAxios = require("axios");
-        const r = await posterAxios.get(`http://localhost:${PORT}/api/picks/potd`, { timeout: 10000 });
-        return r.data;
-      } catch(e) { return {}; }
+        if (potd && potd.generatePickOfTheDay) {
+          var potdResult = await potd.generatePickOfTheDay();
+          if (potdResult && potdResult.pickOfTheDay) return { pick: potdResult.pickOfTheDay };
+        }
+        return {};
+      } catch(e) { console.warn('[Discord] POTD fetch error:', e.message); return {}; }
     },
     async () => {
       try {

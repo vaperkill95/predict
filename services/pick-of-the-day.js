@@ -218,13 +218,13 @@ async function generatePickOfTheDay() {
       bestBook: scoring.bestBook,
       evEdge: scoring.evEdge,
       analytics: {
-        seasonAvg: prop.analytics.seasonAvg,
-        hitRate: prop.analytics.hitRate,
-        l5Avg: prop.analytics.l5Avg,
-        l10Avg: prop.analytics.l10Avg,
-        trend: prop.analytics.trend,
-        consistency: prop.analytics.consistency,
-        lineDiff: prop.analytics.lineDiff,
+        seasonAvg: prop.analytics ? prop.analytics.seasonAvg : null,
+        hitRate: prop.analytics ? prop.analytics.hitRate : null,
+        l5Avg: prop.analytics ? prop.analytics.l5Avg : null,
+        l10Avg: prop.analytics ? prop.analytics.l10Avg : null,
+        trend: prop.analytics ? prop.analytics.trend : null,
+        consistency: prop.analytics ? prop.analytics.consistency : null,
+        lineDiff: prop.analytics ? prop.analytics.lineDiff : null,
       },
     });
   }
