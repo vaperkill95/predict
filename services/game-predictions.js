@@ -231,8 +231,29 @@ function analyzeGame(game) {
 router.get('/:sport', async (req, res) => {
   const { sport } = req.params;
   try {
-    const oddsResp = await axios.get(`http://localhost:${PORT}/api/odds/${sport}`, { timeout: 15000 });
-    const games = oddsResp.data?.games || [];
+    // Fetch odds directly from the Odds API to bypass internal rate limiter
+    const ODDS_KEY = process.env.ODDS_API_KEY;
+    const PROP_SPORTS = { nba: 'basketball_nba', nfl: 'americanfootball_nfl', mlb: 'baseball_mlb', nhl: 'icehockey_nhl' };
+    const oddsSport = PROP_SPORTS[sport];
+    
+    let games = [];
+    if (ODDS_KEY && oddsSport) {
+      const oddsResp = await axios.get(`https://api.the-odds-api.com/v4/sports/${oddsSport}/odds`, {
+        params: { apiKey: ODDS_KEY, regions: 'us,us2', markets: 'spreads,totals,h2h', oddsFormat: 'american' },
+        timeout: 15000,
+      });
+      games = (oddsResp.data || []).map(g => ({
+        id: g.id,
+        homeTeam: g.home_team,
+        awayTeam: g.away_team,
+        commenceTime: g.commence_time,
+        bookmakers: g.bookmakers?.map(b => ({ title: b.title, key: b.key, markets: b.markets })) || [],
+      }));
+    } else {
+      // Fallback to internal odds endpoint
+      const oddsResp = await axios.get(`http://localhost:${PORT}/api/odds/${sport}`, { timeout: 15000 });
+      games = oddsResp.data?.games || [];
+    }
 
     if (games.length === 0) {
       return res.json({ sport, games: [], count: 0, message: 'No games with odds today' });
@@ -268,10 +289,10 @@ router.get('/:sport', async (req, res) => {
 router.get('/:sport/:gameId', async (req, res) => {
   const { sport, gameId } = req.params;
   try {
-    const oddsResp = await axios.get(`http://localhost:${PORT}/api/odds/${sport}`, { timeout: 15000 });
-    const game = (oddsResp.data?.games || []).find(g => g.id === gameId);
+    const mainResp = await axios.get(`http://localhost:${PORT}/api/games/${sport}`, { timeout: 20000 });
+    const game = (mainResp.data?.games || []).find(g => g.id === gameId);
     if (!game) return res.json({ error: 'Game not found' });
-    res.json(analyzeGame(game));
+    res.json(game);
   } catch (err) {
     res.json({ error: err.message });
   }
