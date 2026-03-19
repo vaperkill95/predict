@@ -153,4 +153,61 @@
     }
   }
 })();
+
+// === Player Headshot Injection ===
+// Adds ESPN player headshot photos to props list rows
+(function injectHeadshots() {
+  const headshotCache = {};
+  const pendingLookups = new Set();
+
+  async function getHeadshot(name) {
+    if (headshotCache[name] !== undefined) return headshotCache[name];
+    if (pendingLookups.has(name)) return null;
+    pendingLookups.add(name);
+    try {
+      const resp = await fetch(`/api/headshots/nba/${encodeURIComponent(name)}`);
+      const data = await resp.json();
+      headshotCache[name] = data.headshot || null;
+    } catch (e) {
+      headshotCache[name] = null;
+    }
+    pendingLookups.delete(name);
+    return headshotCache[name];
+  }
+
+  async function addHeadshotsToRows() {
+    // Find all prop rows that have player names but no headshot yet
+    const rows = document.querySelectorAll('tr, [class*="prop"], [class*="row"], [class*="card"]');
+    for (const row of rows) {
+      if (row.querySelector('.oracle-headshot')) continue;
+      // Find the first child that looks like a player name (bold text, not a number)
+      const nameEl = row.querySelector('td:first-child, [class*="player"], [class*="name"]');
+      if (!nameEl) continue;
+      const text = nameEl.textContent?.trim();
+      if (!text || text.length < 4 || text.length > 40 || /^\d/.test(text)) continue;
+      // Extract just the player name (first line, before any team/game info)
+      const name = text.split('\n')[0].trim();
+      if (!name || name.includes('·') || name.includes('@')) continue;
+      
+      const headshot = await getHeadshot(name);
+      if (headshot) {
+        const img = document.createElement('img');
+        img.src = headshot;
+        img.className = 'oracle-headshot';
+        img.style.cssText = 'width:36px;height:26px;border-radius:4px;object-fit:cover;margin-right:8px;vertical-align:middle;flex-shrink:0;';
+        img.onerror = function() { this.style.display = 'none'; };
+        // Insert before the name
+        if (nameEl.firstChild) {
+          nameEl.insertBefore(img, nameEl.firstChild);
+        }
+      }
+    }
+  }
+
+  // Run every 3 seconds to catch new content
+  setInterval(addHeadshotsToRows, 3000);
+  // Also run on mutations
+  const hsObserver = new MutationObserver(() => { setTimeout(addHeadshotsToRows, 500); });
+  hsObserver.observe(document.body, { childList: true, subtree: true });
+})();
 </script>

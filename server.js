@@ -159,6 +159,13 @@ try {
   console.log("cdl-predictions not found, skipping CDL predictions");
 }
 
+let playerHeadshots = null;
+try {
+  playerHeadshots = require("./services/player-headshots");
+} catch (e) {
+  console.log("player-headshots not found, skipping headshots");
+}
+
 const app = express();
 const PORT = process.env.PORT || 3001;
 
@@ -445,6 +452,9 @@ if (gamePredictions) {
 if (cdlPredictions) {
   app.use("/api/cdl-predictions", cdlPredictions.router);
 }
+if (playerHeadshots) {
+  app.use("/api/headshots", playerHeadshots.router);
+}
 
 // === Start services ===
 dvp.startRefresh();
@@ -571,6 +581,7 @@ app.get("/api/health", (req, res) => {
       stability: stability ? "active" : "not loaded",
       game_predictions: gamePredictions ? "active" : "not loaded",
       cdl_predictions: cdlPredictions ? "active" : "not loaded",
+      player_headshots: playerHeadshots ? "active" : "not loaded",
       enrichment: enrichment ? "active" : "not loaded",
     },
   });
