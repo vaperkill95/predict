@@ -185,9 +185,10 @@ async function fetchESPNInjuries(sport) {
 // Calculate injury impact on team power
 // ============================================================
 function calcInjuryImpact(injuries, teamAbbr) {
-  if (!injuries || !injuries[teamAbbr]) return 0;
+  if (!injuries || (!injuries[teamAbbr] && !injuries[espnAbbr(teamAbbr)])) return 0;
+  var teamInj = injuries[teamAbbr] || injuries[espnAbbr(teamAbbr)] || [];
   var impact = 0;
-  injuries[teamAbbr].forEach(function(inj) {
+  teamInj.forEach(function(inj) {
     if (inj.status === 'Out' || inj.status === 'Doubtful') {
       impact -= 0.5; // Each key player out = -0.5 power
     } else if (inj.status === 'Questionable') {
@@ -239,6 +240,41 @@ function getCachedGames(sport) {
   return (c && c.games && Date.now() - c.timestamp < 20*60*1000) ? c.games : null;
 }
 
+// ESPN uses different abbreviations than Odds API for some teams
+var ESPN_ABBR_MAP = {
+  WAS: 'WSH', WSH: 'WSH',
+  NOP: 'NO', NO: 'NO',
+  NYK: 'NY', NY: 'NY',
+  GSW: 'GS', GS: 'GS',
+  SAS: 'SA', SA: 'SA',
+  UTA: 'UTAH', UTAH: 'UTAH',
+  // NHL
+  VGK: 'VGK',
+  TBL: 'TB', TB: 'TB',
+  NJD: 'NJ', NJ: 'NJ',
+  SJS: 'SJ', SJ: 'SJ',
+  LAK: 'LA', LA: 'LA',
+  CBJ: 'CBJ',
+  // MLB
+  SDP: 'SD', SD: 'SD',
+  SFG: 'SF', SF: 'SF',
+  TBR: 'TB',
+  KCR: 'KC', KC: 'KC',
+  CWS: 'CHW', CHW: 'CHW',
+  LAA: 'LAA',
+  WSH: 'WSH',
+};
+
+function espnAbbr(abbr) {
+  return ESPN_ABBR_MAP[abbr] || abbr;
+}
+
+function lookupTeam(liveTeams, abbr) {
+  if (!liveTeams) return null;
+  // Try direct lookup first, then ESPN abbreviation
+  return liveTeams[abbr] || liveTeams[espnAbbr(abbr)] || null;
+}
+
 // ============================================================
 // Analyze a single game with LIVE data
 // ============================================================
@@ -253,9 +289,10 @@ function analyzeGame(game, sport, liveTeams, injuries) {
   var homeHomeAdj = 0, awayAwayAdj = 0;
   var dataSource = 'static';
 
-  if (liveTeams && liveTeams[homeAbbr] && liveTeams[awayAbbr]) {
-    var ht = liveTeams[homeAbbr];
-    var at = liveTeams[awayAbbr];
+  var ht = lookupTeam(liveTeams, homeAbbr);
+  var at = lookupTeam(liveTeams, awayAbbr);
+
+  if (ht && at) {
     homePower = ht.power;
     awayPower = at.power;
     homeRecord = ht.wins + '-' + ht.losses;
@@ -412,12 +449,12 @@ function analyzeGame(game, sport, liveTeams, injuries) {
     commenceTime:game.commenceTime, sport:sport, environment:environment, bestBet:bestBet,
     dataSource: dataSource,
     records: { home: homeRecord, away: awayRecord,
-      homeL10: liveTeams && liveTeams[homeAbbr] ? liveTeams[homeAbbr].l10Record : null,
-      awayL10: liveTeams && liveTeams[awayAbbr] ? liveTeams[awayAbbr].l10Record : null,
-      homeStreak: liveTeams && liveTeams[homeAbbr] ? liveTeams[homeAbbr].streak : null,
-      awayStreak: liveTeams && liveTeams[awayAbbr] ? liveTeams[awayAbbr].streak : null,
-      homePPG: liveTeams && liveTeams[homeAbbr] ? liveTeams[homeAbbr].ppg : null,
-      awayPPG: liveTeams && liveTeams[awayAbbr] ? liveTeams[awayAbbr].ppg : null,
+      homeL10: ht ? ht.l10Record : null,
+      awayL10: at ? at.l10Record : null,
+      homeStreak: ht ? ht.streak : null,
+      awayStreak: at ? at.streak : null,
+      homePPG: ht ? ht.ppg : null,
+      awayPPG: at ? at.ppg : null,
     },
     adjustments: {
       homePower: +homeAdj.toFixed(1), awayPower: +awayAdj.toFixed(1),
