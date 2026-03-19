@@ -626,7 +626,7 @@ try {
       try {
         if (smartPicks && smartPicks.picksCache) {
           var cached = smartPicks.picksCache[sport];
-          if (cached && cached.length > 0) return { picks: cached };
+          if (cached && cached.picks && cached.picks.length > 0) return { picks: cached.picks };
         }
         const posterAxios = require("axios");
         const r = await posterAxios.get(`http://localhost:${PORT}/api/props/${sport}/picks`, { timeout: 10000 });
