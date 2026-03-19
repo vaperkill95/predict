@@ -655,7 +655,7 @@ try {
     }
   );
 } catch(e) {
-  console.log("Discord poster not loaded:", e.message);
+  console.log("Discord poster not loaded:", e.message, e.stack?.split('\n')[1]);
 }
 
 // === PWA Manifest ===

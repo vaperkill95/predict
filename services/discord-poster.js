@@ -267,8 +267,9 @@ function startPosting(getPicksFn, getEVFn, getGamesFn, getPOTDFn, getHistoryFn) 
         try {
           var data = await getPicksFn(sport);
           var picks = data ? (data.picks || []) : [];
+          console.log('[Discord] ' + sport.toUpperCase() + ' picks: ' + picks.length);
           if (picks.length > 0) await postPicks(sport, picks);
-        } catch (e) { /* skip sport */ }
+        } catch (e) { console.warn('[Discord] ' + sport + ' picks error:', e.message); }
       }
 
       // Post EV bets
@@ -277,7 +278,7 @@ function startPosting(getPicksFn, getEVFn, getGamesFn, getPOTDFn, getHistoryFn) 
           var evData = await getEVFn();
           var bets = evData ? (evData.bets || []) : [];
           if (bets.length > 0) await postEV(bets);
-        } catch (e) { /* skip */ }
+        } catch (e) { console.warn('[Discord] EV post error:', e.message); }
       }
 
       // Post game predictions
@@ -285,8 +286,9 @@ function startPosting(getPicksFn, getEVFn, getGamesFn, getPOTDFn, getHistoryFn) 
         try {
           var gamesData = await getGamesFn();
           var games = gamesData ? (gamesData.games || []) : [];
+          console.log('[Discord] Games data: ' + games.length + ' games');
           if (games.length > 0) await postGames(games);
-        } catch (e) { /* skip */ }
+        } catch (e) { console.warn('[Discord] Games post error:', e.message); }
       }
 
       // Post POTD
@@ -294,7 +296,7 @@ function startPosting(getPicksFn, getEVFn, getGamesFn, getPOTDFn, getHistoryFn) 
         try {
           var potdData = await getPOTDFn();
           if (potdData && potdData.pick) await postPOTD(potdData.pick);
-        } catch (e) { /* skip */ }
+        } catch (e) { console.warn('[Discord] POTD post error:', e.message); }
       }
 
       // Post results
@@ -302,15 +304,15 @@ function startPosting(getPicksFn, getEVFn, getGamesFn, getPOTDFn, getHistoryFn) 
         try {
           var historyData = await getHistoryFn();
           if (historyData && historyData.overall && historyData.overall.total > 0) await postResults(historyData);
-        } catch (e) { /* skip */ }
+        } catch (e) { console.warn('[Discord] Results post error:', e.message); }
       }
     } catch (e) {
       console.warn('[Discord] Post cycle error:', e.message);
     }
   }
 
-  // First post after 2 minutes (let data load)
-  setTimeout(runPost, 2 * 60 * 1000);
+  // First post after 3 minutes (let all data services load first)
+  setTimeout(runPost, 3 * 60 * 1000);
 
   // Then every 30 minutes
   setInterval(runPost, 30 * 60 * 1000);
