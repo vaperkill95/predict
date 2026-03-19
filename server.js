@@ -145,6 +145,13 @@ try {
   console.log("bookmakers-config not found, using defaults");
 }
 
+let gamePredictions = null;
+try {
+  gamePredictions = require("./services/game-predictions");
+} catch (e) {
+  console.log("game-predictions not found, skipping game picks");
+}
+
 const app = express();
 const PORT = process.env.PORT || 3001;
 
@@ -243,6 +250,9 @@ if (parlayBuilder) {
 }
 if (bookmakersConfig) {
   app.use("/api/bookmakers", bookmakersConfig.router);
+}
+if (gamePredictions) {
+  app.use("/api/games", gamePredictions.router);
 }
 
 // === Start services ===
@@ -368,6 +378,7 @@ app.get("/api/health", (req, res) => {
       accuracy_boost: accuracyBoost ? "active" : "not loaded",
       parlay_builder: parlayBuilder ? "active" : "not loaded",
       stability: stability ? "active" : "not loaded",
+      game_predictions: gamePredictions ? "active" : "not loaded",
       enrichment: enrichment ? "active" : "not loaded",
     },
   });
@@ -418,6 +429,11 @@ app.get("/parlay", (req, res) => {
 // === Privacy Policy (required for App Store) ===
 app.get("/privacy", (req, res) => {
   res.sendFile(path.join(__dirname, "public", "privacy.html"));
+});
+
+// === Game Predictions ===
+app.get("/games", (req, res) => {
+  res.sendFile(path.join(__dirname, "public", "game-predictions.html"));
 });
 
 // === React SPA routes (inject help + sharp buttons) ===
