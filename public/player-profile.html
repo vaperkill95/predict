@@ -217,20 +217,17 @@ async function searchPlayer() {
 
 function parseGameLog(data) {
   const games = [];
-  const categories = data.categories || data.seasonTypes?.[0]?.categories || [];
-  const events = data.events || data.seasonTypes?.[0]?.events || {};
+  // Labels are at top level
+  const labels = data.labels || data.names || [];
 
-  // Get stat labels
-  const statCat = categories.find(c => c.name === 'offensive' || c.type === 'offensive') || categories[0];
-  const labels = (statCat?.labels || statCat?.names || []);
-
-  // Map event IDs to game info
+  // Build event map from top-level events (game info — date, opponent, result)
   const eventMap = {};
-  if (typeof events === 'object') {
-    for (const [id, ev] of Object.entries(events)) {
+  if (data.events) {
+    for (const [key, ev] of Object.entries(data.events)) {
+      const id = ev.id || key;
       eventMap[id] = {
         date: ev.gameDate || ev.date,
-        opponent: ev.opponent?.displayName || ev.opponent?.abbreviation || ev.atVs + ' ' + (ev.opponent?.abbreviation || ''),
+        opponent: ev.opponent?.displayName || ev.opponent?.abbreviation || (ev.atVs || '') + ' ' + (ev.opponent?.abbreviation || ''),
         homeAway: ev.homeAway || (ev.atVs === 'vs' ? 'home' : 'away'),
         result: ev.gameResult || '',
         score: ev.score || '',
@@ -238,41 +235,50 @@ function parseGameLog(data) {
     }
   }
 
-  // Parse stat rows
-  const statRows = statCat?.events || {};
-  for (const [eventId, stats] of Object.entries(statRows)) {
-    const game = eventMap[eventId];
-    if (!game) continue;
+  // Stats are in seasonTypes[].categories[].events[]
+  const seen = new Set();
+  for (const st of data.seasonTypes || []) {
+    for (const cat of st.categories || []) {
+      for (const [idx, catEvent] of Object.entries(cat.events || {})) {
+        const eventId = catEvent.eventId || idx;
+        if (seen.has(eventId)) continue;
+        seen.add(eventId);
 
-    const statObj = {};
-    if (Array.isArray(stats)) {
-      labels.forEach((label, i) => { statObj[label] = stats[i]; });
-    } else if (stats.stats) {
-      labels.forEach((label, i) => { statObj[label] = stats.stats[i]; });
+        const ev = eventMap[eventId] || {};
+        const stats = catEvent.stats || [];
+
+        const statObj = {};
+        labels.forEach((label, i) => { statObj[label] = stats[i]; });
+
+        // Parse compound stats like "11-22" for FG
+        const parse3pt = (val) => {
+          if (!val) return 0;
+          if (typeof val === 'string' && val.includes('-')) return parseInt(val.split('-')[0]) || 0;
+          return parseInt(val) || 0;
+        };
+
+        games.push({
+          date: ev.date,
+          opponent: ev.opponent || '—',
+          homeAway: ev.homeAway || '',
+          result: ev.result || '',
+          score: ev.score || '',
+          stats: {
+            min: parseFloat(statObj.MIN || 0),
+            pts: parseInt(statObj.PTS || 0),
+            reb: parseInt(statObj.REB || 0),
+            ast: parseInt(statObj.AST || 0),
+            stl: parseInt(statObj.STL || 0),
+            blk: parseInt(statObj.BLK || 0),
+            threes: parse3pt(statObj['3PT']),
+            to: parseInt(statObj.TO || 0),
+          },
+        });
+      }
+      break; // Only use first category (avoids duplicate games from multiple month categories)
     }
-
-    games.push({
-      date: game.date,
-      opponent: game.opponent,
-      homeAway: game.homeAway,
-      result: game.result,
-      score: game.score,
-      stats: {
-        min: parseFloat(statObj.MIN || statObj.minutes || 0),
-        pts: parseInt(statObj.PTS || statObj.points || 0),
-        reb: parseInt(statObj.REB || statObj.rebounds || 0),
-        ast: parseInt(statObj.AST || statObj.assists || 0),
-        stl: parseInt(statObj.STL || statObj.steals || 0),
-        blk: parseInt(statObj.BLK || statObj.blocks || 0),
-        threes: parseInt(statObj['3PM'] || statObj.threePointFieldGoalsMade || 0),
-        fgm: parseInt(statObj.FGM || statObj.fieldGoalsMade || 0),
-        fga: parseInt(statObj.FGA || statObj.fieldGoalsAttempted || 0),
-        to: parseInt(statObj.TO || statObj.turnovers || 0),
-      },
-    });
   }
 
-  // Sort by date descending
   games.sort((a, b) => new Date(b.date) - new Date(a.date));
   return games;
 }
