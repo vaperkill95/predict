@@ -384,47 +384,76 @@ app.get("/api/health", (req, res) => {
   });
 });
 
-// === Landing page at root / (inject How It Works + Sharp Tools links) ===
+// === Landing page at root / (inject full nav + updated stats) ===
 app.get("/", (req, res) => {
   const landingPath = path.join(__dirname, "public", "landing.html");
   const fs = require("fs");
   try {
     let html = fs.readFileSync(landingPath, "utf8");
-    const navLinks = '<a href="/pick" style="color:#f59e0b;font-size:14px;font-weight:700;text-decoration:none;padding:10px 16px;border-radius:8px;transition:all 0.2s;background:rgba(245,158,11,0.1);">🏆 Pick of the Day</a>\n    <a href="/start" style="color:#10b981;font-size:14px;font-weight:700;text-decoration:none;padding:10px 16px;border-radius:8px;transition:all 0.2s;background:rgba(16,185,129,0.1);">🎯 Start Here</a>\n    <a href="/how-it-works" style="color:#94a3b8;font-size:14px;font-weight:500;text-decoration:none;padding:10px 16px;border-radius:8px;transition:all 0.2s;">How It Works</a>\n    <a href="/sharp" style="color:#94a3b8;font-size:14px;font-weight:500;text-decoration:none;padding:10px 16px;border-radius:8px;transition:all 0.2s;">⚡ Sharp Tools</a>';
+    const navLinks = '<a href="/pick" style="color:#f59e0b;font-size:14px;font-weight:700;text-decoration:none;padding:10px 16px;border-radius:8px;transition:all 0.2s;background:rgba(245,158,11,0.1);">🏆 POTD</a>\n    <a href="/games" style="color:#10b981;font-size:14px;font-weight:700;text-decoration:none;padding:10px 16px;border-radius:8px;transition:all 0.2s;background:rgba(16,185,129,0.1);">🏟️ Games</a>\n    <a href="/parlay" style="color:#a78bfa;font-size:14px;font-weight:700;text-decoration:none;padding:10px 16px;border-radius:8px;transition:all 0.2s;background:rgba(167,139,250,0.1);">🎲 Parlay</a>\n    <a href="/sharp" style="color:#94a3b8;font-size:14px;font-weight:500;text-decoration:none;padding:10px 16px;border-radius:8px;transition:all 0.2s;">⚡ Sharp</a>\n    <a href="/how-it-works" style="color:#94a3b8;font-size:14px;font-weight:500;text-decoration:none;padding:10px 16px;border-radius:8px;transition:all 0.2s;">Guide</a>';
     html = html.replace(
       '<a href="/app/" class="nav-cta">',
       navLinks + '\n    <a href="/app/" class="nav-cta">'
     );
+    // Update stats: 8+ sportsbooks → 20+
+    html = html.replace(/8\+/g, '20+');
+    html = html.replace('8+ sportsbooks compared', '20+ sportsbooks compared');
+    html = html.replace('Player props from 8+ sportsbooks', 'Player props from 20+ sportsbooks');
     res.type("html").send(html);
   } catch (e) {
     res.sendFile(landingPath);
   }
 });
 
+// === Universal Nav for all standalone pages ===
+const fs = require("fs");
+const UNIVERSAL_NAV = `<nav class="nav" style="padding:14px 0;border-bottom:1px solid #1e293b;background:#0a0f1a;position:sticky;top:0;z-index:100;backdrop-filter:blur(12px);">
+<div style="display:flex;align-items:center;justify-content:space-between;max-width:960px;margin:0 auto;padding:0 20px;">
+<a href="/" style="font-family:Outfit,sans-serif;font-weight:900;font-size:18px;letter-spacing:2px;color:#f1f5f9;text-decoration:none;">⟁ <span style="color:#38bdf8;">ORACLE</span></a>
+<div style="display:flex;gap:4px;flex-wrap:wrap;align-items:center;">
+<a href="/pick" style="font-size:12px;color:#94a3b8;font-weight:500;padding:5px 8px;border-radius:6px;text-decoration:none;">POTD</a>
+<a href="/games" style="font-size:12px;color:#94a3b8;font-weight:500;padding:5px 8px;border-radius:6px;text-decoration:none;">Games</a>
+<a href="/app/" style="font-size:12px;color:#94a3b8;font-weight:500;padding:5px 8px;border-radius:6px;text-decoration:none;">App</a>
+<a href="/parlay" style="font-size:12px;color:#94a3b8;font-weight:500;padding:5px 8px;border-radius:6px;text-decoration:none;">Parlay</a>
+<a href="/sharp" style="font-size:12px;color:#94a3b8;font-weight:500;padding:5px 8px;border-radius:6px;text-decoration:none;">Sharp</a>
+<a href="/how-it-works" style="font-size:12px;color:#94a3b8;font-weight:500;padding:5px 8px;border-radius:6px;text-decoration:none;">Guide</a>
+<a href="/start" style="font-size:12px;color:#94a3b8;font-weight:500;padding:5px 8px;border-radius:6px;text-decoration:none;">Start</a>
+</div></div></nav>`;
+
+function serveWithNav(filePath, activeLink) {
+  return (req, res) => {
+    try {
+      let html = fs.readFileSync(filePath, "utf8");
+      // Replace existing nav with universal nav
+      const navRegex = /<nav[^>]*>[\s\S]*?<\/nav>/i;
+      if (navRegex.test(html)) {
+        const activeNav = UNIVERSAL_NAV.replace(
+          `href="${activeLink}"`,
+          `href="${activeLink}" style="font-size:12px;color:#f1f5f9;font-weight:700;padding:5px 8px;border-radius:6px;text-decoration:none;background:#1a2236;"`
+        );
+        html = html.replace(navRegex, activeNav);
+      }
+      res.type("html").send(html);
+    } catch (e) {
+      res.sendFile(filePath);
+    }
+  };
+}
+
 // === How It Works page ===
-app.get("/how-it-works", (req, res) => {
-  res.sendFile(path.join(__dirname, "public", "how-it-works.html"));
-});
+app.get("/how-it-works", serveWithNav(path.join(__dirname, "public", "how-it-works.html"), "/how-it-works"));
 
 // === Sharp Dashboard ===
-app.get("/sharp", (req, res) => {
-  res.sendFile(path.join(__dirname, "public", "sharp-dashboard.html"));
-});
+app.get("/sharp", serveWithNav(path.join(__dirname, "public", "sharp-dashboard.html"), "/sharp"));
 
 // === First Bet Walkthrough ===
-app.get("/start", (req, res) => {
-  res.sendFile(path.join(__dirname, "public", "first-bet.html"));
-});
+app.get("/start", serveWithNav(path.join(__dirname, "public", "first-bet.html"), "/start"));
 
 // === Pick of the Day ===
-app.get("/pick", (req, res) => {
-  res.sendFile(path.join(__dirname, "public", "pick-of-the-day.html"));
-});
+app.get("/pick", serveWithNav(path.join(__dirname, "public", "pick-of-the-day.html"), "/pick"));
 
 // === Parlay Builder ===
-app.get("/parlay", (req, res) => {
-  res.sendFile(path.join(__dirname, "public", "parlay-builder.html"));
-});
+app.get("/parlay", serveWithNav(path.join(__dirname, "public", "parlay-builder.html"), "/parlay"));
 
 // === Privacy Policy (required for App Store) ===
 app.get("/privacy", (req, res) => {
@@ -432,9 +461,7 @@ app.get("/privacy", (req, res) => {
 });
 
 // === Game Predictions ===
-app.get("/games", (req, res) => {
-  res.sendFile(path.join(__dirname, "public", "game-predictions.html"));
-});
+app.get("/games", serveWithNav(path.join(__dirname, "public", "game-predictions.html"), "/games"));
 
 // === React SPA routes (inject help + sharp buttons) ===
 const helpButtonPath = path.join(__dirname, "public", "help-button.html");
