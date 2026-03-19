@@ -164,6 +164,82 @@ app.use("/api/", rateLimit({ windowMs: 15 * 60 * 1000, max: 500, message: { erro
 
 // === API Routes ===
 app.use("/api/sports", sportsRoutes);
+
+// === Intercept game predictions — use ORACLE's engine instead of Anthropic API ===
+app.post("/api/predictions/game", async (req, res, next) => {
+  // If Anthropic key exists, let the original handler run
+  if (process.env.ANTHROPIC_API_KEY) return next();
+
+  const { sport, gameId, homeTeam, awayTeam } = req.body;
+  if (!sport || !gameId) return res.json({ error: "sport and gameId are required" });
+
+  try {
+    // Use ORACLE's game predictions engine
+    if (gamePredictions) {
+      const axios = require("axios");
+      const PORT = process.env.PORT || 3001;
+      const gamesResp = await axios.get(`http://localhost:${PORT}/api/games/${sport}`, { timeout: 15000 }).catch(() => null);
+      const games = gamesResp?.data?.games || [];
+
+      // Find this game
+      const game = games.find(g =>
+        (g.homeTeam === homeTeam || g.awayTeam === awayTeam) ||
+        (homeTeam && g.homeTeam?.includes(homeTeam?.split(' ').pop())) ||
+        (awayTeam && g.awayTeam?.includes(awayTeam?.split(' ').pop()))
+      );
+
+      if (game) {
+        const sp = game.predictions?.spread || {};
+        const tp = game.predictions?.total || {};
+        const w = game.predictions?.winner || {};
+
+        const homeWin = w.team === game.homeTeam ? w.confidence : 100 - w.confidence;
+        const awayWin = 100 - homeWin;
+
+        return res.json({
+          gameId,
+          sport,
+          prediction: {
+            homeTeam: game.homeTeam,
+            awayTeam: game.awayTeam,
+            homeWinProb: homeWin,
+            awayWinProb: awayWin,
+            predictedWinner: w.team || game.homeTeam,
+            confidence: Math.max(sp.confidence || 0, w.confidence || 0),
+            spread: game.consensus?.spread || 0,
+            total: game.consensus?.total || 220,
+            keyFactors: [
+              `${game.environment} game environment`,
+              `Spread: ${game.homeAbbr} ${game.consensus?.spread || 0} (${sp.confidence || 50}% confidence)`,
+              `Total: ${tp.side || 'OVER'} ${game.consensus?.total || 220} (${tp.confidence || 50}% confidence)`,
+              `${game.bookCount || 0} sportsbooks compared`,
+              sp.bestOdds ? `Best spread odds: ${sp.bestOdds.book} (${sp.bestOdds.price > 0 ? '+' : ''}${sp.bestOdds.price})` : null,
+            ].filter(Boolean),
+            hotTake: `ORACLE's 18-factor model picks ${w.abbr || w.team} to win. ${tp.side || 'OVER'} ${game.consensus?.total || 220} for the total. ${game.environment} game expected.`,
+            fallback: false,
+            poweredBy: 'ORACLE 18-Factor Model',
+          },
+        });
+      }
+    }
+
+    // Fallback if game not found
+    return res.json({
+      gameId, sport,
+      prediction: {
+        homeTeam: homeTeam || "Home Team",
+        awayTeam: awayTeam || "Away Team",
+        homeWinProb: 50, awayWinProb: 50, confidence: 0,
+        keyFactors: ["Game not found in today's odds — check back closer to game time"],
+        hotTake: "No odds data available yet for this game.",
+        fallback: true,
+      },
+    });
+  } catch (e) {
+    next();
+  }
+});
+
 app.use("/api/predictions", predictionsRoutes);
 app.use("/api/odds", oddsRoutes);
 app.use("/api/cdl", cdlRoutes);
