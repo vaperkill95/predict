@@ -174,15 +174,82 @@ app.use("/api/sports", sportsRoutes);
 
 // === Intercept game predictions — ALWAYS use ORACLE's 18-factor engine ===
 app.post("/api/predictions/game", async (req, res, next) => {
-  const { sport, gameId, homeTeam, awayTeam } = req.body;
+  let { sport, gameId, homeTeam, awayTeam } = req.body;
   if (!sport || !gameId) return res.json({ error: "sport and gameId are required" });
 
   try {
-    // Use ORACLE's game predictions engine — call Odds API directly to avoid rate limiter
-    if (gamePredictions) {
-      const axios = require("axios");
+    const axios = require("axios");
+
+    // Step 1: If team names not provided, look them up from ESPN
+    if (!homeTeam || !awayTeam) {
+      const espnSportMap = { nba: 'basketball/nba', nfl: 'football/nfl', mlb: 'baseball/mlb', nhl: 'hockey/nhl' };
+      const espnSport = espnSportMap[sport];
+      if (espnSport) {
+        try {
+          const espnResp = await axios.get(
+            `https://site.api.espn.com/apis/site/v2/sports/${espnSport}/summary?event=${gameId}`,
+            { timeout: 10000 }
+          );
+          const header = espnResp.data?.header?.competitions?.[0];
+          if (header?.competitors) {
+            for (const c of header.competitors) {
+              if (c.homeAway === 'home') homeTeam = c.team?.displayName || c.team?.name;
+              else awayTeam = c.team?.displayName || c.team?.name;
+            }
+          }
+          if (!homeTeam || !awayTeam) {
+            const boxTeams = espnResp.data?.boxscore?.teams || [];
+            if (boxTeams.length === 2) {
+              homeTeam = homeTeam || boxTeams[0]?.team?.displayName;
+              awayTeam = awayTeam || boxTeams[1]?.team?.displayName;
+            }
+          }
+          console.log(`[AI Predict] ESPN lookup for ${gameId}: ${awayTeam} @ ${homeTeam}`);
+        } catch (espnErr) {
+          console.log(`[AI Predict] ESPN lookup failed for ${gameId}: ${espnErr.message}`);
+        }
+      }
+    }
+
+    // Step 2: CDL / Esports — use CDL prediction engine
+    if (cdlPredictions && (sport === 'cdl' || sport === 'codmw' || sport === 'cod')) {
+      try {
+        const teamStats = await cdlPredictions.buildTeamStats();
+        const findTeam = (name) => {
+          if (!name) return null;
+          const lower = name.toLowerCase();
+          return Object.values(teamStats).find(t =>
+            t.name.toLowerCase() === lower ||
+            t.name.toLowerCase().includes(lower.split(' ').pop()) ||
+            lower.includes(t.name.toLowerCase().split(' ').pop())
+          );
+        };
+        const t1 = findTeam(homeTeam);
+        const t2 = findTeam(awayTeam);
+        if (t1 && t2) {
+          const pred = cdlPredictions.predictMatch(t1, t2);
+          return res.json({
+            gameId, sport,
+            prediction: {
+              homeTeam: t1.name, awayTeam: t2.name,
+              homeWinProb: pred.team1Prob, awayWinProb: pred.team2Prob,
+              predictedWinner: pred.predictedWinner.name,
+              confidence: pred.confidence,
+              keyFactors: pred.factors.map(f => `${f.name}: ${f.team1} vs ${f.team2} → ${f.advantage}`),
+              hotTake: `ORACLE CDL: ${pred.predictedWinner.name} (${pred.winnerProb}%) based on win rate, form, H2H, map record, and streaks.`,
+              fallback: false, poweredBy: 'ORACLE CDL Prediction Engine',
+            },
+          });
+        }
+      } catch (cdlErr) {
+        console.error(`[AI Predict] CDL error: ${cdlErr.message}`);
+      }
+    }
+
+    // Step 3: Traditional sports — use Odds API + game predictions engine
+    if (gamePredictions && homeTeam) {
       const ODDS_KEY = process.env.ODDS_API_KEY;
-      const PROP_SPORTS = { nba: 'basketball_nba', nfl: 'americanfootball_nfl', mlb: 'baseball_mlb', nhl: 'icehockey_nhl', cdl: null };
+      const PROP_SPORTS = { nba: 'basketball_nba', nfl: 'americanfootball_nfl', mlb: 'baseball_mlb', nhl: 'icehockey_nhl' };
       const oddsSport = PROP_SPORTS[sport];
 
       let games = [];
@@ -192,121 +259,74 @@ app.post("/api/predictions/game", async (req, res, next) => {
             params: { apiKey: ODDS_KEY, regions: 'us,us2', markets: 'spreads,totals,h2h', oddsFormat: 'american' },
             timeout: 15000,
           });
-          const rawGames = (oddsResp.data || []).map(g => ({
+          games = (oddsResp.data || []).map(g => gamePredictions.analyzeGame({
             id: g.id, homeTeam: g.home_team, awayTeam: g.away_team, commenceTime: g.commence_time,
             bookmakers: g.bookmakers?.map(b => ({ title: b.title, key: b.key, markets: b.markets })) || [],
           }));
-          games = rawGames.map(g => gamePredictions.analyzeGame(g));
-          console.log(`[AI Predict] Got ${games.length} games for ${sport}, looking for ${homeTeam} / ${awayTeam}`);
+          console.log(`[AI Predict] Got ${games.length} ${sport} games, matching: ${awayTeam} @ ${homeTeam}`);
         } catch (oddsErr) {
           console.error(`[AI Predict] Odds API error: ${oddsErr.message}`);
         }
-      } else {
-        console.log(`[AI Predict] No ODDS_KEY or sport not supported: ${sport} / ${oddsSport}`);
       }
 
-      // Find this game by matching team names
-      const game = games.find(g =>
-        (homeTeam && (g.homeTeam === homeTeam || g.homeTeam?.includes(homeTeam?.split(' ').pop()))) ||
-        (awayTeam && (g.awayTeam === awayTeam || g.awayTeam?.includes(awayTeam?.split(' ').pop())))
-      );
+      // Match by team name — use last word of team name (e.g. "Rockets", "Lakers")
+      const game = games.find(g => {
+        const hLast = homeTeam?.split(' ').pop()?.toLowerCase();
+        const aLast = awayTeam?.split(' ').pop()?.toLowerCase();
+        const gHome = g.homeTeam?.toLowerCase() || '';
+        const gAway = g.awayTeam?.toLowerCase() || '';
+        return (hLast && (gHome.includes(hLast) || gAway.includes(hLast))) ||
+               (aLast && (gHome.includes(aLast) || gAway.includes(aLast)));
+      });
 
       if (game) {
         const sp = game.predictions?.spread || {};
         const tp = game.predictions?.total || {};
         const w = game.predictions?.winner || {};
-
         const homeWin = w.team === game.homeTeam ? w.confidence : 100 - w.confidence;
-        const awayWin = 100 - homeWin;
 
         return res.json({
-          gameId,
-          sport,
+          gameId, sport,
           prediction: {
-            homeTeam: game.homeTeam,
-            awayTeam: game.awayTeam,
-            homeWinProb: homeWin,
-            awayWinProb: awayWin,
+            homeTeam: game.homeTeam, awayTeam: game.awayTeam,
+            homeWinProb: homeWin, awayWinProb: 100 - homeWin,
             predictedWinner: w.team || game.homeTeam,
             confidence: Math.max(sp.confidence || 0, w.confidence || 0),
-            spread: game.consensus?.spread || 0,
-            total: game.consensus?.total || 220,
+            spread: game.consensus?.spread || 0, total: game.consensus?.total || 220,
             keyFactors: [
               `${game.environment} game environment`,
               `Spread: ${game.homeAbbr} ${game.consensus?.spread || 0} (${sp.confidence || 50}% confidence)`,
               `Total: ${tp.side || 'OVER'} ${game.consensus?.total || 220} (${tp.confidence || 50}% confidence)`,
               `${game.bookCount || 0} sportsbooks compared`,
-              sp.bestOdds ? `Best spread odds: ${sp.bestOdds.book} (${sp.bestOdds.price > 0 ? '+' : ''}${sp.bestOdds.price})` : null,
+              sp.bestOdds ? `Best odds: ${sp.bestOdds.book} (${sp.bestOdds.price > 0 ? '+' : ''}${sp.bestOdds.price})` : null,
             ].filter(Boolean),
-            hotTake: `ORACLE's 18-factor model picks ${w.abbr || w.team} to win. ${tp.side || 'OVER'} ${game.consensus?.total || 220} for the total. ${game.environment} game expected.`,
-            fallback: false,
-            poweredBy: 'ORACLE 18-Factor Model',
+            hotTake: `ORACLE picks ${w.abbr || w.team} to win. ${tp.side || 'OVER'} ${game.consensus?.total || 220} total. ${game.environment} game.`,
+            fallback: false, poweredBy: 'ORACLE 18-Factor Model',
           },
         });
       }
     }
 
-    // === CDL / Esports prediction fallback ===
-    if (cdlPredictions && (sport === 'cdl' || sport === 'codmw' || sport === 'cod')) {
-      try {
-        const teamStats = await cdlPredictions.buildTeamStats();
-        const t1 = Object.values(teamStats).find(t =>
-          (homeTeam && (t.name.toLowerCase().includes(homeTeam.toLowerCase().split(' ').pop()) || t.name === homeTeam)) ||
-          (awayTeam && (t.name.toLowerCase().includes(awayTeam.toLowerCase().split(' ').pop()) || t.name === awayTeam))
-        );
-        // Find the other team
-        const otherName = t1?.name === homeTeam ? awayTeam : homeTeam;
-        const t2 = Object.values(teamStats).find(t =>
-          t.id !== t1?.id && otherName && (t.name.toLowerCase().includes(otherName.toLowerCase().split(' ').pop()) || t.name === otherName)
-        );
-
-        if (t1 && t2) {
-          const pred = cdlPredictions.predictMatch(t1, t2);
-          return res.json({
-            gameId, sport,
-            prediction: {
-              homeTeam: t1.name,
-              awayTeam: t2.name,
-              homeWinProb: pred.team1Prob,
-              awayWinProb: pred.team2Prob,
-              predictedWinner: pred.predictedWinner.name,
-              confidence: pred.confidence,
-              keyFactors: pred.factors.map(f => `${f.name}: ${f.team1} vs ${f.team2} → ${f.advantage}`),
-              hotTake: `ORACLE CDL prediction: ${pred.predictedWinner.name} (${pred.winnerProb}%) based on ${pred.factors.length} factors including win rate, recent form, head-to-head, map record, and streak.`,
-              fallback: false,
-              poweredBy: 'ORACLE CDL Prediction Engine',
-            },
-          });
-        }
-      } catch (cdlErr) {
-        console.error(`[AI Predict] CDL prediction error: ${cdlErr.message}`);
-      }
-    }
-
-    // Fallback if game not found
+    // Fallback
     return res.json({
       gameId, sport,
       prediction: {
-        homeTeam: homeTeam || "Home Team",
-        awayTeam: awayTeam || "Away Team",
+        homeTeam: homeTeam || "Home Team", awayTeam: awayTeam || "Away Team",
         homeWinProb: 50, awayWinProb: 50, confidence: 0,
-        keyFactors: ["Game not found in today's odds — check back closer to game time"],
-        hotTake: "No odds data available yet for this game.",
+        keyFactors: [homeTeam ? `No odds data found for ${awayTeam} @ ${homeTeam}` : "Could not identify teams for this game"],
+        hotTake: homeTeam ? `No active odds for this game. Visit /games for today's predictions.` : "Game data unavailable.",
         fallback: true,
       },
     });
   } catch (e) {
-    // Never fall through to Anthropic — always return ORACLE response
+    console.error(`[AI Predict] Error: ${e.message}`);
     return res.json({
       gameId, sport,
       prediction: {
-        homeTeam: homeTeam || "Home Team",
-        awayTeam: awayTeam || "Away Team",
+        homeTeam: homeTeam || "Home", awayTeam: awayTeam || "Away",
         homeWinProb: 50, awayWinProb: 50, confidence: 0,
-        keyFactors: ["ORACLE prediction engine encountered an issue — try again in a moment"],
-        hotTake: "Prediction temporarily unavailable. Visit /games for full game predictions.",
-        fallback: true,
-        poweredBy: 'ORACLE 18-Factor Model',
+        keyFactors: ["Prediction engine error — try again"],
+        hotTake: "Visit /games for full predictions.", fallback: true, poweredBy: 'ORACLE',
       },
     });
   }
