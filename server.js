@@ -211,6 +211,26 @@ app.post("/api/predictions/game", async (req, res, next) => {
       }
     }
 
+    // Step 1b: CDL/Esports — look up team names from PandaScore match ID
+    if ((!homeTeam || !awayTeam) && (sport === 'cdl' || sport === 'codmw' || sport === 'cod')) {
+      const PS_KEY = process.env.PANDASCORE_API_KEY;
+      if (PS_KEY) {
+        try {
+          const psResp = await axios.get(`https://api.pandascore.co/matches/${gameId}`, {
+            params: { token: PS_KEY }, timeout: 10000,
+          });
+          const opponents = psResp.data?.opponents || [];
+          if (opponents.length === 2) {
+            homeTeam = opponents[0]?.opponent?.name;
+            awayTeam = opponents[1]?.opponent?.name;
+            console.log(`[AI Predict] PandaScore lookup for CDL ${gameId}: ${homeTeam} vs ${awayTeam}`);
+          }
+        } catch (psErr) {
+          console.log(`[AI Predict] PandaScore lookup failed for ${gameId}: ${psErr.message}`);
+        }
+      }
+    }
+
     // Step 2: CDL / Esports — use CDL prediction engine
     if (cdlPredictions && (sport === 'cdl' || sport === 'codmw' || sport === 'cod')) {
       try {
