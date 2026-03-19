@@ -40,7 +40,7 @@ async function getPlayerProps(sportKey, marketFilter = null) {
     const eventResults = await Promise.all(
       events.slice(0, 5).map(event =>
         axios.get(`${ODDS_BASE}/sports/${oddsSport}/events/${event.id}/odds`, {
-          params: { apiKey, regions: "us,us2", markets: marketsStr, oddsFormat: "american", bookmakers: "draftkings,fanduel,betmgm,bovada,pointsbet,williamhill_us,betrivers,unibet_us,prizepicks,underdog" },
+          params: { apiKey, regions: "us,us2", markets: marketsStr, oddsFormat: "american", bookmakers: "draftkings,fanduel,betmgm,bovada,caesars,betrivers,fanatics,espnbet,hardrockbet,bet365,mybookieag,betonlineag,lowvig,betus,wynnbet,pointsbetus,prizepicks,underdog,fliff,sleeper" },
           timeout: 10000,
         }).then(res => ({ event, data: res.data })).catch(() => null)
       )

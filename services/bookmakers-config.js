@@ -1,52 +1,57 @@
 /**
- * bookmakers-config.js — Expanded Sportsbook List
+ * bookmakers-config.js — Expanded Sportsbook Coverage (23 books)
  * 
- * Use this in routes/props.js to request more bookmakers from the Odds API.
- * 
- * Change your props route's bookmakers parameter to:
- *   const { BOOKMAKERS_STRING } = require('../services/bookmakers-config');
- *   // Then in your API call:
- *   bookmakers: BOOKMAKERS_STRING
- * 
- * Or if you construct the URL manually:
- *   &bookmakers=${BOOKMAKERS_STRING}
+ * Expands from 5 to 23+ sportsbooks/DFS platforms.
+ * Use REGIONS in Odds API calls to get all books.
  */
 
-// All US sportsbooks available in the Odds API
+const express = require('express');
+const router = express.Router();
+
 const US_SPORTSBOOKS = [
-  'draftkings',      // DraftKings
-  'fanduel',         // FanDuel
-  'betmgm',          // BetMGM
-  'caesars',          // Caesars Sportsbook
-  'pointsbetus',     // PointsBet
-  'betrivers',       // BetRivers
-  'bovada',          // Bovada
-  'betonlineag',     // BetOnline.ag
-  'mybookieag',      // MyBookie.ag
-  'superbook',       // SuperBook
-  'wynnbet',         // WynnBet
-  'espnbet',         // ESPN BET
-  'fanatics',        // Fanatics Sportsbook
+  { key: 'fanduel', name: 'FanDuel', type: 'sportsbook' },
+  { key: 'draftkings', name: 'DraftKings', type: 'sportsbook' },
+  { key: 'betmgm', name: 'BetMGM', type: 'sportsbook' },
+  { key: 'caesars', name: 'Caesars', type: 'sportsbook' },
+  { key: 'betrivers', name: 'BetRivers', type: 'sportsbook' },
+  { key: 'fanatics', name: 'Fanatics', type: 'sportsbook' },
+  { key: 'espnbet', name: 'ESPN BET', type: 'sportsbook' },
+  { key: 'hardrockbet', name: 'Hard Rock Bet', type: 'sportsbook' },
+  { key: 'bet365', name: 'bet365', type: 'sportsbook' },
+  { key: 'wynnbet', name: 'WynnBET', type: 'sportsbook' },
+  { key: 'pointsbetus', name: 'PointsBet', type: 'sportsbook' },
 ];
 
-// DFS/Pick'em sites (projections, not traditional odds)
-const DFS_SITES = [
-  'prizepicks',      // PrizePicks
-  'underdogfantasy', // Underdog Fantasy
-  'fliff',           // Fliff
-  // 'sleeper',       // Sleeper (may not be in Odds API yet)
-  // 'parlayplay',    // ParlayPlay (may not be in Odds API yet)
+const US2_SPORTSBOOKS = [
+  { key: 'bovada', name: 'Bovada', type: 'sportsbook' },
+  { key: 'mybookieag', name: 'MyBookie', type: 'sportsbook' },
+  { key: 'betonlineag', name: 'BetOnline', type: 'sportsbook' },
+  { key: 'lowvig', name: 'LowVig', type: 'sportsbook' },
+  { key: 'betus', name: 'BetUS', type: 'sportsbook' },
 ];
 
-// All bookmakers combined
-const ALL_BOOKMAKERS = [...US_SPORTSBOOKS, ...DFS_SITES];
+const DFS_PLATFORMS = [
+  { key: 'prizepicks', name: 'PrizePicks', type: 'dfs' },
+  { key: 'underdog', name: 'Underdog', type: 'dfs' },
+  { key: 'fliff', name: 'Fliff', type: 'dfs' },
+  { key: 'sleeper', name: 'Sleeper', type: 'dfs' },
+  { key: 'draftkings_pick6', name: 'DK Pick6', type: 'dfs' },
+  { key: 'dabble', name: 'Dabble', type: 'dfs' },
+  { key: 'parlayplay', name: 'ParlayPlay', type: 'dfs' },
+];
 
-// Comma-separated string for API parameter
-const BOOKMAKERS_STRING = ALL_BOOKMAKERS.join(',');
+const ALL_BOOKS = [...US_SPORTSBOOKS, ...US2_SPORTSBOOKS, ...DFS_PLATFORMS];
+const REGIONS = 'us,us2';
+const ALL_BOOKMAKER_KEYS = ALL_BOOKS.map(b => b.key).join(',');
 
-module.exports = {
-  US_SPORTSBOOKS,
-  DFS_SITES,
-  ALL_BOOKMAKERS,
-  BOOKMAKERS_STRING,
-};
+router.get('/list', (req, res) => {
+  res.json({
+    total: ALL_BOOKS.length,
+    sportsbooks: US_SPORTSBOOKS.length + US2_SPORTSBOOKS.length,
+    dfs: DFS_PLATFORMS.length,
+    books: ALL_BOOKS,
+    regions: REGIONS,
+  });
+});
+
+module.exports = { router, ALL_BOOKS, REGIONS, ALL_BOOKMAKER_KEYS, US_SPORTSBOOKS, US2_SPORTSBOOKS, DFS_PLATFORMS };

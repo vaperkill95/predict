@@ -138,6 +138,13 @@ try {
   console.log("stability module not found, running without stability features");
 }
 
+let bookmakersConfig = null;
+try {
+  bookmakersConfig = require("./services/bookmakers-config");
+} catch (e) {
+  console.log("bookmakers-config not found, using defaults");
+}
+
 const app = express();
 const PORT = process.env.PORT || 3001;
 
@@ -157,6 +164,9 @@ app.use("/api/dvp", dvp.router);
 app.use("/api/esports", esports.router);
 app.use("/api/analytics", analytics.router);
 app.use("/api/predict", predictionModel.router);
+
+// === Expand sportsbook regions for props — adds us2 region for more books ===
+process.env.ODDS_REGIONS = process.env.ODDS_REGIONS || 'us,us2';
 // === Enhanced props middleware — auto-enriches props with analytics data ===
 if (enhancedPropsMiddleware) {
   enhancedPropsMiddleware.applyMiddleware(app);
@@ -230,6 +240,9 @@ if (accuracyBoost) {
 }
 if (parlayBuilder) {
   app.use("/api/parlay", parlayBuilder.router);
+}
+if (bookmakersConfig) {
+  app.use("/api/bookmakers", bookmakersConfig.router);
 }
 
 // === Start services ===
