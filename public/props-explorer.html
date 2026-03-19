@@ -153,9 +153,31 @@ const headshotCache = {};
 async function loadProps() {
   document.getElementById('propsBody').innerHTML = '<tr><td colspan="12" class="loading">Loading props...</td></tr>';
   try {
-    const resp = await fetch(`/api/props/${currentSport}`);
-    const data = await resp.json();
-    allProps = (data.props || []).map(enrichProp);
+    // Fetch both raw props and enriched picks
+    const [propsResp, picksResp] = await Promise.all([
+      fetch(`/api/props/${currentSport}`),
+      fetch(`/api/props/${currentSport}/picks`),
+    ]);
+    const propsData = await propsResp.json();
+    const picksData = await picksResp.json();
+
+    // Build a lookup from enriched picks (these have seasonAvg, projection, hitRate, etc.)
+    const enrichedMap = {};
+    for (const pick of (picksData.picks || [])) {
+      const key = `${pick.player}_${pick.market}`.toLowerCase();
+      enrichedMap[key] = pick;
+    }
+
+    // Merge: use enriched data where available, fall back to raw
+    allProps = (propsData.props || []).map(p => {
+      const key = `${p.player}_${p.marketLabel || p.market}`.toLowerCase();
+      const enriched = enrichedMap[key];
+      if (enriched) {
+        return enrichProp({ ...p, ...enriched });
+      }
+      return enrichProp(p);
+    });
+
     filterProps();
     updateStats();
   } catch(e) {

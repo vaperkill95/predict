@@ -438,62 +438,113 @@ router.get('/history/auto-grade', async (req, res) => {
   if (pending.length === 0) return res.json({ graded: 0, message: 'No pending picks' });
 
   let graded = 0;
-  const statMap = { 'Points': 'points', 'Rebounds': 'rebounds', 'Assists': 'assists', '3-Pointers': 'threePointersMade', '3-pointers Made': 'threePointersMade' };
+
+  // ESPN stat label mapping — maps our market names to ESPN box score label prefixes
+  const LABEL_MAP = {
+    'points': 'PTS',
+    'rebounds': 'REB',
+    'assists': 'AST',
+    '3-pointers': '3PM',
+    '3-pointers made': '3PM',
+    'threes': '3PM',
+    'steals': 'STL',
+    'blocks': 'BLK',
+    'turnovers': 'TO',
+    'goals': 'G',        // NHL
+    'shots': 'SOG',       // NHL
+    'saves': 'SV',        // NHL
+  };
+
+  // Sport → ESPN endpoint map
+  const SPORT_MAP = {
+    'nba': 'basketball/nba',
+    'nhl': 'hockey/nhl',
+    'nfl': 'football/nfl',
+    'mlb': 'baseball/mlb',
+  };
+
+  // Group pending picks by sport
+  const picksBySport = {};
+  for (const p of pending) {
+    const sport = p.sport || 'nba';
+    if (!picksBySport[sport]) picksBySport[sport] = [];
+    picksBySport[sport].push(p);
+  }
 
   try {
-    // Fetch today's completed games from ESPN
-    const espn = await axios.get(
-      'https://site.api.espn.com/apis/site/v2/sports/basketball/nba/scoreboard',
-      { timeout: 10000 }
-    );
-    const events = espn.data?.events || [];
-    const finishedGames = events.filter(e => e.status?.type?.name === 'STATUS_FINAL');
+    for (const [sport, sportPicks] of Object.entries(picksBySport)) {
+      const espnPath = SPORT_MAP[sport];
+      if (!espnPath) continue;
 
-    for (const pick of pending) {
-      const statKey = statMap[pick.market] || pick.market?.toLowerCase();
-      if (!statKey) continue;
+      // Fetch scoreboard for this sport
+      let finishedGames = [];
+      try {
+        const espn = await axios.get(
+          `https://site.api.espn.com/apis/site/v2/sports/${espnPath}/scoreboard`,
+          { timeout: 10000 }
+        );
+        finishedGames = (espn.data?.events || []).filter(e => e.status?.type?.name === 'STATUS_FINAL');
+      } catch (e) { continue; }
 
-      // Try to find this player's box score in finished games
+      if (finishedGames.length === 0) continue;
+
+      // Fetch box scores for all finished games (cache per game)
+      const boxScoreCache = {};
       for (const game of finishedGames) {
-        const comp = game.competitions?.[0];
-        if (!comp) continue;
-
-        for (const team of (comp.competitors || [])) {
-          // We need the box score - try fetching it
-          try {
-            const boxResp = await axios.get(
-              `https://site.api.espn.com/apis/site/v2/sports/basketball/nba/summary?event=${game.id}`,
-              { timeout: 8000 }
-            );
-            const boxScore = boxResp.data?.boxscore?.players || [];
-            for (const teamBox of boxScore) {
-              for (const player of (teamBox.statistics?.[0]?.athletes || [])) {
-                const pName = player.athlete?.displayName;
-                if (!pName || pName.toLowerCase() !== pick.player?.toLowerCase()) continue;
-
-                // Found the player! Get their stat
-                const stats = player.stats || [];
-                const statLabels = teamBox.statistics?.[0]?.labels || [];
-                const statIndex = statLabels.findIndex(l => l.toLowerCase().includes(statKey.substring(0, 3)));
-
-                if (statIndex >= 0 && stats[statIndex] !== undefined) {
-                  const actual = parseFloat(stats[statIndex]);
-                  const hit = pick.pick === 'OVER' ? actual > pick.line : actual < pick.line;
-
-                  // Update the pick in history
-                  const idx = pickHistory.findIndex(h =>
-                    h.player === pick.player && h.market === pick.market && h.date === pick.date && h.result === 'pending'
-                  );
-                  if (idx >= 0) {
-                    pickHistory[idx].result = hit ? 'hit' : 'miss';
-                    pickHistory[idx].actual = actual;
-                    pickHistory[idx].gradedAt = new Date().toISOString();
-                    graded++;
-                  }
-                }
-              }
+        try {
+          const boxResp = await axios.get(
+            `https://site.api.espn.com/apis/site/v2/sports/${espnPath}/summary?event=${game.id}`,
+            { timeout: 8000 }
+          );
+          const playerMap = {};
+          for (const teamBox of (boxResp.data?.boxscore?.players || [])) {
+            const labels = teamBox.statistics?.[0]?.labels || [];
+            for (const athlete of (teamBox.statistics?.[0]?.athletes || [])) {
+              const name = athlete.athlete?.displayName?.toLowerCase();
+              if (!name) continue;
+              const statObj = {};
+              labels.forEach((label, i) => { statObj[label] = athlete.stats?.[i]; });
+              playerMap[name] = statObj;
             }
-          } catch (e) { /* Skip this game */ }
+          }
+          boxScoreCache[game.id] = playerMap;
+        } catch (e) { /* skip */ }
+      }
+
+      // Grade each pending pick
+      for (const pick of sportPicks) {
+        const playerName = pick.player?.toLowerCase();
+        if (!playerName) continue;
+
+        const market = (pick.market || '').toLowerCase();
+        const espnLabel = LABEL_MAP[market] || Object.entries(LABEL_MAP).find(([k]) => market.includes(k))?.[1];
+        if (!espnLabel) continue;
+
+        // Search all box scores for this player
+        for (const [gameId, playerMap] of Object.entries(boxScoreCache)) {
+          const playerStats = playerMap[playerName];
+          if (!playerStats) continue;
+
+          // Find the stat value
+          const statValue = playerStats[espnLabel];
+          if (statValue === undefined || statValue === null) continue;
+
+          const actual = parseFloat(statValue);
+          if (isNaN(actual)) continue;
+
+          const hit = pick.pick === 'OVER' ? actual > pick.line : actual < pick.line;
+
+          // Update in history
+          const idx = pickHistory.findIndex(h =>
+            h.player === pick.player && h.market === pick.market && h.date === pick.date && h.result === 'pending'
+          );
+          if (idx >= 0) {
+            pickHistory[idx].result = hit ? 'hit' : 'miss';
+            pickHistory[idx].actual = actual;
+            pickHistory[idx].gradedAt = new Date().toISOString();
+            graded++;
+          }
+          break; // Found the player, move to next pick
         }
       }
     }
