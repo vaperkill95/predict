@@ -615,21 +615,6 @@ async function getMovementInternal(sport) {
 // Start trending picks refresh (every 10 min)
 trendingPicks.startRefresh(fetchPropsInternal, fetchPicksInternal, getMovementInternal);
 
-// Pre-fetch games to populate cache for Discord poster (after 90 sec)
-if (gamePredictions) {
-  setTimeout(async () => {
-    try {
-      const posterAxios = require("axios");
-      for (const sp of ['nba', 'nhl']) {
-        try {
-          await posterAxios.get(`http://localhost:${PORT}/api/games/${sp}`, { timeout: 20000 });
-          console.log(`[Games] Pre-fetched ${sp.toUpperCase()} games into cache`);
-        } catch(e) { /* skip */ }
-      }
-    } catch(e) {}
-  }, 90 * 1000);
-}
-
 // Start Discord alerts (every 10 min)
 discordAlerts.start(fetchPropsInternal, fetchPicksInternal);
 
@@ -661,14 +646,32 @@ try {
     },
     async () => {
       try {
+        // Try cache first
         if (gamePredictions && gamePredictions.getCachedGames) {
           var cached = gamePredictions.getCachedGames('nba') || gamePredictions.getCachedGames('nhl');
           if (cached && cached.length > 0) return { games: cached };
         }
-        const posterAxios = require("axios");
-        const r = await posterAxios.get(`http://localhost:${PORT}/api/games/nba`, { timeout: 10000 });
-        return r.data;
-      } catch(e) { return { games: [] }; }
+        // If no cache, fetch directly from Odds API and analyze
+        if (gamePredictions && gamePredictions.analyzeGame && process.env.ODDS_API_KEY) {
+          const posterAxios = require("axios");
+          const ODDS_KEY = process.env.ODDS_API_KEY;
+          const oddsResp = await posterAxios.get('https://api.the-odds-api.com/v4/sports/basketball_nba/odds', {
+            params: { apiKey: ODDS_KEY, regions: 'us,us2', markets: 'spreads,totals,h2h', oddsFormat: 'american' },
+            timeout: 15000,
+          });
+          const games = (oddsResp.data || []).map(g => gamePredictions.analyzeGame({
+            id: g.id, homeTeam: g.home_team, awayTeam: g.away_team, commenceTime: g.commence_time,
+            bookmakers: (g.bookmakers || []).map(b => ({ title: b.title, key: b.key, markets: b.markets })),
+          }, 'nba'));
+          // Cache them for future use
+          if (gamePredictions.gamesCache) {
+            gamePredictions.gamesCache['nba'] = { games: games, timestamp: Date.now() };
+          }
+          console.log('[Discord] Fetched ' + games.length + ' NBA games directly from Odds API');
+          return { games: games };
+        }
+        return { games: [] };
+      } catch(e) { console.warn('[Discord] Games fetch error:', e.message); return { games: [] }; }
     },
     async () => {
       try {
