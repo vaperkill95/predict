@@ -96,6 +96,23 @@ try {
   console.log("sharp-tools not found, skipping pro bettor tools");
 }
 
+// Multi-API Odds Provider (Odds API + SharpAPI failover)
+let multiOdds = null;
+try {
+  multiOdds = require("./services/multi-odds-provider");
+  console.log("[MultiOdds] Provider loaded — Odds API + SharpAPI failover active");
+} catch (e) {
+  console.log("multi-odds-provider not found, using single API mode");
+}
+
+// SharpAPI-powered routes for Sharp Dashboard
+let sharpRoutes = null;
+try {
+  sharpRoutes = require("./services/sharp-routes");
+} catch (e) {
+  console.log("sharp-routes not found, using legacy sharp tools");
+}
+
 let potd = null;
 try {
   potd = require("./services/pick-of-the-day");
@@ -456,6 +473,20 @@ if (playerHeadshots) {
   app.use("/api/headshots", playerHeadshots.router);
 }
 
+// === SharpAPI-powered routes (EV, Arbs, Middles, Splits) ===
+if (sharpRoutes) {
+  app.use("/api/sharp-v2", sharpRoutes.router);
+}
+
+// === Multi-API Provider status ===
+app.get("/api/providers", (req, res) => {
+  if (multiOdds) {
+    res.json(multiOdds.getProviderStatus());
+  } else {
+    res.json({ multiOdds: false, note: "Single API mode" });
+  }
+});
+
 // === ORACLE Bot API (Claude Haiku powered) ===
 let botApi = null;
 try {
@@ -504,30 +535,39 @@ if (accuracyBoost && accuracyBoost.startMonitoring) {
 }
 
 // ============================================================
-// SHARED PROPS CACHE — reduces Odds API calls by 80%+
-// All services share this cache instead of calling the API independently
+// MULTI-API FAILOVER SYSTEM
+// Routes between Odds API, SharpAPI, ESPN, PandaScore
 // ============================================================
-const propsCache = {};
-const PROPS_CACHE_TTL = 15 * 60 * 1000; // 15 min cache — one API call serves ALL services
+let multiApi = null;
+try {
+  multiApi = require("./services/multi-api");
+  console.log("[MultiAPI] Loaded — Odds API + SharpAPI + ESPN + PandaScore");
+} catch(e) {
+  console.log("[MultiAPI] Not loaded:", e.message);
+}
 
+// Shared props function — all services use this
 async function getCachedProps(sport) {
-  const now = Date.now();
-  if (propsCache[sport] && now - propsCache[sport].time < PROPS_CACHE_TTL) {
-    return propsCache[sport].data;
+  if (multiApi) {
+    return await multiApi.getProps(sport);
   }
+  // Fallback to direct Odds API call
   try {
     const { getPlayerProps } = require("./services/props");
-    const data = await getPlayerProps(sport);
-    propsCache[sport] = { data, time: now };
-    console.log(`[PropsCache] Refreshed ${sport}: ${data.props?.length || 0} props`);
-    return data;
+    return await getPlayerProps(sport);
   } catch(e) {
-    console.error(`[PropsCache] Failed for ${sport}: ${e.message}`);
-    // Return stale cache if available
-    if (propsCache[sport]) return propsCache[sport].data;
     return { props: [] };
   }
 }
+
+// API status endpoint — shows health of all data sources
+app.get("/api/data-sources", (req, res) => {
+  if (multiApi) {
+    res.json(multiApi.getStatus());
+  } else {
+    res.json({ error: "multi-api not loaded" });
+  }
+});
 
 // Start CDL stats scraper (every 30 min)
 scrapeCDLStats().catch(err => console.log("Initial CDL scrape skipped:", err.message));
@@ -617,7 +657,11 @@ app.get("/api/health", (req, res) => {
       cdl_predictions: cdlPredictions ? "active" : "not loaded",
       player_headshots: playerHeadshots ? "active" : "not loaded",
       enrichment: enrichment ? "active" : "not loaded",
+      multi_odds_provider: multiOdds ? "active" : "not loaded",
+      sharp_api: process.env.SHARP_API_KEY ? "configured" : "not configured",
+      sharp_routes: sharpRoutes ? "active" : "not loaded",
     },
+    providers: multiOdds ? multiOdds.getProviderStatus() : { mode: "single-api" },
   });
 });
 
