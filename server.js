@@ -615,6 +615,7 @@ const UNIVERSAL_NAV = `<nav class="nav" style="padding:14px 0;border-bottom:1px 
 <a href="/" style="font-family:Outfit,sans-serif;font-weight:900;font-size:18px;letter-spacing:2px;color:#f1f5f9;text-decoration:none;">⟁ <span style="color:#38bdf8;">ORACLE</span></a>
 <div style="display:flex;gap:4px;flex-wrap:wrap;align-items:center;">
 <a href="/pick" style="font-size:12px;color:#94a3b8;font-weight:500;padding:5px 8px;border-radius:6px;text-decoration:none;">POTD</a>
+<a href="/props" style="font-size:12px;color:#94a3b8;font-weight:500;padding:5px 8px;border-radius:6px;text-decoration:none;">Props</a>
 <a href="/games" style="font-size:12px;color:#94a3b8;font-weight:500;padding:5px 8px;border-radius:6px;text-decoration:none;">Games</a>
 <a href="/app/" style="font-size:12px;color:#94a3b8;font-weight:500;padding:5px 8px;border-radius:6px;text-decoration:none;">App</a>
 <a href="/parlay" style="font-size:12px;color:#94a3b8;font-weight:500;padding:5px 8px;border-radius:6px;text-decoration:none;">Parlay</a>
@@ -672,6 +673,12 @@ app.get("/games", serveWithNav(path.join(__dirname, "public", "game-predictions.
 
 // === Player Profile ===
 app.get("/player", serveWithNav(path.join(__dirname, "public", "player-profile.html"), "/player"));
+
+// === Props Explorer ===
+app.get("/props", serveWithNav(path.join(__dirname, "public", "props-explorer.html"), "/props"));
+
+// === Discrepancies ===
+app.get("/discrepancies", serveWithNav(path.join(__dirname, "public", "discrepancies.html"), "/discrepancies"));
 
 // === React SPA routes (inject help + sharp buttons) ===
 const helpButtonPath = path.join(__dirname, "public", "help-button.html");

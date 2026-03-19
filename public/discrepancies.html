@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Discrepancies — ORACLE</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;600;800;900&family=DM+Sans:wght@400;500;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<style>
+:root{--bg-deep:#060a14;--bg-base:#0a0f1a;--bg-card:#111827;--bg-elevated:#1a2236;--border:#1e293b;--text-primary:#f1f5f9;--text-secondary:#94a3b8;--text-muted:#64748b;--accent:#38bdf8;--green:#10b981;--red:#ef4444;--amber:#f59e0b;--purple:#a78bfa;--font-display:"Outfit",sans-serif;--font-body:"DM Sans",sans-serif;--font-mono:"JetBrains Mono",monospace;}
+*{margin:0;padding:0;box-sizing:border-box;}
+body{background:var(--bg-deep);color:var(--text-primary);font-family:var(--font-body);line-height:1.5;}
+a{color:var(--accent);text-decoration:none;}
+.container{max-width:1200px;margin:0 auto;padding:0 16px;}
+.page-header{padding:24px 0 16px;}
+.page-title{font-family:var(--font-display);font-size:24px;font-weight:800;}
+.page-title span{color:var(--accent);}
+.page-sub{color:var(--text-muted);font-size:13px;margin-top:4px;}
+.badge{background:var(--red);color:#fff;font-size:12px;font-weight:700;padding:2px 8px;border-radius:6px;margin-left:8px;}
+
+.filters{display:flex;gap:6px;flex-wrap:wrap;padding-bottom:12px;margin-bottom:12px;border-bottom:1px solid var(--border);}
+.filter-btn{padding:6px 14px;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;background:var(--bg-card);border:1px solid var(--border);color:var(--text-secondary);transition:all 0.15s;white-space:nowrap;}
+.filter-btn.active{background:var(--accent);color:#000;border-color:var(--accent);}
+.filter-btn:hover:not(.active){background:var(--bg-elevated);}
+
+.disc-grid{display:grid;gap:10px;}
+.disc-card{background:var(--bg-card);border:1px solid var(--border);border-radius:12px;padding:16px;display:grid;grid-template-columns:1fr auto;gap:12px;align-items:center;transition:border 0.2s;}
+.disc-card:hover{border-color:var(--accent);}
+.disc-player{font-weight:700;font-size:15px;}
+.disc-game{font-size:11px;color:var(--text-muted);}
+.disc-market{font-size:12px;color:var(--accent);margin-top:2px;}
+.disc-lines{display:flex;gap:16px;align-items:center;}
+.disc-line{text-align:center;}
+.disc-line .label{font-size:10px;color:var(--text-muted);text-transform:uppercase;}
+.disc-line .value{font-family:var(--font-mono);font-size:18px;font-weight:700;}
+.disc-line .book{font-size:10px;color:var(--text-muted);}
+.disc-gap{text-align:center;padding:0 12px;}
+.disc-gap .value{font-family:var(--font-mono);font-size:22px;font-weight:800;color:var(--red);}
+.disc-gap .label{font-size:10px;color:var(--text-muted);}
+.disc-stats{display:flex;gap:16px;margin-top:8px;font-size:11px;color:var(--text-secondary);}
+.disc-stats strong{color:var(--text-primary);}
+
+.empty{text-align:center;padding:60px 20px;color:var(--text-muted);}
+</style>
+</head>
+<body>
+<div class="container">
+<div class="page-header">
+  <div class="page-title">🔀 <span>Discrepancies</span><span class="badge" id="discCount">0</span></div>
+  <div class="page-sub">Props where sportsbooks disagree on lines — the bigger the gap, the bigger the potential edge</div>
+</div>
+
+<div class="filters">
+  <div class="filter-btn active" data-sport="nba" onclick="loadDisc('nba')">🏀 NBA</div>
+  <div class="filter-btn" data-sport="nfl" onclick="loadDisc('nfl')">🏈 NFL</div>
+  <div class="filter-btn" data-sport="mlb" onclick="loadDisc('mlb')">⚾ MLB</div>
+  <div class="filter-btn" data-sport="nhl" onclick="loadDisc('nhl')">🏒 NHL</div>
+</div>
+
+<div class="disc-grid" id="discGrid">
+  <div class="empty">Loading discrepancies...</div>
+</div>
+</div>
+
+<script>
+async function loadDisc(sport) {
+  document.querySelectorAll('.filter-btn').forEach(b => b.classList.toggle('active', b.dataset.sport === sport));
+  document.getElementById('discGrid').innerHTML = '<div class="empty">Loading...</div>';
+
+  try {
+    const resp = await fetch(`/api/props/${sport}`);
+    const data = await resp.json();
+    const props = data.props || [];
+
+    // Find props with line spread > 0
+    const discs = props.filter(p => {
+      const spread = p.lineSpread || p.spread || 0;
+      return spread > 0 && p.bookCount > 1;
+    }).map(p => {
+      const spread = p.lineSpread || p.spread || 0;
+      const minLine = p.minLine || (p.consensusLine - spread / 2);
+      const maxLine = p.maxLine || (p.consensusLine + spread / 2);
+      return { ...p, spread, minLine, maxLine };
+    }).sort((a, b) => b.spread - a.spread);
+
+    document.getElementById('discCount').textContent = discs.length;
+
+    if (!discs.length) {
+      document.getElementById('discGrid').innerHTML = '<div class="empty">No discrepancies found — all books agree on lines right now</div>';
+      return;
+    }
+
+    document.getElementById('discGrid').innerHTML = discs.slice(0, 50).map(p => {
+      const gapColor = p.spread >= 3 ? 'var(--red)' : p.spread >= 2 ? 'var(--amber)' : 'var(--accent)';
+      const avg = p.seasonAvg || p.average || 0;
+      const hitRate = p.hitRate || p.overHitRate || 0;
+      return `<div class="disc-card">
+        <div>
+          <div class="disc-player"><a href="/player?name=${encodeURIComponent(p.player)}">${p.player}</a></div>
+          <div class="disc-game">${p.game || ''}</div>
+          <div class="disc-market">${p.marketLabel || p.market || ''}</div>
+          <div class="disc-stats">
+            <span>Avg: <strong>${avg ? parseFloat(avg).toFixed(1) : '—'}</strong></span>
+            <span>Hit: <strong>${hitRate ? parseFloat(hitRate).toFixed(0) + '%' : '—'}</strong></span>
+            <span>Books: <strong>${p.bookCount || p.books || 0}</strong></span>
+            ${p.lineType === 'demon' ? '<span style="color:var(--red);font-weight:700;">🔥 DEMON</span>' : ''}
+            ${p.lineType === 'goblin' ? '<span style="color:var(--purple);font-weight:700;">👹 GOBLIN</span>' : ''}
+          </div>
+        </div>
+        <div class="disc-lines">
+          <div class="disc-line">
+            <div class="label">Low</div>
+            <div class="value" style="color:var(--green);">${p.minLine?.toFixed(1) || '—'}</div>
+          </div>
+          <div class="disc-gap">
+            <div class="value" style="color:${gapColor};">${p.spread?.toFixed(1)}</div>
+            <div class="label">Gap</div>
+          </div>
+          <div class="disc-line">
+            <div class="label">High</div>
+            <div class="value" style="color:var(--red);">${p.maxLine?.toFixed(1) || '—'}</div>
+          </div>
+        </div>
+      </div>`;
+    }).join('');
+  } catch(e) {
+    document.getElementById('discGrid').innerHTML = `<div class="empty">Error: ${e.message}</div>`;
+  }
+}
+
+loadDisc('nba');
+</script>
+</body>
+</html>
