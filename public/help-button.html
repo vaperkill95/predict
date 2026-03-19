@@ -99,9 +99,58 @@
 
   // Run immediately and also watch for tab changes
   replaceMessage();
-  const observer = new MutationObserver(() => { replaceMessage(); });
+  const observer = new MutationObserver(() => { replaceMessage(); fixSetupRequired(); });
   observer.observe(document.body, { childList: true, subtree: true, characterData: true });
   // Also run periodically for React re-renders
-  setInterval(replaceMessage, 2000);
+  setInterval(() => { replaceMessage(); fixSetupRequired(); }, 2000);
+
+  // Fix "Setup Required" on Top Picks tab — force load picks from ORACLE's API
+  async function fixSetupRequired() {
+    const allEls = document.querySelectorAll('*');
+    for (const el of allEls) {
+      if (el.children.length > 3) continue;
+      const text = el.innerText || '';
+      if (text.includes('Setup Required') && text.includes('Failed to generate picks')) {
+        try {
+          const sport = document.querySelector('[class*="active"]')?.textContent?.toLowerCase() || 'nba';
+          const sportKey = ['nba','nfl','mlb','nhl'].find(s => sport.includes(s)) || 'nba';
+          const resp = await fetch(`/api/props/${sportKey}/picks`);
+          const data = await resp.json();
+          if (data.picks && data.picks.length > 0) {
+            let html = '<div style="padding:16px;">';
+            html += '<div style="font-size:16px;font-weight:700;color:#38bdf8;margin-bottom:12px;">🔥 ORACLE Top Picks</div>';
+            for (const p of data.picks.slice(0, 8)) {
+              const gradeColor = p.grade?.includes('A') ? '#10b981' : p.grade?.includes('B') ? '#38bdf8' : '#f59e0b';
+              html += `<div style="background:#111827;border:1px solid #1e293b;border-radius:10px;padding:12px;margin-bottom:8px;">
+                <div style="display:flex;justify-content:space-between;align-items:center;">
+                  <div>
+                    <span style="font-weight:700;color:#f1f5f9;">${p.player}</span>
+                    <span style="color:#64748b;font-size:12px;margin-left:8px;">${p.game || ''}</span>
+                  </div>
+                  <span style="background:${gradeColor}22;color:${gradeColor};padding:2px 8px;border-radius:4px;font-size:12px;font-weight:700;">${p.grade} ${p.confidence}%</span>
+                </div>
+                <div style="margin-top:6px;display:flex;gap:12px;font-size:13px;">
+                  <span style="color:${p.pick === 'OVER' ? '#10b981' : '#ef4444'};font-weight:600;">${p.pick} ${p.line} ${p.market}</span>
+                  <span style="color:#94a3b8;">Proj: ${p.projection?.toFixed(1) || '—'}</span>
+                  <span style="color:#94a3b8;">Hit: ${p.hitRate?.toFixed(0) || '—'}%</span>
+                  <span style="color:#94a3b8;">${p.bestBook || ''}</span>
+                </div>
+                <div style="margin-top:4px;font-size:11px;color:#64748b;">${p.reasoning || ''}</div>
+              </div>`;
+            }
+            html += '</div>';
+            // Find the parent container and replace
+            let container = el;
+            while (container && container.tagName !== 'MAIN' && container.parentElement) {
+              if (container.offsetHeight > 200) break;
+              container = container.parentElement;
+            }
+            container.innerHTML = html;
+          }
+        } catch (e) {}
+        return;
+      }
+    }
+  }
 })();
 </script>
