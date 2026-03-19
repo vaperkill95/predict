@@ -152,6 +152,13 @@ try {
   console.log("game-predictions not found, skipping game picks");
 }
 
+let cdlPredictions = null;
+try {
+  cdlPredictions = require("./services/cdl-predictions");
+} catch (e) {
+  console.log("cdl-predictions not found, skipping CDL predictions");
+}
+
 const app = express();
 const PORT = process.env.PORT || 3001;
 
@@ -236,6 +243,43 @@ app.post("/api/predictions/game", async (req, res, next) => {
             poweredBy: 'ORACLE 18-Factor Model',
           },
         });
+      }
+    }
+
+    // === CDL / Esports prediction fallback ===
+    if (cdlPredictions && (sport === 'cdl' || sport === 'codmw' || sport === 'cod')) {
+      try {
+        const teamStats = await cdlPredictions.buildTeamStats();
+        const t1 = Object.values(teamStats).find(t =>
+          (homeTeam && (t.name.toLowerCase().includes(homeTeam.toLowerCase().split(' ').pop()) || t.name === homeTeam)) ||
+          (awayTeam && (t.name.toLowerCase().includes(awayTeam.toLowerCase().split(' ').pop()) || t.name === awayTeam))
+        );
+        // Find the other team
+        const otherName = t1?.name === homeTeam ? awayTeam : homeTeam;
+        const t2 = Object.values(teamStats).find(t =>
+          t.id !== t1?.id && otherName && (t.name.toLowerCase().includes(otherName.toLowerCase().split(' ').pop()) || t.name === otherName)
+        );
+
+        if (t1 && t2) {
+          const pred = cdlPredictions.predictMatch(t1, t2);
+          return res.json({
+            gameId, sport,
+            prediction: {
+              homeTeam: t1.name,
+              awayTeam: t2.name,
+              homeWinProb: pred.team1Prob,
+              awayWinProb: pred.team2Prob,
+              predictedWinner: pred.predictedWinner.name,
+              confidence: pred.confidence,
+              keyFactors: pred.factors.map(f => `${f.name}: ${f.team1} vs ${f.team2} → ${f.advantage}`),
+              hotTake: `ORACLE CDL prediction: ${pred.predictedWinner.name} (${pred.winnerProb}%) based on ${pred.factors.length} factors including win rate, recent form, head-to-head, map record, and streak.`,
+              fallback: false,
+              poweredBy: 'ORACLE CDL Prediction Engine',
+            },
+          });
+        }
+      } catch (cdlErr) {
+        console.error(`[AI Predict] CDL prediction error: ${cdlErr.message}`);
       }
     }
 
@@ -357,6 +401,9 @@ if (bookmakersConfig) {
 }
 if (gamePredictions) {
   app.use("/api/games", gamePredictions.router);
+}
+if (cdlPredictions) {
+  app.use("/api/cdl-predictions", cdlPredictions.router);
 }
 
 // === Start services ===
@@ -483,6 +530,7 @@ app.get("/api/health", (req, res) => {
       parlay_builder: parlayBuilder ? "active" : "not loaded",
       stability: stability ? "active" : "not loaded",
       game_predictions: gamePredictions ? "active" : "not loaded",
+      cdl_predictions: cdlPredictions ? "active" : "not loaded",
       enrichment: enrichment ? "active" : "not loaded",
     },
   });
