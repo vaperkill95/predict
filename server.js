@@ -684,16 +684,14 @@ try {
 
 function serveAppWithHelp(req, res) {
   const indexPath = path.join(__dirname, "dist", "index.html");
-  if (helpButtonHTML) {
-    const fs = require("fs");
-    try {
-      let html = fs.readFileSync(indexPath, "utf8");
-      html = html.replace("</body>", helpButtonHTML + "\n</body>");
-      res.type("html").send(html);
-    } catch (e) {
-      res.sendFile(indexPath);
-    }
-  } else {
+  const fs = require("fs");
+  try {
+    let html = fs.readFileSync(indexPath, "utf8");
+    // Read help button fresh each time (not cached)
+    const helpHTML = fs.readFileSync(helpButtonPath, "utf8");
+    html = html.replace("</body>", helpHTML + "\n</body>");
+    res.type("html").send(html);
+  } catch (e) {
     res.sendFile(indexPath);
   }
 }

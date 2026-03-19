@@ -160,6 +160,7 @@
 (function injectHeadshots() {
   const headshotCache = {};
   const pendingLookups = new Set();
+  const injected = new WeakSet();
 
   async function getHeadshot(name) {
     if (headshotCache[name] !== undefined) return headshotCache[name];
@@ -176,39 +177,43 @@
     return headshotCache[name];
   }
 
-  async function addHeadshotsToRows() {
-    // Find all prop rows that have player names but no headshot yet
-    const rows = document.querySelectorAll('tr, [class*="prop"], [class*="row"], [class*="card"]');
-    for (const row of rows) {
-      if (row.querySelector('.oracle-headshot')) continue;
-      // Find the first child that looks like a player name (bold text, not a number)
-      const nameEl = row.querySelector('td:first-child, [class*="player"], [class*="name"]');
-      if (!nameEl) continue;
-      const text = nameEl.textContent?.trim();
-      if (!text || text.length < 4 || text.length > 40 || /^\d/.test(text)) continue;
-      // Extract just the player name (first line, before any team/game info)
-      const name = text.split('\n')[0].trim();
-      if (!name || name.includes('·') || name.includes('@')) continue;
-      
-      const headshot = await getHeadshot(name);
+  async function addHeadshots() {
+    // Player names are in <span> elements that match "Firstname Lastname" pattern
+    const spans = document.querySelectorAll('span');
+    for (const span of spans) {
+      if (injected.has(span)) continue;
+      const text = span.textContent?.trim();
+      // Match player name pattern: "First Last" or "First Last Jr" etc
+      if (!text || text.length < 5 || text.length > 35) continue;
+      if (!/^[A-Z][a-z]+ [A-Z]/.test(text)) continue;
+      // Skip if contains non-name characters
+      if (/[·@\d%()$]/.test(text)) continue;
+      // Skip common non-player text
+      if (['Player Props', 'Top Picks', 'Sharp Tools', 'How It Works', 'Game Predictions'].some(s => text.includes(s))) continue;
+      // Must be a leaf or near-leaf node
+      if (span.children.length > 1) continue;
+      // Parent should be a div (React prop row structure)
+      const parent = span.parentElement;
+      if (!parent || parent.tagName === 'NAV' || parent.tagName === 'A') continue;
+      // Don't inject twice
+      if (parent.querySelector('.oracle-hs')) continue;
+
+      injected.add(span);
+      const headshot = await getHeadshot(text);
       if (headshot) {
         const img = document.createElement('img');
         img.src = headshot;
-        img.className = 'oracle-headshot';
-        img.style.cssText = 'width:36px;height:26px;border-radius:4px;object-fit:cover;margin-right:8px;vertical-align:middle;flex-shrink:0;';
+        img.className = 'oracle-hs';
+        img.style.cssText = 'width:32px;height:24px;border-radius:4px;object-fit:cover;margin-right:6px;vertical-align:middle;display:inline-block;';
         img.onerror = function() { this.style.display = 'none'; };
-        // Insert before the name
-        if (nameEl.firstChild) {
-          nameEl.insertBefore(img, nameEl.firstChild);
-        }
+        span.insertBefore(img, span.firstChild);
       }
     }
   }
 
-  // Run every 3 seconds to catch new content
-  setInterval(addHeadshotsToRows, 3000);
-  // Also run on mutations
-  const hsObserver = new MutationObserver(() => { setTimeout(addHeadshotsToRows, 500); });
-  hsObserver.observe(document.body, { childList: true, subtree: true });
+  // Run periodically
+  setInterval(addHeadshots, 4000);
+  // Initial run after page loads
+  setTimeout(addHeadshots, 3000);
 })();
 </script>
