@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Bankroll Tracker — ORACLE</title>
+<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;600;800;900&family=DM+Sans:wght@400;500;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<style>
+:root{--bg-deep:#060a14;--bg-card:#111827;--bg-elevated:#1a2236;--border:#1e293b;--text-primary:#f1f5f9;--text-secondary:#94a3b8;--text-muted:#64748b;--accent:#38bdf8;--green:#10b981;--red:#ef4444;--amber:#f59e0b;--font-display:"Outfit",sans-serif;--font-body:"DM Sans",sans-serif;--font-mono:"JetBrains Mono",monospace;}
+*{margin:0;padding:0;box-sizing:border-box;}body{background:var(--bg-deep);color:var(--text-primary);font-family:var(--font-body);line-height:1.6;}
+.container{max-width:800px;margin:0 auto;padding:0 20px;}
+.hero{padding:28px 0 16px;text-align:center;}.hero h1{font-family:var(--font-display);font-weight:900;font-size:26px;}.hero h1 span{background:linear-gradient(135deg,var(--green),var(--accent));-webkit-background-clip:text;-webkit-text-fill-color:transparent;}.hero p{color:var(--text-secondary);font-size:12px;margin-top:4px;}
+.stats-row{display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:8px;margin:16px 0;}
+.stat-box{background:var(--bg-card);border:1px solid var(--border);border-radius:10px;padding:14px;text-align:center;}.stat-label{font-size:9px;color:var(--text-muted);font-family:var(--font-mono);text-transform:uppercase;}.stat-val{font-family:var(--font-display);font-weight:800;font-size:22px;margin-top:2px;}
+.add-form{background:var(--bg-card);border:1px solid var(--border);border-radius:12px;padding:16px;margin:16px 0;}
+.add-form h3{font-family:var(--font-display);font-weight:700;font-size:14px;margin-bottom:12px;}
+.form-row{display:grid;grid-template-columns:1fr 1fr 1fr 1fr auto;gap:8px;align-items:end;}
+.field{display:flex;flex-direction:column;gap:3px;}.field label{font-size:9px;color:var(--text-muted);font-family:var(--font-mono);text-transform:uppercase;}
+.field input,.field select{background:var(--bg-elevated);border:1px solid var(--border);border-radius:6px;padding:8px;color:var(--text-primary);font-family:var(--font-body);font-size:13px;outline:none;}
+.field input:focus,.field select:focus{border-color:var(--accent);}
+.btn{padding:8px 16px;border-radius:8px;font-family:var(--font-display);font-weight:700;font-size:12px;cursor:pointer;border:none;background:var(--green);color:#fff;transition:all .2s;white-space:nowrap;}.btn:hover{background:#059669;}
+.btn-red{background:var(--red);}.btn-red:hover{background:#dc2626;}
+table{width:100%;border-collapse:collapse;font-size:12px;margin:12px 0;}
+th{text-align:left;padding:8px;background:var(--bg-elevated);font-family:var(--font-mono);font-size:9px;color:var(--text-muted);text-transform:uppercase;}
+td{padding:8px;border-bottom:1px solid var(--border);font-family:var(--font-mono);}
+.win{color:var(--green);font-weight:700;}.loss{color:var(--red);font-weight:700;}.pending{color:var(--text-muted);}
+.profit-pos{color:var(--green);}.profit-neg{color:var(--red);}
+.footer{text-align:center;padding:24px 0;color:var(--text-muted);font-size:10px;border-top:1px solid var(--border);margin-top:30px;}
+.empty{text-align:center;padding:30px;color:var(--text-muted);font-size:13px;}
+@media(max-width:640px){.form-row{grid-template-columns:1fr 1fr;}}
+</style>
+</head>
+<body>
+<div class="container">
+<div class="hero"><h1>💰 <span>Bankroll Tracker</span></h1><p>Log your bets, track your profit/loss, and manage your bankroll. Data saved locally in your browser.</p></div>
+<div id="statsRow" class="stats-row"></div>
+<div class="add-form">
+  <h3>Log a Bet</h3>
+  <div class="form-row">
+    <div class="field"><label>Pick</label><input type="text" id="betPick" placeholder="LAL -3.5"></div>
+    <div class="field"><label>Odds</label><input type="text" id="betOdds" placeholder="-110"></div>
+    <div class="field"><label>Wager ($)</label><input type="number" id="betWager" placeholder="100"></div>
+    <div class="field"><label>Result</label><select id="betResult"><option value="pending">Pending</option><option value="win">Win</option><option value="loss">Loss</option><option value="push">Push</option></select></div>
+    <button class="btn" onclick="addBet()">+ Add</button>
+  </div>
+</div>
+<div id="betsTable"></div>
+</div>
+<div class="footer">⟁ ORACLE — Bankroll data is stored locally in your browser. Clear browser data to reset.</div>
+<script>
+var bets = JSON.parse(localStorage.getItem('oracle_bets') || '[]');
+
+function saveBets() { localStorage.setItem('oracle_bets', JSON.stringify(bets)); }
+
+function calcPayout(odds, wager) {
+  odds = parseInt(odds);
+  if (!odds || !wager) return 0;
+  if (odds > 0) return wager * (odds / 100);
+  else return wager * (100 / Math.abs(odds));
+}
+
+function addBet() {
+  var pick = document.getElementById('betPick').value.trim();
+  var odds = document.getElementById('betOdds').value.trim();
+  var wager = parseFloat(document.getElementById('betWager').value) || 0;
+  var result = document.getElementById('betResult').value;
+  if (!pick || !wager) return alert('Enter pick and wager amount');
+  var payout = calcPayout(odds, wager);
+  var profit = result === 'win' ? payout : result === 'loss' ? -wager : 0;
+  bets.unshift({ pick:pick, odds:odds, wager:wager, result:result, payout:+payout.toFixed(2), profit:+profit.toFixed(2), date:new Date().toISOString().split('T')[0], id:Date.now() });
+  saveBets(); render();
+  document.getElementById('betPick').value=''; document.getElementById('betOdds').value=''; document.getElementById('betWager').value='';
+}
+
+function removeBet(id) { bets = bets.filter(function(b){return b.id!==id}); saveBets(); render(); }
+
+function updateResult(id, result) {
+  var bet = bets.find(function(b){return b.id===id});
+  if (!bet) return;
+  bet.result = result;
+  var payout = calcPayout(bet.odds, bet.wager);
+  bet.profit = result === 'win' ? +payout.toFixed(2) : result === 'loss' ? -bet.wager : 0;
+  saveBets(); render();
+}
+
+function render() {
+  var wins = bets.filter(function(b){return b.result==='win'}).length;
+  var losses = bets.filter(function(b){return b.result==='loss'}).length;
+  var pending = bets.filter(function(b){return b.result==='pending'}).length;
+  var totalWagered = bets.reduce(function(s,b){return s+b.wager},0);
+  var totalProfit = bets.filter(function(b){return b.result!=='pending'}).reduce(function(s,b){return s+b.profit},0);
+  var roi = totalWagered > 0 ? (totalProfit / totalWagered * 100) : 0;
+  var pClass = totalProfit >= 0 ? 'profit-pos' : 'profit-neg';
+
+  document.getElementById('statsRow').innerHTML =
+    '<div class="stat-box"><div class="stat-label">Record</div><div class="stat-val" style="color:var(--green)">'+wins+'W - '+losses+'L</div></div>' +
+    '<div class="stat-box"><div class="stat-label">Total Profit</div><div class="stat-val '+pClass+'">'+(totalProfit>=0?'+':'')+totalProfit.toFixed(2)+'</div></div>' +
+    '<div class="stat-box"><div class="stat-label">ROI</div><div class="stat-val '+pClass+'">'+(roi>=0?'+':'')+roi.toFixed(1)+'%</div></div>' +
+    '<div class="stat-box"><div class="stat-label">Total Wagered</div><div class="stat-val">$'+totalWagered.toFixed(0)+'</div></div>' +
+    '<div class="stat-box"><div class="stat-label">Pending</div><div class="stat-val" style="color:var(--accent)">'+pending+'</div></div>';
+
+  if (bets.length === 0) {
+    document.getElementById('betsTable').innerHTML = '<div class="empty">No bets logged yet. Add your first bet above!</div>';
+    return;
+  }
+
+  var html = '<table><thead><tr><th>Date</th><th>Pick</th><th>Odds</th><th>Wager</th><th>Profit</th><th>Result</th><th></th></tr></thead><tbody>';
+  bets.slice(0,50).forEach(function(b) {
+    var rClass = b.result==='win'?'win':b.result==='loss'?'loss':'pending';
+    var rIcon = b.result==='win'?'✅':b.result==='loss'?'❌':b.result==='push'?'🔄':'⏳';
+    html += '<tr><td>'+b.date+'</td><td style="font-family:var(--font-body);font-weight:600">'+b.pick+'</td><td>'+b.odds+'</td><td>$'+b.wager+'</td>' +
+      '<td class="'+(b.profit>=0?'profit-pos':'profit-neg')+'">'+(b.profit>=0?'+':'')+b.profit.toFixed(2)+'</td>' +
+      '<td><select onchange="updateResult('+b.id+',this.value)" style="background:var(--bg-elevated);border:1px solid var(--border);border-radius:4px;padding:2px 4px;color:var(--text-primary);font-size:11px;font-family:var(--font-mono)">' +
+      '<option value="pending"'+(b.result==='pending'?' selected':'')+'>⏳ Pending</option>' +
+      '<option value="win"'+(b.result==='win'?' selected':'')+'>✅ Win</option>' +
+      '<option value="loss"'+(b.result==='loss'?' selected':'')+'>❌ Loss</option>' +
+      '<option value="push"'+(b.result==='push'?' selected':'')+'>🔄 Push</option></select></td>' +
+      '<td><button onclick="removeBet('+b.id+')" style="background:none;border:none;color:var(--text-muted);cursor:pointer;font-size:14px">🗑️</button></td></tr>';
+  });
+  html += '</tbody></table>';
+  document.getElementById('betsTable').innerHTML = html;
+}
+render();
+</script>
+</body>
+</html>

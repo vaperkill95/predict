@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Consensus Picks — ORACLE</title>
+<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;600;800;900&family=DM+Sans:wght@400;500;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<style>
+:root{--bg-deep:#060a14;--bg-card:#111827;--bg-elevated:#1a2236;--border:#1e293b;--text-primary:#f1f5f9;--text-secondary:#94a3b8;--text-muted:#64748b;--accent:#38bdf8;--green:#10b981;--red:#ef4444;--amber:#f59e0b;--purple:#a78bfa;--font-display:"Outfit",sans-serif;--font-body:"DM Sans",sans-serif;--font-mono:"JetBrains Mono",monospace;}
+*{margin:0;padding:0;box-sizing:border-box;}body{background:var(--bg-deep);color:var(--text-primary);font-family:var(--font-body);line-height:1.6;}
+.container{max-width:960px;margin:0 auto;padding:0 20px;}
+.hero{padding:28px 0 16px;text-align:center;}.hero h1{font-family:var(--font-display);font-weight:900;font-size:26px;}.hero h1 span{background:linear-gradient(135deg,var(--green),var(--accent));-webkit-background-clip:text;-webkit-text-fill-color:transparent;}.hero p{color:var(--text-secondary);font-size:12px;margin-top:4px;}
+.consensus-card{background:var(--bg-card);border:1px solid var(--border);border-radius:14px;padding:18px;margin:12px 0;transition:all .2s;}
+.consensus-card.strong{border-left:3px solid var(--green);}
+.card-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;}
+.card-title{font-family:var(--font-display);font-weight:800;font-size:16px;}
+.card-sub{font-size:11px;color:var(--text-muted);font-family:var(--font-mono);}
+.signals{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin:10px 0;}
+.signal{background:var(--bg-elevated);border-radius:8px;padding:10px;text-align:center;}
+.signal-label{font-size:9px;color:var(--text-muted);font-family:var(--font-mono);text-transform:uppercase;}
+.signal-val{font-family:var(--font-display);font-weight:800;font-size:14px;margin-top:2px;}
+.signal-detail{font-size:9px;color:var(--text-muted);margin-top:2px;}
+.agree-bar{display:flex;align-items:center;gap:8px;margin-top:10px;padding:8px 12px;background:var(--bg-elevated);border-radius:6px;}
+.agree-label{font-size:10px;color:var(--text-muted);font-family:var(--font-mono);white-space:nowrap;}
+.agree-fill-bg{flex:1;height:8px;background:var(--bg-deep);border-radius:4px;}.agree-fill{height:100%;border-radius:4px;transition:width .5s;}
+.agree-pct{font-family:var(--font-mono);font-size:14px;font-weight:700;min-width:45px;text-align:right;}
+.section{margin:24px 0 8px;}.section h2{font-family:var(--font-display);font-weight:800;font-size:16px;}
+.empty{text-align:center;padding:40px;color:var(--text-muted);}
+.footer{text-align:center;padding:24px 0;color:var(--text-muted);font-size:10px;border-top:1px solid var(--border);margin-top:30px;}
+.loading{display:flex;align-items:center;justify-content:center;gap:8px;padding:40px;color:var(--text-muted);}.loading::after{content:'';width:16px;height:16px;border:2px solid var(--accent);border-top-color:transparent;border-radius:50%;animation:spin .8s linear infinite;}
+@keyframes spin{to{transform:rotate(360deg)}}
+.stat-row{display:grid;grid-template-columns:repeat(auto-fill,minmax(120px,1fr));gap:8px;margin:12px 0;}.stat{padding:10px;background:var(--bg-card);border:1px solid var(--border);border-radius:8px;text-align:center;}.stat .k{font-size:9px;color:var(--text-muted);font-family:var(--font-mono);text-transform:uppercase;}.stat .v{font-family:var(--font-display);font-weight:700;font-size:16px;margin-top:2px;}
+</style>
+</head>
+<body>
+<div class="container">
+<div class="hero"><h1>🤝 <span>Consensus Picks</span></h1><p>Picks where ORACLE's AI model, sportsbook consensus, and sharp signals all agree. Maximum alignment = maximum edge.</p></div>
+<div class="stat-row" id="stats"></div>
+<div class="section"><h2>⚡ Strong Consensus — All Signals Agree</h2></div>
+<div id="strongConsensus"><div class="loading">Analyzing consensus signals</div></div>
+<div class="section"><h2>📊 Moderate Consensus — 2 of 3 Agree</h2></div>
+<div id="moderateConsensus"></div>
+</div>
+<div class="footer">⟁ ORACLE — Consensus picks combine AI model predictions, sportsbook line consensus, and sharp money indicators.</div>
+<script>
+async function loadConsensus() {
+  try {
+    var [propsResp, gamesResp] = await Promise.all([
+      fetch('/api/props/nba').then(function(r){return r.json()}),
+      fetch('/api/games/nba').then(function(r){return r.json()}),
+    ]);
+
+    var props = propsResp.props || [];
+    var games = gamesResp.games || [];
+    var strong = [], moderate = [];
+
+    // Analyze props for consensus
+    props.forEach(function(p) {
+      if (!p.enriched || !p.analytics) return;
+      var signals = 0, totalSignals = 3;
+      var details = [];
+
+      // Signal 1: ORACLE AI model (hit rate + trend)
+      var aiAgree = false;
+      if (p.analytics.hitRate >= 60 && p.lineType === 'demon') { aiAgree = true; signals++; details.push('AI: ' + p.analytics.hitRate.toFixed(0) + '% hit rate'); }
+      else if (p.analytics.hitRate >= 55) { aiAgree = true; signals++; details.push('AI: ' + p.analytics.hitRate.toFixed(0) + '% hit rate'); }
+
+      // Signal 2: Book consensus (6+ books = strong consensus)
+      var bookAgree = false;
+      if (p.bookCount >= 6) { bookAgree = true; signals++; details.push('Books: ' + p.bookCount + ' sportsbooks agree'); }
+
+      // Signal 3: Line vs Average (edge detection)
+      var edgeAgree = false;
+      if (p.analytics.lineDiff && Math.abs(p.analytics.lineDiff) >= 1.5) { edgeAgree = true; signals++; details.push('Edge: ' + Math.abs(p.analytics.lineDiff).toFixed(1) + ' gap vs avg'); }
+
+      if (signals >= 2) {
+        var item = {
+          player: p.player, market: p.marketLabel || p.market, line: p.consensusLine,
+          game: p.game, bookCount: p.bookCount, lineType: p.lineType,
+          hitRate: p.analytics.hitRate, seasonAvg: p.analytics.seasonAvg,
+          pick: p.analytics.suggestion || (p.analytics.lineDiff > 0 ? 'OVER' : 'UNDER'),
+          signals: signals, details: details,
+          aiAgree: aiAgree, bookAgree: bookAgree, edgeAgree: edgeAgree,
+        };
+        if (signals >= 3) strong.push(item); else moderate.push(item);
+      }
+    });
+
+    // Also add game best bets as consensus
+    games.forEach(function(g) {
+      if (!g.bestBet || g.bestBet.confidence < 70) return;
+      var signals = 0, details = [];
+      if (g.bestBet.confidence >= 70) { signals++; details.push('AI: ' + g.bestBet.confidence + '% confidence'); }
+      if (g.bookCount >= 15) { signals++; details.push('Books: ' + g.bookCount + ' compared'); }
+      if (g.dataSource === 'espn-live') { signals++; details.push('ESPN Live data validated'); }
+
+      if (signals >= 2) {
+        var item = {
+          player: g.awayAbbr + ' @ ' + g.homeAbbr, market: g.bestBet.type, line: '',
+          game: g.awayAbbr + ' @ ' + g.homeAbbr, bookCount: g.bookCount,
+          pick: g.bestBet.pick, signals: signals, details: details,
+          aiAgree: true, bookAgree: g.bookCount >= 15, edgeAgree: g.dataSource === 'espn-live',
+          isGame: true, confidence: g.bestBet.confidence,
+        };
+        if (signals >= 3) strong.push(item); else moderate.push(item);
+      }
+    });
+
+    // Stats
+    document.getElementById('stats').innerHTML =
+      '<div class="stat"><div class="k">Strong</div><div class="v" style="color:var(--green)">'+strong.length+'</div></div>' +
+      '<div class="stat"><div class="k">Moderate</div><div class="v" style="color:var(--accent)">'+moderate.length+'</div></div>' +
+      '<div class="stat"><div class="k">Props Analyzed</div><div class="v">'+props.length+'</div></div>' +
+      '<div class="stat"><div class="k">Games Analyzed</div><div class="v">'+games.length+'</div></div>';
+
+    function renderCards(items) {
+      if (items.length === 0) return '<div class="empty">No consensus picks found right now. Check back when more games are on the schedule.</div>';
+      return items.map(function(item) {
+        var agreePct = Math.round((item.signals / 3) * 100);
+        var agreeColor = agreePct >= 100 ? 'var(--green)' : agreePct >= 67 ? 'var(--accent)' : 'var(--amber)';
+        return '<div class="consensus-card'+(item.signals>=3?' strong':'')+'">' +
+          '<div class="card-header"><div><div class="card-title">'+item.player+'</div><div class="card-sub">'+item.game+' • '+item.market+(item.line?' • '+item.line:'')+'</div></div>' +
+          '<div style="text-align:right"><div style="font-family:var(--font-display);font-weight:800;font-size:18px;color:'+(item.pick==='OVER'||item.pick==='over'?'var(--green)':'var(--accent)')+'">'+item.pick+'</div></div></div>' +
+          '<div class="signals">' +
+          '<div class="signal" style="border:1px solid '+(item.aiAgree?'var(--green)':'var(--border)')+'"><div class="signal-label">🤖 AI Model</div><div class="signal-val" style="color:'+(item.aiAgree?'var(--green)':'var(--text-muted)')+'">'+(item.aiAgree?'✅ Agrees':'—')+'</div></div>' +
+          '<div class="signal" style="border:1px solid '+(item.bookAgree?'var(--green)':'var(--border)')+'"><div class="signal-label">📚 Book Consensus</div><div class="signal-val" style="color:'+(item.bookAgree?'var(--green)':'var(--text-muted)')+'">'+(item.bookAgree?'✅ '+item.bookCount+' books':'—')+'</div></div>' +
+          '<div class="signal" style="border:1px solid '+(item.edgeAgree?'var(--green)':'var(--border)')+'"><div class="signal-label">⚡ Edge Detection</div><div class="signal-val" style="color:'+(item.edgeAgree?'var(--green)':'var(--text-muted)')+'">'+(item.edgeAgree?'✅ Edge found':'—')+'</div></div>' +
+          '</div>' +
+          '<div class="agree-bar"><div class="agree-label">Consensus</div><div class="agree-fill-bg"><div class="agree-fill" style="width:'+agreePct+'%;background:'+agreeColor+'"></div></div><div class="agree-pct" style="color:'+agreeColor+'">'+agreePct+'%</div></div>' +
+        '</div>';
+      }).join('');
+    }
+
+    document.getElementById('strongConsensus').innerHTML = renderCards(strong);
+    document.getElementById('moderateConsensus').innerHTML = renderCards(moderate);
+  } catch(e) {
+    document.getElementById('strongConsensus').innerHTML = '<div class="empty">Error: '+e.message+'</div>';
+  }
+}
+loadConsensus();
+</script>
+</body>
+</html>

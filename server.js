@@ -534,6 +534,17 @@ if (accuracyBoost && accuracyBoost.startMonitoring) {
   accuracyBoost.startMonitoring();
 }
 
+// Start game prediction grader (grades ML/spread/total against ESPN final scores)
+try {
+  const gameGrader = require("./services/game-grader");
+  app.use("/api/game-grades", gameGrader.router);
+  gameGrader.startGameGrading(function() {
+    return gamePredictions && gamePredictions.gamesCache && gamePredictions.gamesCache['nba'] ? gamePredictions.gamesCache['nba'].games || [] : [];
+  });
+} catch(e) {
+  console.log("Game grader not loaded:", e.message);
+}
+
 // ============================================================
 // MULTI-API FAILOVER SYSTEM
 // Routes between Odds API, SharpAPI, ESPN, PandaScore
@@ -824,12 +835,30 @@ function serveWithNav(filePath, activeLink) {
         `href="${activeLink}"`,
         `href="${activeLink}" style="font-size:12px;color:#f1f5f9;font-weight:700;padding:5px 8px;border-radius:6px;text-decoration:none;background:#1a2236;"`
       );
+      // Inject SEO meta tags if not present
+      if (!html.includes('og:title')) {
+        var seoTags = '<meta name="robots" content="index, follow">' +
+          '<meta property="og:type" content="website">' +
+          '<meta property="og:site_name" content="ORACLE — AI Sports Predictions">' +
+          '<meta property="og:url" content="https://www.oraclepredictapp.com' + activeLink + '">' +
+          '<meta property="og:image" content="https://www.oraclepredictapp.com/icons/icon-512.png">' +
+          '<meta name="twitter:card" content="summary">' +
+          '<meta name="twitter:site" content="@oraclepredicts">' +
+          '<link rel="manifest" href="/manifest.json">' +
+          '<meta name="theme-color" content="#38bdf8">' +
+          '<link rel="canonical" href="https://www.oraclepredictapp.com' + activeLink + '">';
+        html = html.replace('</head>', seoTags + '\n</head>');
+      }
+      // Inject service worker registration
+      if (!html.includes('serviceWorker')) {
+        var swScript = '<script>if("serviceWorker" in navigator){navigator.serviceWorker.register("/sw.js").catch(function(){})}</script>';
+        html = html.replace('</body>', swScript + '\n</body>');
+      }
       // Replace existing nav with universal nav
       const navRegex = /<nav[^>]*>[\s\S]*?<\/nav>/i;
       if (navRegex.test(html)) {
         html = html.replace(navRegex, activeNav);
       } else {
-        // No nav tag — inject after <body>
         html = html.replace(/<body[^>]*>/i, (match) => match + '\n' + activeNav);
       }
       // Inject bot before </body>
@@ -870,8 +899,17 @@ app.get("/games", serveWithNav(path.join(__dirname, "public", "game-predictions.
 // === Accuracy Record ===
 app.get("/record", serveWithNav(path.join(__dirname, "public", "accuracy-record.html"), "/record"));
 
-// === Share Pick Card (generates image) ===
+// === Share Pick Card ===
 app.get("/share", serveWithNav(path.join(__dirname, "public", "share-card.html"), "/share"));
+
+// === Futures Predictions ===
+app.get("/futures", serveWithNav(path.join(__dirname, "public", "futures.html"), "/futures"));
+
+// === Bankroll Tracker ===
+app.get("/bankroll", serveWithNav(path.join(__dirname, "public", "bankroll.html"), "/bankroll"));
+
+// === Consensus Picks ===
+app.get("/consensus", serveWithNav(path.join(__dirname, "public", "consensus.html"), "/consensus"));
 
 // === Player Profile ===
 app.get("/player", serveWithNav(path.join(__dirname, "public", "player-profile.html"), "/player"));
