@@ -794,24 +794,15 @@ app.get("/", (req, res) => {
   const fs = require("fs");
   try {
     let html = fs.readFileSync(landingPath, "utf8");
-    const navLinks = '<a href="/pick" style="color:#f59e0b;font-size:14px;font-weight:700;text-decoration:none;padding:10px 16px;border-radius:8px;transition:all 0.2s;background:rgba(245,158,11,0.1);">🏆 POTD</a>\n    <a href="/games" style="color:#10b981;font-size:14px;font-weight:700;text-decoration:none;padding:10px 16px;border-radius:8px;transition:all 0.2s;background:rgba(16,185,129,0.1);">🏟️ Games</a>\n    <a href="/futures" style="color:#fbbf24;font-size:14px;font-weight:700;text-decoration:none;padding:10px 16px;border-radius:8px;transition:all 0.2s;background:rgba(251,191,36,0.1);">🏆 Futures</a>\n    <a href="/parlay" style="color:#a78bfa;font-size:14px;font-weight:700;text-decoration:none;padding:10px 16px;border-radius:8px;transition:all 0.2s;background:rgba(167,139,250,0.1);">🎲 Parlay</a>\n    <a href="/sharp" style="color:#94a3b8;font-size:14px;font-weight:500;text-decoration:none;padding:10px 16px;border-radius:8px;transition:all 0.2s;">⚡ Sharp</a>\n    <a href="/consensus" style="color:#94a3b8;font-size:14px;font-weight:500;text-decoration:none;padding:10px 16px;border-radius:8px;transition:all 0.2s;">🤝 Consensus</a>\n    <a href="/player" style="color:#94a3b8;font-size:14px;font-weight:500;text-decoration:none;padding:10px 16px;border-radius:8px;transition:all 0.2s;">👤 Players</a>\n    <a href="/how-it-works" style="color:#94a3b8;font-size:14px;font-weight:500;text-decoration:none;padding:10px 16px;border-radius:8px;transition:all 0.2s;">Guide</a>\n    <a href="https://discord.gg/PxREjjgnmf" target="_blank" style="color:#a78bfa;font-size:14px;font-weight:700;text-decoration:none;padding:10px 16px;border-radius:8px;transition:all 0.2s;background:rgba(167,139,250,0.15);">💬 Discord</a>';
-    html = html.replace(
-      '<a href="/app/" class="nav-cta">',
-      navLinks + '\n    <a href="/app/" class="nav-cta">'
-    );
-    // Update stats: 8+ sportsbooks → 20+
-    html = html.replace(/8\+/g, '20+');
-    html = html.replace('8+ sportsbooks compared', '20+ sportsbooks compared');
-    html = html.replace('Player props from 8+ sportsbooks', 'Player props from 20+ sportsbooks');
     // Inject FAB nav
     try {
       const fabHTML = fs.readFileSync(path.join(__dirname, "public", "fab-nav.html"), "utf8");
       html = html.replace("</body>", fabHTML + "\n</body>");
     } catch(e) {}
-    // Inject design system (live ticker)
+    // Inject bot
     try {
-      const designHTML = fs.readFileSync(path.join(__dirname, "public", "oracle-design-system.html"), "utf8");
-      html = html.replace("</body>", designHTML + "\n</body>");
+      const botHTML = fs.readFileSync(path.join(__dirname, "public", "oracle-bot.html"), "utf8");
+      html = html.replace("</body>", botHTML + "\n</body>");
     } catch(e) {}
     res.type("html").send(html);
   } catch (e) {
