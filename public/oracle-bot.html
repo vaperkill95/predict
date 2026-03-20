@@ -189,12 +189,79 @@
   let isOpen = false;
   let botData = {};
 
+  // Session persistence — save/restore conversation across page navigations
+  function saveConversation() {
+    try {
+      var messages = [];
+      msgs.querySelectorAll('.bot-msg').forEach(function(el) {
+        messages.push({ html: el.innerHTML, type: el.classList.contains('user') ? 'user' : 'bot' });
+      });
+      sessionStorage.setItem('oracle_bot_messages', JSON.stringify(messages));
+      sessionStorage.setItem('oracle_bot_open', isOpen ? '1' : '0');
+    } catch(e) {}
+  }
+
+  function restoreConversation() {
+    try {
+      var saved = sessionStorage.getItem('oracle_bot_messages');
+      if (saved) {
+        var messages = JSON.parse(saved);
+        if (messages.length > 0) {
+          msgs.innerHTML = '';
+          messages.forEach(function(m) {
+            var div = document.createElement('div');
+            div.className = 'bot-msg ' + m.type;
+            div.innerHTML = m.html;
+            msgs.appendChild(div);
+          });
+          msgs.scrollTop = msgs.scrollHeight;
+          return true; // had saved messages
+        }
+      }
+    } catch(e) {}
+    return false; // no saved messages
+  }
+
+  // Restore conversation history for the conversation context
+  function restoreHistory() {
+    try {
+      var saved = sessionStorage.getItem('oracle_bot_history');
+      if (saved) return JSON.parse(saved);
+    } catch(e) {}
+    return [];
+  }
+
+  function saveHistory(history) {
+    try {
+      sessionStorage.setItem('oracle_bot_history', JSON.stringify(history.slice(-10)));
+    } catch(e) {}
+  }
+
   window.toggleBot = function() {
     isOpen = !isOpen;
     panel.classList.toggle('open', isOpen);
     document.getElementById('oracleBotBtn').style.display = isOpen ? 'none' : 'flex';
-    if (isOpen && msgs.children.length === 0) initBot();
+    if (isOpen && msgs.children.length === 0) {
+      // Try to restore previous conversation first
+      var hadSaved = restoreConversation();
+      if (!hadSaved) initBot(); // Only show greeting if no prior conversation
+      setQuickButtons(getQuickButtons(detectPage()));
+    }
+    saveConversation();
   };
+
+  // Check if bot was open on the previous page
+  try {
+    if (sessionStorage.getItem('oracle_bot_open') === '1') {
+      // Auto-open and restore
+      isOpen = true;
+      panel.classList.add('open');
+      document.getElementById('oracleBotBtn').style.display = 'none';
+      var hadSaved = restoreConversation();
+      if (!hadSaved) initBot();
+      setQuickButtons(getQuickButtons(detectPage()));
+    }
+  } catch(e) {}
 
   function addMsg(text, type = 'bot') {
     const div = document.createElement('div');
@@ -202,6 +269,7 @@
     div.innerHTML = text;
     msgs.appendChild(div);
     msgs.scrollTop = msgs.scrollHeight;
+    saveConversation();
   }
 
   function setQuickButtons(buttons) {
@@ -279,6 +347,10 @@
       { label: '🎯 Suggest a pick', action: 'suggest' },
       { label: '📖 What am I looking at?', action: 'explain' },
     ];
+    const parlayButtons = [
+      { label: '🎲 Build me a parlay', action: 'buildparlay' },
+      { label: '🔒 Safest bet tonight', action: 'safest' },
+    ];
     const pageSpecific = {
       props: [{ label: '🔥 Best Demon', action: 'demon' }, { label: '📊 Best hit rate', action: 'hitrate' }],
       picks: [{ label: '🏆 #1 pick today', action: 'bestpick' }],
@@ -286,12 +358,13 @@
       sharp: [{ label: '💰 Any +EV bets?', action: 'ev' }, { label: '🎯 Any middles?', action: 'middles' }],
       parlay: [{ label: '📊 My accuracy', action: 'accuracy' }],
       player: [{ label: '📈 Show trends', action: 'trends' }],
+      home: [{ label: '🏆 POTD', action: 'bestpick' }],
     };
-    return [...common, ...(pageSpecific[page] || [])];
+    return [...common, ...parlayButtons, ...(pageSpecific[page] || [])];
   }
 
-  // Conversation history for context
-  let conversationHistory = [];
+  // Conversation history for context — persisted across pages
+  let conversationHistory = restoreHistory();
 
   async function askBot(question) {
     addMsg('<span style="color:#64748b;font-size:11px;">Thinking...</span>');
@@ -316,6 +389,7 @@
         // Track conversation history for context
         conversationHistory.push({ role: 'user', content: question });
         conversationHistory.push({ role: 'assistant', content: data.answer });
+        saveHistory(conversationHistory);
         
         // Format the answer — convert newlines to <br>
         const formatted = data.answer.replace(/\n/g, '<br>');
@@ -345,6 +419,8 @@
       middles: 'Any middling opportunities?',
       accuracy: 'Show me the accuracy record',
       trends: 'Explain the trend charts to me',
+      buildparlay: 'Build me the best 3-leg parlay for tonight using the highest confidence picks',
+      safest: 'What is the safest bet tonight? Show me the pick with the highest hit rate and most books agreeing',
     };
     const question = labels[action] || action;
     addMsg(question, 'user');
