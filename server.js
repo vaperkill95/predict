@@ -563,18 +563,20 @@ try {
       if (smartPicks && smartPicks.picksCache) {
         for (const sport of Object.keys(smartPicks.picksCache)) {
           const cached = smartPicks.picksCache[sport];
-          if (cached && cached.picks && cached.picks.length > 0) {
-            await redisCache.setProps(sport, cached);
+          const items = (cached && cached.picks) || (cached && cached.props) || [];
+          if (items.length > 0) {
+            await redisCache.setProps(sport, { picks: items, props: items, timestamp: cached.timestamp || Date.now() });
             synced++;
           }
         }
       }
-      // Sync smart picks (AI-generated picks with grades)
+      // Sync smart picks (same data, different key for /api/props/:sport/picks)
       if (smartPicks && smartPicks.picksCache) {
         for (const sport of Object.keys(smartPicks.picksCache)) {
           const cached = smartPicks.picksCache[sport];
-          if (cached && cached.picks && cached.picks.length > 0) {
-            await redisCache.setPicks(sport, { picks: cached.picks, timestamp: cached.timestamp || Date.now() });
+          const items = (cached && cached.picks) || (cached && cached.props) || [];
+          if (items.length > 0) {
+            await redisCache.setPicks(sport, { picks: items, timestamp: cached.timestamp || Date.now() });
             synced++;
           }
         }
