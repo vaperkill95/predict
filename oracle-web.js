@@ -59,7 +59,7 @@ app.get("/api/props/:sport", async (req, res) => {
     const props = data.props || data.picks || [];
     res.json({ props: props, count: props.length, available: true, source: "redis" });
   } else {
-    res.json({ props: [], count: 0, available: false, source: "empty" });
+    res.json({ props: [], count: 0, available: true, source: "redis-empty", message: "No props right now. Check back closer to game time." });
   }
 });
 
