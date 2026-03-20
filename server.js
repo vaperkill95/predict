@@ -972,7 +972,7 @@ function serveAppWithHelp(req, res) {
     try { fabHTML = fs.readFileSync(fabPath, "utf8"); } catch(e) {}
     let designHTML = "";
     try { designHTML = fs.readFileSync(path.join(__dirname, "public", "oracle-design-system.html"), "utf8"); } catch(e) {}
-    html = html.replace("</body>", helpHTML + "\n" + botHTML + "\n" + fabHTML + "\n" + designHTML + "\n<style>.tab-bar,.fab-nav,.oracle-fab-group{display:none!important}</style>\n</body>");
+    html = html.replace("</body>", helpHTML + "\n" + botHTML + "\n" + fabHTML + "\n" + designHTML + "\n<style>.tab-bar,.fab-nav,.oracle-fab-group{display:none!important}</style>\n<script>!function(){var lastSport='',checkCount=0;setInterval(function(){var tabs=document.querySelectorAll('[class*=\"sport-tab\"]');var active=null;tabs.forEach(function(t){if(t.className.indexOf('active')>=0)active=t.textContent.trim()});if(!active)return;if(lastSport&&active!==lastSport){checkCount=0}lastSport=active;var mf=document.querySelector('.market-filters');var props=document.querySelector('[class*=\"props-list\"],[class*=\"PropsList\"]');if(!mf&&props&&checkCount<3){checkCount++;setTimeout(function(){var mf2=document.querySelector('.market-filters');if(!mf2){var sportBtns=document.querySelectorAll('[class*=\"sport-tab\"]');sportBtns.forEach(function(b){if(b.textContent.trim().indexOf(active)>=0)b.click()})}},500)}},1500)}()</script>\n</body>");
     res.type("html").send(html);
   } catch (e) {
     res.sendFile(indexPath);
