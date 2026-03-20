@@ -650,6 +650,30 @@ try {
           } catch(e) {}
         }
       } catch(e) {}
+
+      // Sync CDL matches
+      try {
+        if (cdlPredictions && cdlPredictions.getMatches) {
+          var cdlMatches = cdlPredictions.getMatches();
+          if (cdlMatches && cdlMatches.length > 0) {
+            await redisCache.set("oracle:cdl_matches", { matches: cdlMatches, count: cdlMatches.length }, 1800);
+            synced++;
+          }
+        }
+      } catch(e) {}
+
+      // Sync DVP data
+      try {
+        if (dvp && dvp.getSmashSpots) {
+          for (var dvpSport of ['nba']) {
+            var smashData = dvp.getSmashSpots(dvpSport);
+            if (smashData) {
+              await redisCache.set("oracle:dvp:" + dvpSport, { smash: smashData, matchups: smashData }, 1800);
+              synced++;
+            }
+          }
+        }
+      } catch(e) {}
       
       if (synced > 0) {
         console.log("[Redis] Synced " + synced + " cache entries");

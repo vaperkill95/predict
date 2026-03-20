@@ -192,15 +192,75 @@ app.get("/api/cdl/props", async (req, res) => {
   res.json(data || { props: [], count: 0 });
 });
 
+// CDL matches
+app.get("/api/cdl/matches", async (req, res) => {
+  const data = await redisCache.get("oracle:cdl_matches");
+  res.json(data || { matches: [], count: 0 });
+});
+
+// CDL predictions
+app.get("/api/cdl-predictions/:matchId", async (req, res) => {
+  const data = await redisCache.get("oracle:cdl_prediction:" + req.params.matchId);
+  res.json(data || { available: false });
+});
+
 // Trending
 app.get("/api/trending/:sport", async (req, res) => {
   const data = await redisCache.get("oracle:trending:" + req.params.sport);
   res.json(data || { trending: [], count: 0 });
 });
 
-// Player headshots — proxy to ESPN CDN
+// Player headshots — proxy to ESPN CDN (handles /api/headshots/:sport/:player)
+app.get("/api/headshots/:sport/:player", async (req, res) => {
+  try {
+    // Check Redis cache first
+    var cacheKey = "oracle:headshot:" + req.params.sport + ":" + req.params.player.replace(/[^a-zA-Z0-9]/g, '_');
+    var cached = await redisCache.get(cacheKey);
+    if (cached) return res.json(cached);
+    
+    // Search ESPN for the player
+    var axios = require("axios");
+    var searchUrl = "https://site.api.espn.com/apis/common/v3/search?query=" + encodeURIComponent(req.params.player) + "&limit=1&type=player";
+    var resp = await axios.get(searchUrl, { timeout: 5000 });
+    var items = resp.data && resp.data.items ? resp.data.items : [];
+    if (items.length > 0 && items[0].image) {
+      var result = { url: items[0].image, name: req.params.player, source: "espn" };
+      await redisCache.set(cacheKey, result, 86400); // Cache for 24 hours
+      return res.json(result);
+    }
+    res.json({ url: null, name: req.params.player });
+  } catch(e) {
+    res.json({ url: null, name: req.params.player });
+  }
+});
+
+// Fallback headshots without sport param
 app.get("/api/headshots/:player", (req, res) => {
-  res.json({ url: null, source: "not-cached" });
+  res.json({ url: null, name: req.params.player });
+});
+
+// DVP (defense vs position) with action
+app.get("/api/dvp/:sport/smash", async (req, res) => {
+  const data = await redisCache.get("oracle:dvp:" + req.params.sport);
+  if (data && data.smash) { res.json(data.smash); }
+  else { res.json({ spots: [], count: 0 }); }
+});
+
+app.get("/api/dvp/:sport", async (req, res) => {
+  const data = await redisCache.get("oracle:dvp:" + req.params.sport);
+  res.json(data || { matchups: [] });
+});
+
+// Line movement with biggest
+app.get("/api/movement/:sport/biggest", async (req, res) => {
+  const data = await redisCache.getMovement(req.params.sport);
+  if (data && data.movements) {
+    var sorted = data.movements.sort(function(a, b) { return (b.change || 0) - (a.change || 0); });
+    var limit = parseInt(req.query.limit) || 5;
+    res.json({ movements: sorted.slice(0, limit), count: sorted.length });
+  } else {
+    res.json({ movements: [], count: 0 });
+  }
 });
 
 // Enriched props
