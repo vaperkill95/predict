@@ -558,12 +558,24 @@ try {
   // Sync memory caches TO Redis every 30 seconds
   setInterval(async function() {
     try {
-      // Sync props
+      var synced = 0;
+      // Sync props (raw props data)
       if (smartPicks && smartPicks.picksCache) {
         for (const sport of Object.keys(smartPicks.picksCache)) {
           const cached = smartPicks.picksCache[sport];
           if (cached && cached.picks && cached.picks.length > 0) {
             await redisCache.setProps(sport, cached);
+            synced++;
+          }
+        }
+      }
+      // Sync smart picks (AI-generated picks with grades)
+      if (smartPicks && smartPicks.picksCache) {
+        for (const sport of Object.keys(smartPicks.picksCache)) {
+          const cached = smartPicks.picksCache[sport];
+          if (cached && cached.picks && cached.picks.length > 0) {
+            await redisCache.setPicks(sport, { picks: cached.picks, timestamp: cached.timestamp || Date.now() });
+            synced++;
           }
         }
       }
@@ -573,23 +585,67 @@ try {
           const cached = gamePredictions.gamesCache[sport];
           if (cached && cached.games && cached.games.length > 0) {
             await redisCache.setGames(sport, cached);
+            synced++;
           }
         }
       }
       // Sync EV bets
       if (evEngine && evEngine.evCache && evEngine.evCache.length > 0) {
         await redisCache.setEV(evEngine.evCache);
+        synced++;
       }
       // Sync POTD
       if (potd && potd.cache && potd.cache.picks) {
         await redisCache.setPOTD(potd.cache.picks);
+        synced++;
       }
-      // Sync accuracy
+      // Sync accuracy / pick history
       if (parlayBuilder) {
         try {
           const stats = parlayBuilder.getHistoricalStats();
-          await redisCache.setAccuracy(stats);
+          if (stats) { await redisCache.setAccuracy(stats); synced++; }
+          const history = parlayBuilder.getPickHistory ? parlayBuilder.getPickHistory() : null;
+          if (history) { await redisCache.setPickHistory(history); synced++; }
         } catch(e) {}
+      }
+      // Sync line movement
+      if (lineMovement && lineMovement.getSnapshot) {
+        try {
+          for (const sport of ['nba', 'nhl', 'mlb', 'nfl']) {
+            const snap = lineMovement.getSnapshot(sport);
+            if (snap && snap.length > 0) {
+              await redisCache.setMovement(sport, { movements: snap, count: snap.length, timestamp: Date.now() });
+              synced++;
+            }
+          }
+        } catch(e) {}
+      }
+      // Sync game grades
+      try {
+        const gameGrader = require("./services/game-grader");
+        if (gameGrader && gameGrader.getAccuracy) {
+          const grades = gameGrader.getAccuracy();
+          if (grades) { await redisCache.setGameGrades(grades); synced++; }
+        }
+      } catch(e) {}
+
+      // Sync live scores for ticker (ESPN)
+      try {
+        const axios = require("axios");
+        const sports = { nba: 'basketball/nba', nhl: 'hockey/nhl', mlb: 'baseball/mlb', nfl: 'football/nfl' };
+        for (const [sport, espnPath] of Object.entries(sports)) {
+          try {
+            const resp = await axios.get("https://site.api.espn.com/apis/site/v2/sports/" + espnPath + "/scoreboard", { timeout: 8000 });
+            if (resp.data) {
+              await redisCache.set("oracle:scores:" + sport, resp.data, 300); // 5 min TTL
+              synced++;
+            }
+          } catch(e) {}
+        }
+      } catch(e) {}
+      
+      if (synced > 0) {
+        console.log("[Redis] Synced " + synced + " cache entries");
       }
     } catch(e) {
       // Silent fail — Redis sync is best-effort
