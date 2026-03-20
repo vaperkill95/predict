@@ -559,18 +559,23 @@ try {
   setInterval(async function() {
     try {
       var synced = 0;
-      // Sync props (raw props data)
-      if (smartPicks && smartPicks.picksCache) {
-        for (const sport of Object.keys(smartPicks.picksCache)) {
-          const cached = smartPicks.picksCache[sport];
-          const items = (cached && cached.picks) || (cached && cached.props) || [];
-          if (items.length > 0) {
-            await redisCache.setProps(sport, { picks: items, props: items, timestamp: cached.timestamp || Date.now() });
+      
+      // Sync RAW props from Odds API (the actual props with odds from all books)
+      for (const sport of ['nba', 'nhl', 'mlb', 'nfl']) {
+        try {
+          // Use the same function that serves /api/props/:sport
+          var rawProps = null;
+          if (typeof getCachedProps === 'function') {
+            rawProps = await getCachedProps(sport);
+          }
+          if (rawProps && rawProps.props && rawProps.props.length > 0) {
+            await redisCache.setProps(sport, { props: rawProps.props, picks: rawProps.props, count: rawProps.props.length, timestamp: Date.now() });
             synced++;
           }
-        }
+        } catch(e) {}
       }
-      // Sync smart picks (same data, different key for /api/props/:sport/picks)
+
+      // Sync smart picks (AI-analyzed picks with grades)
       if (smartPicks && smartPicks.picksCache) {
         for (const sport of Object.keys(smartPicks.picksCache)) {
           const cached = smartPicks.picksCache[sport];
