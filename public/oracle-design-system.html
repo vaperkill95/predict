@@ -1,0 +1,137 @@
+<!-- ORACLE Design System v2 — Premium Dark Sports Terminal -->
+<style>
+/* ============================================================
+   ORACLE LIVE SCORE TICKER
+   ============================================================ */
+.oracle-ticker{position:fixed;top:0;left:0;right:0;height:36px;background:linear-gradient(180deg,#0d1117 0%,#0a0f1a 100%);border-bottom:1px solid #1e293b;z-index:200;overflow:hidden;display:flex;align-items:center;}
+.oracle-ticker-inner{display:flex;gap:0;animation:tickerScroll 60s linear infinite;white-space:nowrap;will-change:transform;}
+.oracle-ticker:hover .oracle-ticker-inner{animation-play-state:paused;}
+.ticker-game{display:inline-flex;align-items:center;gap:6px;padding:0 16px;border-right:1px solid #1e293b22;font-size:11px;font-family:"JetBrains Mono","DM Sans",monospace;cursor:pointer;transition:background .2s;height:36px;}
+.ticker-game:hover{background:rgba(56,189,248,.05);}
+.ticker-logo{width:18px;height:18px;border-radius:3px;object-fit:contain;}
+.ticker-team{font-weight:600;color:#e2e8f0;min-width:28px;}
+.ticker-score{font-weight:700;color:#f1f5f9;min-width:18px;text-align:center;}
+.ticker-vs{color:#475569;font-size:9px;margin:0 2px;}
+.ticker-status{font-size:9px;padding:1px 5px;border-radius:3px;margin-left:4px;font-weight:600;}
+.ticker-live{background:rgba(239,68,68,.15);color:#ef4444;animation:tickerPulse 2s ease infinite;}
+.ticker-final{background:rgba(100,116,139,.1);color:#64748b;}
+.ticker-upcoming{background:rgba(56,189,248,.1);color:#38bdf8;}
+@keyframes tickerScroll{0%{transform:translateX(0)}100%{transform:translateX(-50%)}}
+@keyframes tickerPulse{0%,100%{opacity:1}50%{opacity:.5}}
+
+/* Push page content down below ticker */
+body{padding-top:36px!important;}
+
+/* ============================================================
+   GLOBAL GLASS CARD EFFECTS
+   ============================================================ */
+.glass{background:rgba(17,24,39,.7)!important;backdrop-filter:blur(12px)!important;-webkit-backdrop-filter:blur(12px)!important;border:1px solid rgba(56,189,248,.08)!important;}
+.glass-strong{background:rgba(17,24,39,.85)!important;backdrop-filter:blur(20px)!important;-webkit-backdrop-filter:blur(20px)!important;border:1px solid rgba(56,189,248,.12)!important;box-shadow:0 8px 32px rgba(0,0,0,.3)!important;}
+
+/* ============================================================
+   TEAM LOGO INTEGRATION
+   ============================================================ */
+.team-logo{width:24px;height:24px;border-radius:4px;object-fit:contain;vertical-align:middle;margin-right:4px;}
+.team-logo-sm{width:18px;height:18px;}
+.team-logo-lg{width:36px;height:36px;}
+.team-logo-xl{width:48px;height:48px;}
+
+/* ============================================================
+   ANIMATED NUMBER COUNTERS
+   ============================================================ */
+.animate-number{opacity:0;transform:translateY(8px);animation:countUp .6s ease forwards;}
+@keyframes countUp{to{opacity:1;transform:translateY(0)}}
+
+/* Staggered card entrance */
+.animate-card{opacity:0;transform:translateY(16px);animation:cardIn .5s ease forwards;}
+@keyframes cardIn{to{opacity:1;transform:translateY(0)}}
+
+/* ============================================================
+   PREMIUM GLOW EFFECTS
+   ============================================================ */
+.glow-green{box-shadow:0 0 20px rgba(16,185,129,.1),0 0 60px rgba(16,185,129,.05);}
+.glow-cyan{box-shadow:0 0 20px rgba(56,189,248,.1),0 0 60px rgba(56,189,248,.05);}
+.glow-red{box-shadow:0 0 20px rgba(239,68,68,.1),0 0 60px rgba(239,68,68,.05);}
+.glow-amber{box-shadow:0 0 20px rgba(245,158,11,.1),0 0 60px rgba(245,158,11,.05);}
+
+/* ============================================================
+   RESPONSIVE MOBILE IMPROVEMENTS
+   ============================================================ */
+@media(max-width:768px){
+  .oracle-ticker{height:32px;}
+  .ticker-game{padding:0 10px;font-size:10px;}
+  .ticker-logo{width:14px;height:14px;}
+  body{padding-top:32px!important;}
+}
+</style>
+
+<!-- Live Score Ticker -->
+<div class="oracle-ticker" id="oracleTicker">
+  <div class="oracle-ticker-inner" id="tickerInner">
+    <div style="padding:0 20px;color:#475569;font-size:10px;font-family:JetBrains Mono,monospace;">Loading scores...</div>
+  </div>
+</div>
+
+<script>
+// ESPN Team Logo Helper
+function espnLogo(abbr, sport) {
+  sport = sport || 'nba';
+  var map = {WSH:'wsh',NY:'ny',GS:'gs',SA:'sa',NO:'no',UTAH:'utah',NOP:'no',NYK:'ny',GSW:'gs',SAS:'sa',UTA:'utah',WAS:'wsh'};
+  var a = (map[abbr] || abbr).toLowerCase();
+  return 'https://a.espncdn.com/i/teamlogos/' + sport + '/500/' + a + '.png';
+}
+
+// Fetch today's scores from ESPN and build ticker
+async function loadTicker() {
+  try {
+    var resp = await fetch('https://site.api.espn.com/apis/site/v2/sports/basketball/nba/scoreboard');
+    var data = await resp.json();
+    var events = data.events || [];
+    if (events.length === 0) return;
+
+    var html = '';
+    // Build double set for seamless loop
+    for (var loop = 0; loop < 2; loop++) {
+      events.forEach(function(ev) {
+        var comp = (ev.competitions || [])[0];
+        if (!comp) return;
+        var home = null, away = null;
+        (comp.competitors || []).forEach(function(c) {
+          var obj = {abbr: c.team.abbreviation, score: c.score || '—', logo: c.team.logo || espnLogo(c.team.abbreviation)};
+          if (c.homeAway === 'home') home = obj; else away = obj;
+        });
+        if (!home || !away) return;
+
+        var status = comp.status || {};
+        var statusType = status.type ? status.type.name : '';
+        var statusText = status.type ? status.type.shortDetail : '';
+        var statusClass = 'ticker-upcoming';
+        if (statusType === 'STATUS_IN_PROGRESS') statusClass = 'ticker-live';
+        else if (statusType === 'STATUS_FINAL') statusClass = 'ticker-final';
+
+        html += '<div class="ticker-game">' +
+          '<img class="ticker-logo" src="' + away.logo + '" alt="" onerror="this.style.display=\'none\'">' +
+          '<span class="ticker-team">' + away.abbr + '</span>' +
+          '<span class="ticker-score">' + away.score + '</span>' +
+          '<span class="ticker-vs">—</span>' +
+          '<span class="ticker-score">' + home.score + '</span>' +
+          '<span class="ticker-team">' + home.abbr + '</span>' +
+          '<img class="ticker-logo" src="' + home.logo + '" alt="" onerror="this.style.display=\'none\'">' +
+          '<span class="ticker-status ' + statusClass + '">' + statusText + '</span>' +
+        '</div>';
+      });
+    }
+    document.getElementById('tickerInner').innerHTML = html;
+
+    // Adjust animation speed based on number of games
+    var speed = Math.max(30, events.length * 8);
+    document.getElementById('tickerInner').style.animationDuration = speed + 's';
+  } catch(e) {
+    document.getElementById('tickerInner').innerHTML = '<div style="padding:0 20px;color:#475569;font-size:10px;">Scores unavailable</div>';
+  }
+}
+
+loadTicker();
+// Refresh ticker every 2 minutes for live updates
+setInterval(loadTicker, 2 * 60 * 1000);
+</script>

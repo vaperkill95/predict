@@ -808,6 +808,11 @@ app.get("/", (req, res) => {
       const fabHTML = fs.readFileSync(path.join(__dirname, "public", "fab-nav.html"), "utf8");
       html = html.replace("</body>", fabHTML + "\n</body>");
     } catch(e) {}
+    // Inject design system (live ticker)
+    try {
+      const designHTML = fs.readFileSync(path.join(__dirname, "public", "oracle-design-system.html"), "utf8");
+      html = html.replace("</body>", designHTML + "\n</body>");
+    } catch(e) {}
     res.type("html").send(html);
   } catch (e) {
     res.sendFile(landingPath);
@@ -871,6 +876,11 @@ function serveWithNav(filePath, activeLink) {
       try {
         const fabHTML = fs.readFileSync(path.join(__dirname, "public", "fab-nav.html"), "utf8");
         html = html.replace("</body>", fabHTML + "\n</body>");
+      } catch(e) {}
+      // Inject design system (live ticker, glass effects, team logos)
+      try {
+        const designHTML = fs.readFileSync(path.join(__dirname, "public", "oracle-design-system.html"), "utf8");
+        html = html.replace("</body>", designHTML + "\n</body>");
       } catch(e) {}
       res.type("html").send(html);
     } catch (e) {
@@ -948,7 +958,9 @@ function serveAppWithHelp(req, res) {
     try { botHTML = fs.readFileSync(botPath, "utf8"); } catch(e) {}
     let fabHTML = "";
     try { fabHTML = fs.readFileSync(fabPath, "utf8"); } catch(e) {}
-    html = html.replace("</body>", helpHTML + "\n" + botHTML + "\n" + fabHTML + "\n<style>.tab-bar,.fab-nav,.oracle-fab-group{display:none!important}</style>\n</body>");
+    let designHTML = "";
+    try { designHTML = fs.readFileSync(path.join(__dirname, "public", "oracle-design-system.html"), "utf8"); } catch(e) {}
+    html = html.replace("</body>", helpHTML + "\n" + botHTML + "\n" + fabHTML + "\n" + designHTML + "\n<style>.tab-bar,.fab-nav,.oracle-fab-group{display:none!important}</style>\n</body>");
     res.type("html").send(html);
   } catch (e) {
     res.sendFile(indexPath);
