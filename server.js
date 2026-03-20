@@ -818,13 +818,8 @@ const UNIVERSAL_NAV = `<nav class="nav" style="padding:14px 0;border-bottom:1px 
 <a href="/pick" style="font-size:12px;color:#94a3b8;font-weight:500;padding:5px 8px;border-radius:6px;text-decoration:none;">POTD</a>
 <a href="/props" style="font-size:12px;color:#94a3b8;font-weight:500;padding:5px 8px;border-radius:6px;text-decoration:none;">Props</a>
 <a href="/games" style="font-size:12px;color:#94a3b8;font-weight:500;padding:5px 8px;border-radius:6px;text-decoration:none;">Games</a>
-<a href="/futures" style="font-size:12px;color:#94a3b8;font-weight:500;padding:5px 8px;border-radius:6px;text-decoration:none;">Futures</a>
-<a href="/consensus" style="font-size:12px;color:#94a3b8;font-weight:500;padding:5px 8px;border-radius:6px;text-decoration:none;">Consensus</a>
-<a href="/parlay" style="font-size:12px;color:#94a3b8;font-weight:500;padding:5px 8px;border-radius:6px;text-decoration:none;">Parlay</a>
 <a href="/sharp" style="font-size:12px;color:#94a3b8;font-weight:500;padding:5px 8px;border-radius:6px;text-decoration:none;">Sharp</a>
-<a href="/bankroll" style="font-size:12px;color:#94a3b8;font-weight:500;padding:5px 8px;border-radius:6px;text-decoration:none;">Bankroll</a>
 <a href="/record" style="font-size:12px;color:#10b981;font-weight:600;padding:5px 8px;border-radius:6px;text-decoration:none;background:#10b98115;">Record</a>
-<a href="/share" style="font-size:12px;color:#f59e0b;font-weight:600;padding:5px 8px;border-radius:6px;text-decoration:none;background:#f59e0b15;">Share</a>
 <a href="https://discord.gg/PxREjjgnmf" target="_blank" style="font-size:12px;color:#a78bfa;font-weight:600;padding:5px 8px;border-radius:6px;text-decoration:none;background:#a78bfa15;">Discord</a>
 </div></div></nav>`;
 
@@ -866,6 +861,11 @@ function serveWithNav(filePath, activeLink) {
       try {
         const botHTML = fs.readFileSync(path.join(__dirname, "public", "oracle-bot.html"), "utf8");
         html = html.replace("</body>", botHTML + "\n</body>");
+      } catch(e) {}
+      // Inject floating navigation menu
+      try {
+        const fabHTML = fs.readFileSync(path.join(__dirname, "public", "fab-nav.html"), "utf8");
+        html = html.replace("</body>", fabHTML + "\n</body>");
       } catch(e) {}
       res.type("html").send(html);
     } catch (e) {

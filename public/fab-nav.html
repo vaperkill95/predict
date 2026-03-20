@@ -1,0 +1,88 @@
+<!-- ORACLE Floating Navigation Menu -->
+<style>
+.oracle-fab-overlay{position:fixed;inset:0;background:rgba(6,10,20,.6);backdrop-filter:blur(4px);z-index:9998;opacity:0;pointer-events:none;transition:opacity .3s;}
+.oracle-fab-overlay.open{opacity:1;pointer-events:auto;}
+
+.oracle-fab-btn{position:fixed;bottom:24px;right:24px;width:56px;height:56px;border-radius:50%;background:linear-gradient(135deg,#38bdf8,#10b981);border:none;cursor:pointer;z-index:9999;display:flex;align-items:center;justify-content:center;box-shadow:0 4px 20px rgba(56,189,248,.3);transition:all .3s;}
+.oracle-fab-btn:hover{transform:scale(1.08);box-shadow:0 6px 28px rgba(56,189,248,.45);}
+.oracle-fab-btn.open{transform:rotate(45deg);background:linear-gradient(135deg,#ef4444,#f59e0b);}
+.oracle-fab-icon{font-size:24px;line-height:1;transition:transform .3s;}
+
+.oracle-fab-menu{position:fixed;bottom:92px;right:24px;z-index:9999;display:flex;flex-direction:column;gap:8px;align-items:flex-end;pointer-events:none;}
+.oracle-fab-menu.open{pointer-events:auto;}
+
+.oracle-fab-item{display:flex;align-items:center;gap:10px;opacity:0;transform:translateY(20px) scale(.8);transition:all .25s cubic-bezier(.34,1.56,.64,1);pointer-events:none;}
+.oracle-fab-menu.open .oracle-fab-item{opacity:1;transform:translateY(0) scale(1);pointer-events:auto;}
+.oracle-fab-menu.open .oracle-fab-item:nth-child(1){transition-delay:.02s;}
+.oracle-fab-menu.open .oracle-fab-item:nth-child(2){transition-delay:.05s;}
+.oracle-fab-menu.open .oracle-fab-item:nth-child(3){transition-delay:.08s;}
+.oracle-fab-menu.open .oracle-fab-item:nth-child(4){transition-delay:.11s;}
+.oracle-fab-menu.open .oracle-fab-item:nth-child(5){transition-delay:.14s;}
+.oracle-fab-menu.open .oracle-fab-item:nth-child(6){transition-delay:.17s;}
+.oracle-fab-menu.open .oracle-fab-item:nth-child(7){transition-delay:.20s;}
+.oracle-fab-menu.open .oracle-fab-item:nth-child(8){transition-delay:.23s;}
+.oracle-fab-menu.open .oracle-fab-item:nth-child(9){transition-delay:.26s;}
+.oracle-fab-menu.open .oracle-fab-item:nth-child(10){transition-delay:.29s;}
+.oracle-fab-menu.open .oracle-fab-item:nth-child(11){transition-delay:.32s;}
+.oracle-fab-menu.open .oracle-fab-item:nth-child(12){transition-delay:.35s;}
+
+.oracle-fab-label{padding:6px 12px;border-radius:8px;background:#111827;border:1px solid #1e293b;font-family:"DM Sans",sans-serif;font-size:12px;font-weight:600;color:#f1f5f9;white-space:nowrap;box-shadow:0 4px 12px rgba(0,0,0,.3);}
+.oracle-fab-label:hover{background:#1a2236;border-color:#38bdf8;}
+
+.oracle-fab-circle{width:44px;height:44px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:18px;border:none;cursor:pointer;transition:all .2s;box-shadow:0 2px 10px rgba(0,0,0,.2);}
+.oracle-fab-circle:hover{transform:scale(1.1);}
+
+/* Color coding by category */
+.fab-picks{background:linear-gradient(135deg,#f59e0b,#f97316);}
+.fab-games{background:linear-gradient(135deg,#10b981,#059669);}
+.fab-tools{background:linear-gradient(135deg,#38bdf8,#0284c7);}
+.fab-sharp{background:linear-gradient(135deg,#a78bfa,#7c3aed);}
+.fab-social{background:linear-gradient(135deg,#a78bfa,#8b5cf6);}
+.fab-money{background:linear-gradient(135deg,#10b981,#34d399);}
+.fab-record{background:linear-gradient(135deg,#10b981,#6ee7b7);}
+.fab-share{background:linear-gradient(135deg,#f59e0b,#fbbf24);}
+.fab-futures{background:linear-gradient(135deg,#fbbf24,#f59e0b);}
+.fab-consensus{background:linear-gradient(135deg,#38bdf8,#10b981);}
+.fab-home{background:linear-gradient(135deg,#64748b,#475569);}
+
+@media(max-width:640px){
+  .oracle-fab-btn{bottom:16px;right:16px;width:50px;height:50px;}
+  .oracle-fab-menu{bottom:78px;right:16px;}
+  .oracle-fab-circle{width:40px;height:40px;font-size:16px;}
+  .oracle-fab-label{font-size:11px;padding:5px 10px;}
+}
+</style>
+
+<div class="oracle-fab-overlay" id="fabOverlay" onclick="toggleFab()"></div>
+
+<div class="oracle-fab-menu" id="fabMenu">
+  <a href="/pick" class="oracle-fab-item" style="text-decoration:none"><span class="oracle-fab-label">Pick of the Day</span><div class="oracle-fab-circle fab-picks">🏆</div></a>
+  <a href="/props" class="oracle-fab-item" style="text-decoration:none"><span class="oracle-fab-label">Props Explorer</span><div class="oracle-fab-circle fab-tools">📊</div></a>
+  <a href="/games" class="oracle-fab-item" style="text-decoration:none"><span class="oracle-fab-label">Game Predictions</span><div class="oracle-fab-circle fab-games">🏟️</div></a>
+  <a href="/futures" class="oracle-fab-item" style="text-decoration:none"><span class="oracle-fab-label">Futures</span><div class="oracle-fab-circle fab-futures">🏆</div></a>
+  <a href="/consensus" class="oracle-fab-item" style="text-decoration:none"><span class="oracle-fab-label">Consensus Picks</span><div class="oracle-fab-circle fab-consensus">🤝</div></a>
+  <a href="/parlay" class="oracle-fab-item" style="text-decoration:none"><span class="oracle-fab-label">Parlay Builder</span><div class="oracle-fab-circle fab-tools">🎲</div></a>
+  <a href="/sharp" class="oracle-fab-item" style="text-decoration:none"><span class="oracle-fab-label">Sharp Dashboard</span><div class="oracle-fab-circle fab-sharp">⚡</div></a>
+  <a href="/bankroll" class="oracle-fab-item" style="text-decoration:none"><span class="oracle-fab-label">Bankroll Tracker</span><div class="oracle-fab-circle fab-money">💰</div></a>
+  <a href="/record" class="oracle-fab-item" style="text-decoration:none"><span class="oracle-fab-label">Accuracy Record</span><div class="oracle-fab-circle fab-record">📈</div></a>
+  <a href="/share" class="oracle-fab-item" style="text-decoration:none"><span class="oracle-fab-label">Share Pick</span><div class="oracle-fab-circle fab-share">📤</div></a>
+  <a href="/player" class="oracle-fab-item" style="text-decoration:none"><span class="oracle-fab-label">Player Profile</span><div class="oracle-fab-circle fab-tools">🔍</div></a>
+  <a href="https://discord.gg/PxREjjgnmf" target="_blank" class="oracle-fab-item" style="text-decoration:none"><span class="oracle-fab-label">Discord</span><div class="oracle-fab-circle fab-social">💬</div></a>
+</div>
+
+<button class="oracle-fab-btn" id="fabBtn" onclick="toggleFab()" aria-label="Navigation menu">
+  <span class="oracle-fab-icon" id="fabIcon">⟁</span>
+</button>
+
+<script>
+var fabOpen = false;
+function toggleFab() {
+  fabOpen = !fabOpen;
+  document.getElementById('fabBtn').classList.toggle('open', fabOpen);
+  document.getElementById('fabMenu').classList.toggle('open', fabOpen);
+  document.getElementById('fabOverlay').classList.toggle('open', fabOpen);
+  document.getElementById('fabIcon').textContent = fabOpen ? '✕' : '⟁';
+}
+// Close on escape
+document.addEventListener('keydown', function(e) { if (e.key === 'Escape' && fabOpen) toggleFab(); });
+</script>
