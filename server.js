@@ -518,6 +518,88 @@ try {
   console.log("Stability module not loaded:", e.message);
 }
 
+// === Redis Cache Layer — shared data that survives restarts ===
+let redisCache = null;
+try {
+  redisCache = require("./services/redis-cache");
+  console.log("[Redis] Cache module loaded");
+
+  // Pre-warm memory caches FROM Redis on startup (instant data)
+  (async function preWarmFromRedis() {
+    try {
+      for (const sport of ['nba', 'nhl', 'mlb', 'nfl']) {
+        const props = await redisCache.getProps(sport);
+        if (props && smartPicks && smartPicks.picksCache) {
+          if (!smartPicks.picksCache[sport] || !smartPicks.picksCache[sport].picks || smartPicks.picksCache[sport].picks.length === 0) {
+            smartPicks.picksCache[sport] = props;
+            console.log("[Redis] Pre-warmed " + sport + " props from Redis: " + (props.picks ? props.picks.length : 0));
+          }
+        }
+        const games = await redisCache.getGames(sport);
+        if (games && gamePredictions && gamePredictions.gamesCache) {
+          if (!gamePredictions.gamesCache[sport] || !gamePredictions.gamesCache[sport].games || gamePredictions.gamesCache[sport].games.length === 0) {
+            gamePredictions.gamesCache[sport] = games;
+            console.log("[Redis] Pre-warmed " + sport + " games from Redis: " + (games.games ? games.games.length : 0));
+          }
+        }
+      }
+      const ev = await redisCache.getEV();
+      if (ev && evEngine && Array.isArray(ev) && ev.length > 0) {
+        if (!evEngine.evCache || evEngine.evCache.length === 0) {
+          evEngine.evCache = ev;
+          console.log("[Redis] Pre-warmed EV bets from Redis: " + ev.length);
+        }
+      }
+    } catch(e) {
+      console.log("[Redis] Pre-warm error (non-fatal):", e.message);
+    }
+  })();
+
+  // Sync memory caches TO Redis every 30 seconds
+  setInterval(async function() {
+    try {
+      // Sync props
+      if (smartPicks && smartPicks.picksCache) {
+        for (const sport of Object.keys(smartPicks.picksCache)) {
+          const cached = smartPicks.picksCache[sport];
+          if (cached && cached.picks && cached.picks.length > 0) {
+            await redisCache.setProps(sport, cached);
+          }
+        }
+      }
+      // Sync games
+      if (gamePredictions && gamePredictions.gamesCache) {
+        for (const sport of Object.keys(gamePredictions.gamesCache)) {
+          const cached = gamePredictions.gamesCache[sport];
+          if (cached && cached.games && cached.games.length > 0) {
+            await redisCache.setGames(sport, cached);
+          }
+        }
+      }
+      // Sync EV bets
+      if (evEngine && evEngine.evCache && evEngine.evCache.length > 0) {
+        await redisCache.setEV(evEngine.evCache);
+      }
+      // Sync POTD
+      if (potd && potd.cache && potd.cache.picks) {
+        await redisCache.setPOTD(potd.cache.picks);
+      }
+      // Sync accuracy
+      if (parlayBuilder) {
+        try {
+          const stats = parlayBuilder.getHistoricalStats();
+          await redisCache.setAccuracy(stats);
+        } catch(e) {}
+      }
+    } catch(e) {
+      // Silent fail — Redis sync is best-effort
+    }
+  }, 30000); // Every 30 seconds
+
+} catch(e) {
+  console.log("[Redis] Not available:", e.message, "— using memory-only mode");
+}
+
 dvp.startRefresh();
 analytics.startRefresh();
 predictionModel.startRefresh();
@@ -804,12 +886,25 @@ app.get("/api/health", (req, res) => {
       multi_odds_provider: multiOdds ? "active" : "not loaded",
       sharp_api: process.env.SHARP_API_KEY ? "configured" : "not configured",
       sharp_routes: sharpRoutes ? "active" : "not loaded",
+      redis: redisCache ? (redisCache.isConnected() ? "connected" : "disconnected") : "not loaded",
     },
     providers: multiOdds ? multiOdds.getProviderStatus() : { mode: "single-api" },
   });
 });
 
 // === Landing page at root / (inject full nav + updated stats) ===
+
+// Redis health check
+app.get("/api/redis/health", async (req, res) => {
+  if (!redisCache) return res.json({ status: "not loaded" });
+  try {
+    const health = await redisCache.healthCheck();
+    res.json(health);
+  } catch(e) {
+    res.json({ status: "error", error: e.message });
+  }
+});
+
 app.get("/", (req, res) => {
   const landingPath = path.join(__dirname, "public", "landing.html");
   const fs = require("fs");
