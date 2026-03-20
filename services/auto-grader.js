@@ -181,11 +181,39 @@ function mapMarketToStat(market) {
 async function gradePicksRound() {
   console.log('[AutoGrader] Starting grading round...');
 
-  // Get today's smart picks
+  // Get today's smart picks — use direct cache access to avoid rate limiting
   let picks = [];
   try {
-    const resp = await axios.get(`http://localhost:${PORT}/api/picks/nba`, { timeout: 15000 });
-    picks = resp.data?.picks || [];
+    // Try direct cache access first (no HTTP needed)
+    try {
+      var smartPicks = require('./smart-picks');
+      if (smartPicks && smartPicks.picksCache) {
+        var cached = smartPicks.picksCache['nba'];
+        if (cached && cached.picks && cached.picks.length > 0) {
+          picks = cached.picks;
+          console.log('[AutoGrader] Got ' + picks.length + ' picks from cache');
+        }
+      }
+    } catch(e) {}
+
+    // Also check parlay builder history for ungraded picks
+    try {
+      var parlayBuilder = require('./parlay-builder');
+      if (parlayBuilder && parlayBuilder.getPickHistory) {
+        var history = parlayBuilder.getPickHistory();
+        var ungraded = (history || []).filter(function(p) { return !p.result || p.result === 'pending'; });
+        if (ungraded.length > 0 && picks.length === 0) {
+          picks = ungraded;
+          console.log('[AutoGrader] Got ' + picks.length + ' ungraded picks from history');
+        }
+      }
+    } catch(e) {}
+
+    // Fallback to HTTP if no cache
+    if (picks.length === 0) {
+      var resp = await axios.get('http://localhost:' + PORT + '/api/picks/nba', { timeout: 15000 });
+      picks = resp.data && resp.data.picks ? resp.data.picks : [];
+    }
   } catch (e) {
     console.warn('[AutoGrader] Could not fetch picks:', e.message);
     return;
@@ -260,6 +288,14 @@ async function gradePicksRound() {
       if (hit && !push) gradingStats.hits++;
       else if (!push) gradingStats.misses++;
       gradingStats.total++;
+
+      // Also update parlay-builder history with the grading result
+      try {
+        var parlayBuilder = require('./parlay-builder');
+        if (parlayBuilder && parlayBuilder.gradePick) {
+          parlayBuilder.gradePick(pick.player, pick.market, pick.line, push ? 'push' : (hit ? 'hit' : 'miss'), actual);
+        }
+      } catch(e) {}
     }
 
     // Rate limit between box score fetches

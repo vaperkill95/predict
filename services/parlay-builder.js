@@ -556,4 +556,21 @@ router.get('/history/auto-grade', async (req, res) => {
   }
 });
 
-module.exports = { router, analyzeParlay, getHistoricalStats, recordPick };
+function gradePick(player, market, line, result, actual) {
+  var today = new Date().toISOString().split('T')[0];
+  var pick = pickHistory.find(function(h) {
+    return h.player === player && h.market === market && h.line === line && (!h.result || h.result === 'pending');
+  });
+  if (pick) {
+    pick.result = result;
+    pick.actual = actual;
+    pick.gradedAt = new Date().toISOString();
+    saveHistory();
+  }
+}
+
+function getPickHistory() {
+  return pickHistory;
+}
+
+module.exports = { router, analyzeParlay, getHistoricalStats, recordPick, gradePick, getPickHistory };
