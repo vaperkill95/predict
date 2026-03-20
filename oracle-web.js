@@ -56,7 +56,8 @@ app.get("/api/redis/health", async (req, res) => {
 app.get("/api/props/:sport", async (req, res) => {
   const data = await redisCache.getProps(req.params.sport);
   if (data) {
-    res.json({ props: data.props || [], count: (data.props || []).length, available: true, source: "redis" });
+    const props = data.props || data.picks || [];
+    res.json({ props: props, count: props.length, available: true, source: "redis" });
   } else {
     res.json({ props: [], count: 0, available: false, source: "empty" });
   }
@@ -167,7 +168,12 @@ app.post("/api/predictions/game", async (req, res) => {
 // Odds — return props data (odds are embedded in props)
 app.get("/api/odds/:sport", async (req, res) => {
   const data = await redisCache.getProps(req.params.sport);
-  res.json(data || { props: [], count: 0 });
+  if (data) {
+    const props = data.props || data.picks || [];
+    res.json({ props: props, count: props.length });
+  } else {
+    res.json({ props: [], count: 0 });
+  }
 });
 
 // Data sources
@@ -200,7 +206,12 @@ app.get("/api/headshots/:player", (req, res) => {
 // Enriched props
 app.get("/api/enriched/:sport", async (req, res) => {
   const data = await redisCache.getProps(req.params.sport);
-  res.json(data || { props: [], count: 0 });
+  if (data) {
+    const props = data.props || data.picks || [];
+    res.json({ props: props, count: props.length });
+  } else {
+    res.json({ props: [], count: 0 });
+  }
 });
 
 // DVP (defense vs position)
