@@ -3,12 +3,12 @@
 .oracle-fab-overlay{position:fixed;inset:0;background:rgba(6,10,20,.6);backdrop-filter:blur(4px);z-index:9998;opacity:0;pointer-events:none;transition:opacity .3s;}
 .oracle-fab-overlay.open{opacity:1;pointer-events:auto;}
 
-.oracle-fab-btn{position:fixed;bottom:90px;right:24px;width:50px;height:50px;border-radius:14px;background:linear-gradient(135deg,#1a2236,#111827);border:1px solid #38bdf8;cursor:pointer;z-index:9999;display:flex;align-items:center;justify-content:center;box-shadow:0 4px 20px rgba(56,189,248,.2);transition:all .3s;}
+.oracle-fab-btn{position:fixed;bottom:24px;left:24px;width:50px;height:50px;border-radius:14px;background:linear-gradient(135deg,#1a2236,#111827);border:1px solid #38bdf8;cursor:pointer;z-index:9999;display:flex;align-items:center;justify-content:center;box-shadow:0 4px 20px rgba(56,189,248,.2);transition:all .3s;}
 .oracle-fab-btn:hover{transform:scale(1.05);box-shadow:0 6px 28px rgba(56,189,248,.35);border-color:#10b981;}
 .oracle-fab-btn.open{background:linear-gradient(135deg,#1a2236,#111827);border-color:#ef4444;}
 .oracle-fab-icon{font-size:20px;line-height:1;transition:transform .3s;color:#38bdf8;font-family:"JetBrains Mono",monospace;font-weight:700;}
 
-.oracle-fab-menu{position:fixed;bottom:150px;right:24px;z-index:9999;display:flex;flex-direction:column;gap:8px;align-items:flex-end;pointer-events:none;}
+.oracle-fab-menu{position:fixed;bottom:86px;left:24px;z-index:9999;display:flex;flex-direction:column;gap:8px;align-items:flex-start;pointer-events:none;}
 .oracle-fab-menu.open{pointer-events:auto;}
 
 .oracle-fab-item{display:flex;align-items:center;gap:10px;opacity:0;transform:translateY(20px) scale(.8);transition:all .25s cubic-bezier(.34,1.56,.64,1);pointer-events:none;}
@@ -46,8 +46,8 @@
 .fab-home{background:linear-gradient(135deg,#64748b,#475569);}
 
 @media(max-width:640px){
-  .oracle-fab-btn{bottom:80px;right:16px;width:46px;height:46px;}
-  .oracle-fab-menu{bottom:136px;right:16px;}
+  .oracle-fab-btn{bottom:16px;left:16px;width:46px;height:46px;}
+  .oracle-fab-menu{bottom:74px;left:16px;}
   .oracle-fab-circle{width:40px;height:40px;font-size:16px;}
   .oracle-fab-label{font-size:11px;padding:5px 10px;}
 }
@@ -56,18 +56,18 @@
 <div class="oracle-fab-overlay" id="fabOverlay" onclick="toggleFab()"></div>
 
 <div class="oracle-fab-menu" id="fabMenu">
-  <a href="/pick" class="oracle-fab-item" style="text-decoration:none"><span class="oracle-fab-label">Pick of the Day</span><div class="oracle-fab-circle fab-picks">🏆</div></a>
-  <a href="/props" class="oracle-fab-item" style="text-decoration:none"><span class="oracle-fab-label">Props Explorer</span><div class="oracle-fab-circle fab-tools">📊</div></a>
-  <a href="/games" class="oracle-fab-item" style="text-decoration:none"><span class="oracle-fab-label">Game Predictions</span><div class="oracle-fab-circle fab-games">🏟️</div></a>
-  <a href="/futures" class="oracle-fab-item" style="text-decoration:none"><span class="oracle-fab-label">Futures</span><div class="oracle-fab-circle fab-futures">🏆</div></a>
-  <a href="/consensus" class="oracle-fab-item" style="text-decoration:none"><span class="oracle-fab-label">Consensus Picks</span><div class="oracle-fab-circle fab-consensus">🤝</div></a>
-  <a href="/parlay" class="oracle-fab-item" style="text-decoration:none"><span class="oracle-fab-label">Parlay Builder</span><div class="oracle-fab-circle fab-tools">🎲</div></a>
-  <a href="/sharp" class="oracle-fab-item" style="text-decoration:none"><span class="oracle-fab-label">Sharp Dashboard</span><div class="oracle-fab-circle fab-sharp">⚡</div></a>
-  <a href="/bankroll" class="oracle-fab-item" style="text-decoration:none"><span class="oracle-fab-label">Bankroll Tracker</span><div class="oracle-fab-circle fab-money">💰</div></a>
-  <a href="/record" class="oracle-fab-item" style="text-decoration:none"><span class="oracle-fab-label">Accuracy Record</span><div class="oracle-fab-circle fab-record">📈</div></a>
-  <a href="/share" class="oracle-fab-item" style="text-decoration:none"><span class="oracle-fab-label">Share Pick</span><div class="oracle-fab-circle fab-share">📤</div></a>
-  <a href="/player" class="oracle-fab-item" style="text-decoration:none"><span class="oracle-fab-label">Player Profile</span><div class="oracle-fab-circle fab-tools">🔍</div></a>
-  <a href="https://discord.gg/PxREjjgnmf" target="_blank" class="oracle-fab-item" style="text-decoration:none"><span class="oracle-fab-label">Discord</span><div class="oracle-fab-circle fab-social">💬</div></a>
+  <a href="/pick" class="oracle-fab-item" style="text-decoration:none"><div class="oracle-fab-circle fab-picks">🏆</div><span class="oracle-fab-label">Pick of the Day</span></a>
+  <a href="/props" class="oracle-fab-item" style="text-decoration:none"><div class="oracle-fab-circle fab-tools">📊</div><span class="oracle-fab-label">Props Explorer</span></a>
+  <a href="/games" class="oracle-fab-item" style="text-decoration:none"><div class="oracle-fab-circle fab-games">🏟️</div><span class="oracle-fab-label">Game Predictions</span></a>
+  <a href="/futures" class="oracle-fab-item" style="text-decoration:none"><div class="oracle-fab-circle fab-futures">🏆</div><span class="oracle-fab-label">Futures</span></a>
+  <a href="/consensus" class="oracle-fab-item" style="text-decoration:none"><div class="oracle-fab-circle fab-consensus">🤝</div><span class="oracle-fab-label">Consensus Picks</span></a>
+  <a href="/parlay" class="oracle-fab-item" style="text-decoration:none"><div class="oracle-fab-circle fab-tools">🎲</div><span class="oracle-fab-label">Parlay Builder</span></a>
+  <a href="/sharp" class="oracle-fab-item" style="text-decoration:none"><div class="oracle-fab-circle fab-sharp">⚡</div><span class="oracle-fab-label">Sharp Dashboard</span></a>
+  <a href="/bankroll" class="oracle-fab-item" style="text-decoration:none"><div class="oracle-fab-circle fab-money">💰</div><span class="oracle-fab-label">Bankroll Tracker</span></a>
+  <a href="/record" class="oracle-fab-item" style="text-decoration:none"><div class="oracle-fab-circle fab-record">📈</div><span class="oracle-fab-label">Accuracy Record</span></a>
+  <a href="/share" class="oracle-fab-item" style="text-decoration:none"><div class="oracle-fab-circle fab-share">📤</div><span class="oracle-fab-label">Share Pick</span></a>
+  <a href="/player" class="oracle-fab-item" style="text-decoration:none"><div class="oracle-fab-circle fab-tools">🔍</div><span class="oracle-fab-label">Player Profile</span></a>
+  <a href="https://discord.gg/PxREjjgnmf" target="_blank" class="oracle-fab-item" style="text-decoration:none"><div class="oracle-fab-circle fab-social">💬</div><span class="oracle-fab-label">Discord</span></a>
 </div>
 
 <button class="oracle-fab-btn" id="fabBtn" onclick="toggleFab()" aria-label="Navigation menu">

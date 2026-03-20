@@ -803,6 +803,11 @@ app.get("/", (req, res) => {
     html = html.replace(/8\+/g, '20+');
     html = html.replace('8+ sportsbooks compared', '20+ sportsbooks compared');
     html = html.replace('Player props from 8+ sportsbooks', 'Player props from 20+ sportsbooks');
+    // Inject FAB nav
+    try {
+      const fabHTML = fs.readFileSync(path.join(__dirname, "public", "fab-nav.html"), "utf8");
+      html = html.replace("</body>", fabHTML + "\n</body>");
+    } catch(e) {}
     res.type("html").send(html);
   } catch (e) {
     res.sendFile(landingPath);
@@ -933,14 +938,17 @@ try {
 function serveAppWithHelp(req, res) {
   const indexPath = path.join(__dirname, "dist", "index.html");
   const botPath = path.join(__dirname, "public", "oracle-bot.html");
+  const fabPath = path.join(__dirname, "public", "fab-nav.html");
   const fs = require("fs");
   try {
     let html = fs.readFileSync(indexPath, "utf8");
-    // Read help button + bot fresh each time
+    // Read help button + bot + FAB fresh each time
     const helpHTML = fs.readFileSync(helpButtonPath, "utf8");
     let botHTML = "";
     try { botHTML = fs.readFileSync(botPath, "utf8"); } catch(e) {}
-    html = html.replace("</body>", helpHTML + "\n" + botHTML + "\n</body>");
+    let fabHTML = "";
+    try { fabHTML = fs.readFileSync(fabPath, "utf8"); } catch(e) {}
+    html = html.replace("</body>", helpHTML + "\n" + botHTML + "\n" + fabHTML + "\n</body>");
     res.type("html").send(html);
   } catch (e) {
     res.sendFile(indexPath);
