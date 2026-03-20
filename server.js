@@ -191,7 +191,18 @@ app.use(helmet({ contentSecurityPolicy: false }));
 app.use(compression());
 app.use(express.json());
 app.use(cors({ origin: process.env.CLIENT_URL || "*", credentials: true }));
-app.use("/api/", rateLimit({ windowMs: 15 * 60 * 1000, max: 500, message: { error: "Rate limited" } }));
+app.use("/api/", rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 2000,
+  message: { error: "Rate limited" },
+  skip: function(req) {
+    // Skip rate limiting for internal requests (localhost, 127.0.0.1)
+    var ip = req.ip || req.connection.remoteAddress || '';
+    return ip === '127.0.0.1' || ip === '::1' || ip === '::ffff:127.0.0.1' || ip.includes('localhost');
+  },
+  standardHeaders: true,
+  legacyHeaders: false,
+}));
 
 // === API Routes ===
 app.use("/api/sports", sportsRoutes);
