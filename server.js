@@ -948,7 +948,7 @@ function serveAppWithHelp(req, res) {
     try { botHTML = fs.readFileSync(botPath, "utf8"); } catch(e) {}
     let fabHTML = "";
     try { fabHTML = fs.readFileSync(fabPath, "utf8"); } catch(e) {}
-    html = html.replace("</body>", helpHTML + "\n" + botHTML + "\n" + fabHTML + "\n<style>.tab-bar,.fab-nav{display:none!important}</style>\n</body>");
+    html = html.replace("</body>", helpHTML + "\n" + botHTML + "\n" + fabHTML + "\n<style>.tab-bar,.fab-nav,.oracle-fab-group{display:none!important}</style>\n</body>");
     res.type("html").send(html);
   } catch (e) {
     res.sendFile(indexPath);
