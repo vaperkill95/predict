@@ -1,241 +1,140 @@
 /**
- * stability.js — Production Stability Module
+ * stability.js — Make ORACLE rock-solid
  * 
- * Prevents crashes by:
- *   1. Memory monitoring + automatic cache purging when memory gets high
- *   2. Request queue limiter — prevents ESPN/API flooding
- *   3. Graceful shutdown handler
- *   4. Health check endpoint with real memory/CPU stats
- *   5. Automatic restart recovery
- *   6. Cache TTL enforcement (no unbounded growth)
+ * Problem: Every deploy restarts the server, caches start empty, site shows
+ * "no data" for 1-2 minutes while APIs refresh. Feels fragile.
  * 
- * Setup:
- *   const stability = require('./services/stability');
- *   stability.init(app);
+ * Solution:
+ * 1. Save caches to disk every 5 minutes
+ * 2. On startup, pre-warm caches from disk immediately
+ * 3. Site shows yesterday's/recent data instantly while fresh data loads
+ * 4. Users never see an empty site
  */
 
-const os = require('os');
+const fs = require('fs');
+const path = require('path');
+
+const CACHE_DIR = path.join(__dirname, '..', 'data', 'cache');
+
+// Ensure cache directory exists
+try {
+  if (!fs.existsSync(path.join(__dirname, '..', 'data'))) fs.mkdirSync(path.join(__dirname, '..', 'data'), { recursive: true });
+  if (!fs.existsSync(CACHE_DIR)) fs.mkdirSync(CACHE_DIR, { recursive: true });
+} catch(e) { console.warn('[Stability] Could not create cache dir:', e.message); }
 
 // ============================================================
-// 1. MEMORY MONITORING
+// Disk Cache — read/write JSON to data/cache/
 // ============================================================
-
-const MEMORY_WARN_MB = 400;   // Warn at 400MB
-const MEMORY_PURGE_MB = 450;  // Purge caches at 450MB
-const MEMORY_CHECK_MS = 60000; // Check every 60s
-
-let memoryStats = { current: 0, peak: 0, purgeCount: 0, lastCheck: null };
-
-function checkMemory() {
-  const used = process.memoryUsage();
-  const heapMB = Math.round(used.heapUsed / 1024 / 1024);
-  const rssMB = Math.round(used.rss / 1024 / 1024);
-
-  memoryStats.current = heapMB;
-  memoryStats.rss = rssMB;
-  memoryStats.peak = Math.max(memoryStats.peak, heapMB);
-  memoryStats.lastCheck = new Date().toISOString();
-
-  if (heapMB > MEMORY_PURGE_MB) {
-    console.warn(`[Stability] ⚠️ Memory high: ${heapMB}MB heap, ${rssMB}MB RSS — purging caches`);
-    purgeCaches();
-    memoryStats.purgeCount++;
-
-    // Force garbage collection if available
-    if (global.gc) {
-      global.gc();
-      console.log('[Stability] Forced GC');
-    }
-  } else if (heapMB > MEMORY_WARN_MB) {
-    console.warn(`[Stability] Memory warning: ${heapMB}MB heap`);
-  }
-
-  return { heapMB, rssMB };
+function saveToDisk(key, data) {
+  try {
+    var filePath = path.join(CACHE_DIR, key.replace(/[^a-zA-Z0-9_-]/g, '_') + '.json');
+    fs.writeFileSync(filePath, JSON.stringify({ data: data, savedAt: Date.now() }));
+  } catch(e) {}
 }
 
-function purgeCaches() {
-  // Purge smart picks cache (keep only latest)
+function loadFromDisk(key, maxAgeMs) {
   try {
-    const smartPicks = require('./smart-picks');
-    if (smartPicks.picksCache) {
-      for (const sport of Object.keys(smartPicks.picksCache)) {
-        const cache = smartPicks.picksCache[sport];
-        if (cache && cache.picks && cache.picks.length > 8) {
-          cache.picks = cache.picks.slice(0, 8);
+    var filePath = path.join(CACHE_DIR, key.replace(/[^a-zA-Z0-9_-]/g, '_') + '.json');
+    if (!fs.existsSync(filePath)) return null;
+    var raw = JSON.parse(fs.readFileSync(filePath, 'utf8'));
+    if (maxAgeMs && Date.now() - raw.savedAt > maxAgeMs) return null;
+    return raw.data;
+  } catch(e) { return null; }
+}
+
+// ============================================================
+// Pre-warm all caches from disk on startup
+// Call this BEFORE starting refresh cycles
+// ============================================================
+function preWarmCaches(smartPicks, gamePredictions, evEngine) {
+  var warmed = 0;
+  var MAX_AGE = 6 * 60 * 60 * 1000; // 6 hours max stale
+
+  try {
+    // Restore props/picks caches
+    if (smartPicks && smartPicks.picksCache) {
+      ['nba', 'nhl', 'mlb', 'nfl'].forEach(function(sport) {
+        var diskData = loadFromDisk('props_' + sport, MAX_AGE);
+        if (diskData && diskData.picks && diskData.picks.length > 0) {
+          smartPicks.picksCache[sport] = diskData;
+          warmed++;
+          console.log('[Stability] Pre-warmed ' + sport + ' props: ' + diskData.picks.length + ' picks from disk');
         }
+      });
+    }
+
+    // Restore games caches
+    if (gamePredictions && gamePredictions.gamesCache) {
+      ['nba', 'nhl'].forEach(function(sport) {
+        var diskData = loadFromDisk('games_' + sport, MAX_AGE);
+        if (diskData && diskData.games && diskData.games.length > 0) {
+          gamePredictions.gamesCache[sport] = diskData;
+          warmed++;
+          console.log('[Stability] Pre-warmed ' + sport + ' games: ' + diskData.games.length + ' games from disk');
+        }
+      });
+    }
+
+    // Restore EV cache
+    if (evEngine) {
+      var evDisk = loadFromDisk('ev_bets', MAX_AGE);
+      if (evDisk && Array.isArray(evDisk) && evDisk.length > 0) {
+        evEngine.evCache = evDisk;
+        warmed++;
+        console.log('[Stability] Pre-warmed EV bets: ' + evDisk.length + ' from disk');
       }
     }
-  } catch (e) {}
+  } catch(e) {
+    console.warn('[Stability] Pre-warm error:', e.message);
+  }
 
-  // Purge enrichment cache
-  try {
-    const enrichment = require('./enhanced-props-middleware');
-    if (enrichment.cache) {
-      const keys = Object.keys(enrichment.cache);
-      if (keys.length > 10) {
-        // Keep only the 5 most recent
-        const sorted = keys.sort((a, b) => {
-          const aTime = enrichment.cache[a]?.fetchedAt || 0;
-          const bTime = enrichment.cache[b]?.fetchedAt || 0;
-          return bTime - aTime;
+  if (warmed > 0) {
+    console.log('[Stability] ✅ Pre-warmed ' + warmed + ' caches from disk — site ready immediately');
+  } else {
+    console.log('[Stability] No disk caches found — first startup, caches will populate from APIs');
+  }
+}
+
+// ============================================================
+// Periodically save caches to disk (every 5 min)
+// ============================================================
+function startPersistence(smartPicks, gamePredictions, evEngine) {
+  function saveAll() {
+    try {
+      if (smartPicks && smartPicks.picksCache) {
+        Object.keys(smartPicks.picksCache).forEach(function(sport) {
+          var cached = smartPicks.picksCache[sport];
+          if (cached && cached.picks && cached.picks.length > 0) {
+            saveToDisk('props_' + sport, cached);
+          }
         });
-        for (const key of sorted.slice(5)) {
-          delete enrichment.cache[key];
-        }
       }
-    }
-  } catch (e) {}
-
-  // Purge game context cache
-  try {
-    const accuracyBoost = require('./accuracy-boost');
-    // Nothing to purge — it auto-expires
-  } catch (e) {}
-
-  console.log('[Stability] Caches purged');
-}
-
-// ============================================================
-// 2. REQUEST QUEUE LIMITER
-// ============================================================
-
-const requestQueue = {
-  active: 0,
-  maxConcurrent: 5, // Max 5 simultaneous external API requests
-  queue: [],
-};
-
-async function throttledRequest(fn) {
-  if (requestQueue.active >= requestQueue.maxConcurrent) {
-    // Wait for a slot
-    await new Promise(resolve => {
-      requestQueue.queue.push(resolve);
-    });
+      if (gamePredictions && gamePredictions.gamesCache) {
+        Object.keys(gamePredictions.gamesCache).forEach(function(sport) {
+          var cached = gamePredictions.gamesCache[sport];
+          if (cached && cached.games && cached.games.length > 0) {
+            saveToDisk('games_' + sport, cached);
+          }
+        });
+      }
+      if (evEngine && evEngine.evCache && evEngine.evCache.length > 0) {
+        saveToDisk('ev_bets', evEngine.evCache);
+      }
+    } catch(e) {}
   }
 
-  requestQueue.active++;
-  try {
-    return await fn();
-  } finally {
-    requestQueue.active--;
-    if (requestQueue.queue.length > 0) {
-      const next = requestQueue.queue.shift();
-      next();
-    }
-  }
-}
+  // Save every 5 minutes
+  setInterval(saveAll, 5 * 60 * 1000);
 
-// ============================================================
-// 3. GRACEFUL SHUTDOWN
-// ============================================================
+  // Also save 2 minutes after startup (give caches time to populate)
+  setTimeout(saveAll, 2 * 60 * 1000);
 
-function setupGracefulShutdown(server) {
-  const shutdown = (signal) => {
-    console.log(`[Stability] ${signal} received — graceful shutdown`);
-    server.close(() => {
-      console.log('[Stability] Server closed');
-      process.exit(0);
-    });
-    // Force exit after 10s
-    setTimeout(() => {
-      console.error('[Stability] Forced exit after timeout');
-      process.exit(1);
-    }, 10000);
-  };
-
-  process.on('SIGTERM', () => shutdown('SIGTERM'));
-  process.on('SIGINT', () => shutdown('SIGINT'));
-
-  // Catch unhandled errors to prevent crashes
-  process.on('uncaughtException', (err) => {
-    console.error('[Stability] Uncaught exception:', err.message);
-    console.error(err.stack);
-    // Don't exit — try to keep running
-  });
-
-  process.on('unhandledRejection', (reason) => {
-    console.error('[Stability] Unhandled rejection:', reason);
-    // Don't exit — try to keep running
-  });
-}
-
-// ============================================================
-// 4. ENHANCED HEALTH CHECK
-// ============================================================
-
-function healthCheckMiddleware(app) {
-  app.get('/api/health/detailed', (req, res) => {
-    const mem = process.memoryUsage();
-    const uptime = process.uptime();
-
-    res.json({
-      status: 'ok',
-      uptime: Math.round(uptime),
-      uptimeHuman: `${Math.floor(uptime / 3600)}h ${Math.floor((uptime % 3600) / 60)}m`,
-      memory: {
-        heapUsedMB: Math.round(mem.heapUsed / 1024 / 1024),
-        heapTotalMB: Math.round(mem.heapTotal / 1024 / 1024),
-        rssMB: Math.round(mem.rss / 1024 / 1024),
-        externalMB: Math.round(mem.external / 1024 / 1024),
-        peakHeapMB: memoryStats.peak,
-        purgeCount: memoryStats.purgeCount,
-      },
-      system: {
-        platform: process.platform,
-        nodeVersion: process.version,
-        cpus: os.cpus().length,
-        totalMemMB: Math.round(os.totalmem() / 1024 / 1024),
-        freeMemMB: Math.round(os.freemem() / 1024 / 1024),
-        loadAvg: os.loadavg().map(l => +l.toFixed(2)),
-      },
-      requestQueue: {
-        active: requestQueue.active,
-        waiting: requestQueue.queue.length,
-        maxConcurrent: requestQueue.maxConcurrent,
-      },
-      timestamp: new Date().toISOString(),
-    });
-  });
-
-  // Simple health check for Railway
-  app.get('/health', (req, res) => {
-    const mem = process.memoryUsage();
-    const heapMB = Math.round(mem.heapUsed / 1024 / 1024);
-    if (heapMB > 500) {
-      return res.status(503).json({ status: 'unhealthy', reason: 'memory', heapMB });
-    }
-    res.json({ status: 'ok' });
-  });
-}
-
-// ============================================================
-// 5. INIT
-// ============================================================
-
-function init(app, server) {
-  console.log('[Stability] Initializing production stability module');
-
-  // Health check endpoints
-  healthCheckMiddleware(app);
-
-  // Memory monitoring
-  setInterval(checkMemory, MEMORY_CHECK_MS);
-  setTimeout(checkMemory, 5000); // First check at 5s
-
-  // Graceful shutdown
-  if (server) setupGracefulShutdown(server);
-
-  // Log startup
-  console.log(`[Stability] Memory limit: warn at ${MEMORY_WARN_MB}MB, purge at ${MEMORY_PURGE_MB}MB`);
-  console.log(`[Stability] Request queue: max ${requestQueue.maxConcurrent} concurrent external requests`);
+  console.log('[Stability] Cache persistence started (saves every 5 min)');
 }
 
 module.exports = {
-  init,
-  checkMemory,
-  purgeCaches,
-  throttledRequest,
-  setupGracefulShutdown,
-  memoryStats,
-  requestQueue,
+  saveToDisk,
+  loadFromDisk,
+  preWarmCaches,
+  startPersistence,
 };

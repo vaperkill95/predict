@@ -508,6 +508,16 @@ try {
 }
 
 // === Start services ===
+
+// Pre-warm caches from disk FIRST — site shows data immediately after restart
+try {
+  const stability = require("./services/stability");
+  stability.preWarmCaches(smartPicks, gamePredictions, evEngine);
+  stability.startPersistence(smartPicks, gamePredictions, evEngine);
+} catch(e) {
+  console.log("Stability module not loaded:", e.message);
+}
+
 dvp.startRefresh();
 analytics.startRefresh();
 predictionModel.startRefresh();
@@ -993,7 +1003,14 @@ app.use((err, req, res, next) => {
 
 const server = app.listen(PORT, () => {
   console.log(`ORACLE v3 running on port ${PORT} — 18-factor model`);
-  if (stability) {
-    stability.init(app, server);
-  }
+  console.log(`[Stability] Server ready. Caches will fully populate within 2 minutes.`);
+});
+
+// Prevent crashes from killing the server
+process.on('uncaughtException', function(err) {
+  console.error('[CRASH PREVENTED] Uncaught exception:', err.message);
+  console.error(err.stack);
+});
+process.on('unhandledRejection', function(reason) {
+  console.error('[CRASH PREVENTED] Unhandled rejection:', reason);
 });
