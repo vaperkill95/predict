@@ -972,7 +972,7 @@ function serveAppWithHelp(req, res) {
     try { fabHTML = fs.readFileSync(fabPath, "utf8"); } catch(e) {}
     let designHTML = "";
     try { designHTML = fs.readFileSync(path.join(__dirname, "public", "oracle-design-system.html"), "utf8"); } catch(e) {}
-    html = html.replace("</body>", helpHTML + "\n" + botHTML + "\n" + fabHTML + "\n" + designHTML + "\n<style>.tab-bar,.fab-nav,.oracle-fab-group{display:none!important}</style>\n<script>!function(){var lastSport='';document.addEventListener('click',function(e){var btn=e.target.closest('[class*=\"sport-tab\"]');if(!btn)return;var sport=btn.textContent.trim().replace(/[^A-Za-z]/g,'');if(lastSport&&sport!==lastSport){setTimeout(function(){var mf=document.querySelector('.market-filters');if(!mf){window.location.reload()}},2000)}lastSport=sport})}()</script>\n</body>");
+    html = html.replace("</body>", helpHTML + "\n" + botHTML + "\n" + fabHTML + "\n" + designHTML + "\n<style>.tab-bar,.fab-nav,.oracle-fab-group{display:none!important}</style>\n<script>!function(){var currentSport=null;function init(){var sb=document.querySelector('.sports-bar');if(!sb){setTimeout(init,500);return}var btns=sb.querySelectorAll('button');btns.forEach(function(b){if(b.className.indexOf('active')>=0||b.getAttribute('aria-selected')==='true'){currentSport=b.textContent.trim()}});sb.addEventListener('click',function(e){var btn=e.target.closest('button');if(!btn)return;var clicked=btn.textContent.trim();if(currentSport&&clicked!==currentSport){currentSport=clicked;setTimeout(function(){window.location.reload()},150)}else if(!currentSport){currentSport=clicked}},true)}setTimeout(init,1500)}()</script>\n</body>");
     res.type("html").send(html);
   } catch (e) {
     res.sendFile(indexPath);
