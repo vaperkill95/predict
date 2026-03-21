@@ -596,39 +596,39 @@ try {
           }
         }
       }
-      // Sync EV bets — fetch from our own endpoint for proper formatting
+      // Sync EV bets — direct from evEngine cache (NO HTTP)
+      if (evEngine && evEngine.evCache && evEngine.evCache.length > 0) {
+        await redisCache.setEV(evEngine.evCache);
+        synced++;
+      }
+      // Sync sharp snapshot — build directly from memory (NO HTTP)
       try {
-        var evResp = await require("axios").get("http://localhost:" + (process.env.PORT || 3001) + "/api/ev/bets?minEdge=0", { timeout: 10000 });
-        if (evResp.data && evResp.data.bets && evResp.data.bets.length > 0) {
-          await redisCache.setEV(evResp.data.bets);
+        var sharpData = {
+          evBets: evEngine && evEngine.evCache ? evEngine.evCache : [],
+          movements: [],
+          timestamp: new Date().toISOString(),
+        };
+        if (lineMovement && lineMovement.getSnapshot) {
+          sharpData.movements = lineMovement.getSnapshot('nba') || [];
+        }
+        if (sharpData.evBets.length > 0 || sharpData.movements.length > 0) {
+          await redisCache.set("oracle:sharp_snapshot", sharpData, 1800);
           synced++;
         }
-      } catch(e) {
-        // Fallback to direct cache
-        if (evEngine && evEngine.evCache && evEngine.evCache.length > 0) {
-          await redisCache.setEV(evEngine.evCache);
-          synced++;
+      } catch(e) {}
+      // Sync line movement — direct from lineMovement module (NO HTTP)
+      if (lineMovement && lineMovement.getSnapshot) {
+        for (var mvSport of ['nba', 'nhl', 'mlb', 'nfl']) {
+          try {
+            var snap = lineMovement.getSnapshot(mvSport);
+            if (snap && snap.length > 0) {
+              await redisCache.setMovement(mvSport, { movements: snap, count: snap.length, timestamp: Date.now() });
+              synced++;
+            }
+          } catch(e) {}
         }
       }
-      // Sync sharp snapshot
-      try {
-        var sharpResp = await require("axios").get("http://localhost:" + (process.env.PORT || 3001) + "/api/sharp/snapshot", { timeout: 10000 });
-        if (sharpResp.data) {
-          await redisCache.set("oracle:sharp_snapshot", sharpResp.data, 1800);
-          synced++;
-        }
-      } catch(e) {}
-      // Sync line movement for all sports
-      try {
-        for (var mvSport of ['nba', 'nhl', 'mlb', 'nfl']) {
-          var mvResp = await require("axios").get("http://localhost:" + (process.env.PORT || 3001) + "/api/movement/" + mvSport, { timeout: 8000 });
-          if (mvResp.data && mvResp.data.movements && mvResp.data.movements.length > 0) {
-            await redisCache.setMovement(mvSport, mvResp.data);
-            synced++;
-          }
-        }
-      } catch(e) {}
-      // Sync POTD
+      // Sync POTD — direct from potd cache (NO HTTP)
       if (potd && potd.cache && potd.cache.picks) {
         await redisCache.setPOTD(potd.cache.picks);
         synced++;
@@ -640,18 +640,6 @@ try {
           if (stats) { await redisCache.setAccuracy(stats); synced++; }
           const history = parlayBuilder.getPickHistory ? parlayBuilder.getPickHistory() : null;
           if (history) { await redisCache.setPickHistory(history); synced++; }
-        } catch(e) {}
-      }
-      // Sync line movement
-      if (lineMovement && lineMovement.getSnapshot) {
-        try {
-          for (const sport of ['nba', 'nhl', 'mlb', 'nfl']) {
-            const snap = lineMovement.getSnapshot(sport);
-            if (snap && snap.length > 0) {
-              await redisCache.setMovement(sport, { movements: snap, count: snap.length, timestamp: Date.now() });
-              synced++;
-            }
-          }
         } catch(e) {}
       }
       // Sync game grades
@@ -678,23 +666,28 @@ try {
         }
       } catch(e) {}
 
-      // Sync CDL matches — fetch from our own endpoint
+      // Sync CDL matches — direct from cdlPredictions module (NO HTTP)
       try {
-        var cdlResp = await require("axios").get("http://localhost:" + (process.env.PORT || 3001) + "/api/cdl/matches", { timeout: 10000 });
-        if (cdlResp.data && cdlResp.data.matches && cdlResp.data.matches.length > 0) {
-          await redisCache.set("oracle:cdl_matches", cdlResp.data, 1800);
-          synced++;
+        if (cdlPredictions && cdlPredictions.cache && cdlPredictions.cache.matches) {
+          var cdlData = cdlPredictions.cache.matches;
+          if (cdlData && cdlData.length > 0) {
+            await redisCache.set("oracle:cdl_matches", { available: true, matches: cdlData, liveCount: 0, upcomingCount: cdlData.filter(function(m){return m.status==='upcoming'}).length, recentCount: cdlData.filter(function(m){return m.status==='completed'}).length }, 1800);
+            synced++;
+          }
         }
-      } catch(e) {}
-
-      // Sync CDL props
-      try {
-        var cdlPropsResp = await require("axios").get("http://localhost:" + (process.env.PORT || 3001) + "/api/cdl/props", { timeout: 10000 });
-        if (cdlPropsResp.data && cdlPropsResp.data.props && cdlPropsResp.data.props.length > 0) {
-          await redisCache.set("oracle:cdl_props", cdlPropsResp.data, 1800);
-          synced++;
-        }
-      } catch(e) {}
+      } catch(e) {
+        // Fallback: try the esports module
+        try {
+          var esportsModule = require("./services/esports");
+          if (esportsModule && esportsModule.getMatches) {
+            var matches = await esportsModule.getMatches('cod');
+            if (matches && matches.length > 0) {
+              await redisCache.set("oracle:cdl_matches", { available: true, matches: matches }, 1800);
+              synced++;
+            }
+          }
+        } catch(e2) {}
+      }
 
       // Sync DVP data
       try {
@@ -715,7 +708,7 @@ try {
     } catch(e) {
       // Silent fail — Redis sync is best-effort
     }
-  }, 30000); // Every 30 seconds
+  }, 60000); // Every 60 seconds (was 30s — reduced to lower memory pressure)
 
   // Run advanced features every 5 minutes (grading, SGP, bankroll sim, alerts)
   try {
