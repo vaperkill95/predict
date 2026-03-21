@@ -597,14 +597,14 @@ try {
         }
       }
       // Sync EV bets — direct from evEngine cache (NO HTTP)
-      if (evEngine && evEngine.evCache && evEngine.evCache.length > 0) {
-        await redisCache.setEV(evEngine.evCache);
+      if (evEngine && evEngine.cache && evEngine.cache.evBets && evEngine.cache.evBets.length > 0) {
+        await redisCache.setEV(evEngine.cache.evBets);
         synced++;
       }
       // Sync sharp snapshot — build directly from memory (NO HTTP)
       try {
         var sharpData = {
-          evBets: evEngine && evEngine.evCache ? evEngine.evCache : [],
+          evBets: evEngine && evEngine.cache && evEngine.cache.evBets ? evEngine.cache.evBets : [],
           movements: [],
           timestamp: new Date().toISOString(),
         };

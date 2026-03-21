@@ -421,4 +421,4 @@ router.get('/devig', (req, res) => {
   });
 });
 
-module.exports = { router, startScanning, scanForEV, calculateEV, devigPower, devigMultiplicative, devigWorstCase, americanToProb, probToAmerican, setDirectFetcher };
+module.exports = { router, startScanning, scanForEV, calculateEV, devigPower, devigMultiplicative, devigWorstCase, americanToProb, probToAmerican, setDirectFetcher, cache };
