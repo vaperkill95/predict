@@ -290,20 +290,56 @@ app.get("/api/analytics/:sport", async (req, res) => {
   res.json(data || {});
 });
 
-// Bot API
+// Bot API — proxy to worker which has the Anthropic API key
 app.post("/api/bot/ask", async (req, res) => {
-  res.json({ answer: "I'm connecting to the AI engine. Try again in a moment, or use the quick buttons below for instant answers!" });
+  try {
+    var axios = require("axios");
+    var workerUrl = process.env.WORKER_URL || "https://predict-production-c236.up.railway.app";
+    var resp = await axios.post(workerUrl + "/api/bot/ask", req.body, { timeout: 30000, headers: { "Content-Type": "application/json" } });
+    res.json(resp.data);
+  } catch(e) {
+    // Fallback: use Redis cached data to answer common questions
+    var question = (req.body.question || "").toLowerCase();
+    var answer = "";
+    if (question.includes("pick") || question.includes("suggest")) {
+      var props = await redisCache.getProps("nba");
+      var items = props ? (props.props || props.picks || []) : [];
+      var demons = items.filter(function(p) { return p.lineType === "demon"; }).slice(0, 3);
+      if (demons.length > 0) {
+        answer = "Here are today's top Demon lines:\\n\\n";
+        demons.forEach(function(d) { answer += "🔥 " + d.player + " — " + (d.marketLabel || d.market) + " @ " + d.consensusLine + " (" + d.bookCount + " books)\\n"; });
+        answer += "\\nDemon lines have 6+ books agreeing on the line — highest consensus edge.";
+      } else {
+        answer = "No Demon lines available right now. Check back closer to game time!";
+      }
+    } else if (question.includes("ev") || question.includes("value")) {
+      var ev = await redisCache.getEV();
+      if (ev && ev.length > 0) {
+        answer = "Found " + ev.length + " +EV bets! The top edge is " + ev[0].player + " " + ev[0].market + " with a " + (ev[0].edgePercent || "?") + "% edge.";
+      } else {
+        answer = "No +EV bets found right now. EV bets appear during pre-game hours (11am-7pm ET).";
+      }
+    } else {
+      answer = "I'm having trouble connecting to the AI engine right now. Try the quick buttons below or check back in a moment!";
+    }
+    res.json({ answer: answer });
+  }
 });
 
 // Sharp snapshot
 app.get("/api/sharp/snapshot", async (req, res) => {
-  const ev = await redisCache.getEV();
-  const movement = await redisCache.getMovement("nba");
-  res.json({
-    evBets: ev || [],
-    movements: movement ? movement.movements || [] : [],
-    timestamp: new Date().toISOString(),
-  });
+  const cached = await redisCache.get("oracle:sharp_snapshot");
+  if (cached) {
+    res.json(cached);
+  } else {
+    const ev = await redisCache.getEV();
+    const movement = await redisCache.getMovement("nba");
+    res.json({
+      evBets: ev || [],
+      movements: movement ? movement.movements || [] : [],
+      timestamp: new Date().toISOString(),
+    });
+  }
 });
 
 // Esports routes

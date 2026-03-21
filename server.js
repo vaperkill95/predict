@@ -596,11 +596,38 @@ try {
           }
         }
       }
-      // Sync EV bets
-      if (evEngine && evEngine.evCache && evEngine.evCache.length > 0) {
-        await redisCache.setEV(evEngine.evCache);
-        synced++;
+      // Sync EV bets — fetch from our own endpoint for proper formatting
+      try {
+        var evResp = await require("axios").get("http://localhost:" + (process.env.PORT || 3001) + "/api/ev/bets?minEdge=0", { timeout: 10000 });
+        if (evResp.data && evResp.data.bets && evResp.data.bets.length > 0) {
+          await redisCache.setEV(evResp.data.bets);
+          synced++;
+        }
+      } catch(e) {
+        // Fallback to direct cache
+        if (evEngine && evEngine.evCache && evEngine.evCache.length > 0) {
+          await redisCache.setEV(evEngine.evCache);
+          synced++;
+        }
       }
+      // Sync sharp snapshot
+      try {
+        var sharpResp = await require("axios").get("http://localhost:" + (process.env.PORT || 3001) + "/api/sharp/snapshot", { timeout: 10000 });
+        if (sharpResp.data) {
+          await redisCache.set("oracle:sharp_snapshot", sharpResp.data, 1800);
+          synced++;
+        }
+      } catch(e) {}
+      // Sync line movement for all sports
+      try {
+        for (var mvSport of ['nba', 'nhl', 'mlb', 'nfl']) {
+          var mvResp = await require("axios").get("http://localhost:" + (process.env.PORT || 3001) + "/api/movement/" + mvSport, { timeout: 8000 });
+          if (mvResp.data && mvResp.data.movements && mvResp.data.movements.length > 0) {
+            await redisCache.setMovement(mvSport, mvResp.data);
+            synced++;
+          }
+        }
+      } catch(e) {}
       // Sync POTD
       if (potd && potd.cache && potd.cache.picks) {
         await redisCache.setPOTD(potd.cache.picks);
