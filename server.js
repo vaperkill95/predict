@@ -651,14 +651,21 @@ try {
         }
       } catch(e) {}
 
-      // Sync CDL matches
+      // Sync CDL matches — fetch from our own endpoint
       try {
-        if (cdlPredictions && cdlPredictions.getMatches) {
-          var cdlMatches = cdlPredictions.getMatches();
-          if (cdlMatches && cdlMatches.length > 0) {
-            await redisCache.set("oracle:cdl_matches", { matches: cdlMatches, count: cdlMatches.length }, 1800);
-            synced++;
-          }
+        var cdlResp = await require("axios").get("http://localhost:" + (process.env.PORT || 3001) + "/api/cdl/matches", { timeout: 10000 });
+        if (cdlResp.data && cdlResp.data.matches && cdlResp.data.matches.length > 0) {
+          await redisCache.set("oracle:cdl_matches", cdlResp.data, 1800);
+          synced++;
+        }
+      } catch(e) {}
+
+      // Sync CDL props
+      try {
+        var cdlPropsResp = await require("axios").get("http://localhost:" + (process.env.PORT || 3001) + "/api/cdl/props", { timeout: 10000 });
+        if (cdlPropsResp.data && cdlPropsResp.data.props && cdlPropsResp.data.props.length > 0) {
+          await redisCache.set("oracle:cdl_props", cdlPropsResp.data, 1800);
+          synced++;
         }
       } catch(e) {}
 

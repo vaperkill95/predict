@@ -195,7 +195,11 @@ app.get("/api/cdl/props", async (req, res) => {
 // CDL matches
 app.get("/api/cdl/matches", async (req, res) => {
   const data = await redisCache.get("oracle:cdl_matches");
-  res.json(data || { matches: [], count: 0 });
+  if (data && data.matches) {
+    res.json(data);
+  } else {
+    res.json({ available: false, matches: [], liveCount: 0, upcomingCount: 0, recentCount: 0 });
+  }
 });
 
 // CDL predictions
