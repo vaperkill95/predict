@@ -717,6 +717,21 @@ try {
     }
   }, 30000); // Every 30 seconds
 
+  // Run advanced features every 5 minutes (grading, SGP, bankroll sim, alerts)
+  try {
+    var features = require("./services/oracle-features");
+    setInterval(function() {
+      features.runAllFeatures().catch(function(e) { console.warn("[Features] Error:", e.message); });
+    }, 5 * 60 * 1000); // Every 5 minutes
+    // Also run once after 60 seconds (give caches time to populate)
+    setTimeout(function() {
+      features.runAllFeatures().catch(function(e) { console.warn("[Features] Initial run error:", e.message); });
+    }, 60000);
+    console.log("[Features] Auto-grading, SGP, bankroll sim, alerts — running every 5 min");
+  } catch(e) {
+    console.log("[Features] Not loaded:", e.message);
+  }
+
 } catch(e) {
   console.log("[Redis] Not available:", e.message, "— using memory-only mode");
 }

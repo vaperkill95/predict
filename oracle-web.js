@@ -342,6 +342,49 @@ app.get("/api/sharp/snapshot", async (req, res) => {
   }
 });
 
+// ============================================================
+// ORACLE FEATURES — Grading, Performance, SGP, Bankroll, Alerts
+// ============================================================
+
+// Grading stats + recent graded picks
+app.get("/api/features/grades", async (req, res) => {
+  var stats = await redisCache.get("oracle:grading_stats");
+  res.json(stats || { overall: { total: 0, hits: 0, misses: 0, hitRate: 0, profit: 0 }, recentPicks: [], daily: [] });
+});
+
+app.get("/api/features/grades/recent", async (req, res) => {
+  var grades = await redisCache.get("oracle:graded_picks");
+  var limit = parseInt(req.query.limit) || 50;
+  res.json({ picks: (grades || []).slice(-limit).reverse(), total: (grades || []).length });
+});
+
+// Historical performance dashboard
+app.get("/api/features/performance", async (req, res) => {
+  var stats = await redisCache.get("oracle:grading_stats");
+  res.json(stats || { overall: {}, today: {}, last7Days: {}, last30Days: {}, bySport: {}, byLineType: {}, byMarket: {}, daily: [] });
+});
+
+// SGP suggestions
+app.get("/api/features/sgp", async (req, res) => {
+  var sgp = await redisCache.get("oracle:sgp_suggestions");
+  res.json({ suggestions: sgp || [], count: (sgp || []).length });
+});
+
+// Bankroll simulator
+app.get("/api/features/bankroll", async (req, res) => {
+  var strategy = req.query.strategy || "flat";
+  var lineType = req.query.lineType || null;
+  var key = lineType === "demon" ? "oracle:bankroll_sim_demon" : "oracle:bankroll_sim";
+  var sim = await redisCache.get(key);
+  res.json(sim || { message: "No simulation data yet. Check back after games are graded." });
+});
+
+// Alerts
+app.get("/api/features/alerts", async (req, res) => {
+  var alerts = await redisCache.get("oracle:alerts");
+  res.json({ alerts: alerts || [], count: (alerts || []).length });
+});
+
 // Esports routes
 app.get("/api/esports/:game/matches", async (req, res) => {
   const data = await redisCache.get("oracle:esports:" + req.params.game);
