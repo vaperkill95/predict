@@ -114,23 +114,40 @@ async function fetchBoxScore(sport, eventId) {
 /**
  * Run grading cycle — fetch finished games, grade all ungraded picks
  * Stores results in Redis
+ * 
+ * Key insight: We save a snapshot of props when they're generated (before games start).
+ * After games finish, we grade the SNAPSHOT props, not current props.
  */
 async function runGradingCycle() {
   if (!redisCache) return;
   
   var axios = require('axios');
-  var PORT = process.env.PORT || 3001;
   
   try {
-    // Get today's and yesterday's picks from Redis
     var allGrades = (await redisCache.get('oracle:graded_picks')) || [];
     var sports = ['nba', 'nhl'];
     
+    // STEP 1: Save today's props as a snapshot (for grading later tonight)
+    for (var si = 0; si < sports.length; si++) {
+      var sport = sports[si];
+      var propsData = await redisCache.getProps(sport);
+      var props = propsData ? (propsData.props || propsData.picks || []) : [];
+      if (props.length > 0) {
+        var today = new Date().toISOString().split('T')[0];
+        var snapshotKey = 'oracle:props_snapshot:' + sport + ':' + today;
+        var existing = await redisCache.get(snapshotKey);
+        if (!existing || (existing.length || 0) < props.length) {
+          // Save or update snapshot (keep the largest one — more props = better)
+          await redisCache.set(snapshotKey, props, 48 * 3600); // 48 hour TTL
+        }
+      }
+    }
+    
+    // STEP 2: Grade finished games using saved snapshots
     for (var si = 0; si < sports.length; si++) {
       var sport = sports[si];
       var sportPath = { nba: 'basketball/nba', nhl: 'hockey/nhl' }[sport];
       
-      // Get finished games from ESPN
       try {
         var scoreResp = await axios.get('https://site.api.espn.com/apis/site/v2/sports/' + sportPath + '/scoreboard', { timeout: 10000 });
         var events = scoreResp.data.events || [];
@@ -138,11 +155,20 @@ async function runGradingCycle() {
         
         if (finishedGames.length === 0) continue;
         
-        // Get the props that were available for grading
-        var propsData = await redisCache.getProps(sport);
-        var props = propsData ? (propsData.props || propsData.picks || []) : [];
+        // Try today's snapshot first, then yesterday's
+        var today = new Date().toISOString().split('T')[0];
+        var yesterday = new Date(Date.now() - 86400000).toISOString().split('T')[0];
+        var props = await redisCache.get('oracle:props_snapshot:' + sport + ':' + today);
+        if (!props || props.length === 0) {
+          props = await redisCache.get('oracle:props_snapshot:' + sport + ':' + yesterday);
+        }
+        // Also try current props as fallback
+        if (!props || props.length === 0) {
+          var propsData = await redisCache.getProps(sport);
+          props = propsData ? (propsData.props || propsData.picks || []) : [];
+        }
         
-        if (props.length === 0) continue;
+        if (!props || props.length === 0) continue;
         
         // For each finished game, get box score and grade props
         for (var gi = 0; gi < finishedGames.length; gi++) {

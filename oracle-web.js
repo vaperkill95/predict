@@ -105,11 +105,17 @@ app.get("/api/potd", async (req, res) => {
   }
 });
 
-// Accuracy / History
+// Accuracy / History — try parlayBuilder first, fall back to new grading engine
 app.get("/api/parlay/history", async (req, res) => {
-  const data = await redisCache.getAccuracy();
-  if (data) {
-    res.json(data);
+  // Try the old parlayBuilder data
+  var data = await redisCache.getAccuracy();
+  if (data && data.overall && data.overall.total > 0) {
+    return res.json(data);
+  }
+  // Fall back to new grading engine stats
+  var grades = await redisCache.get("oracle:grading_stats");
+  if (grades && grades.overall && grades.overall.total > 0) {
+    res.json({ overall: grades.overall, recentPicks: grades.recentPicks || [] });
   } else {
     res.json({ overall: { total: 0, hits: 0, misses: 0, hitRate: 0, pending: 0 }, recentPicks: [] });
   }
