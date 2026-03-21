@@ -171,18 +171,25 @@ async function generatePickOfTheDay() {
 
   let props = [], evBets = [];
   try {
-    // Use external URL if available so enrichment middleware runs
-    // Fall back to localhost
-    const baseUrl = process.env.RAILWAY_PUBLIC_DOMAIN 
-      ? `https://${process.env.RAILWAY_PUBLIC_DOMAIN}`
-      : `http://localhost:${PORT}`;
+    // Try Redis first (fastest, most reliable)
+    let redisCache = null;
+    try { redisCache = require('./redis-cache'); } catch(e) {}
     
-    console.log(`[POTD] Fetching props from ${baseUrl}`);
-    const propsResp = await axios.get(`${baseUrl}/api/props/nba`, { timeout: 20000 });
-    props = propsResp.data?.props || [];
-
-    const evResp = await axios.get(`http://localhost:${PORT}/api/ev/bets?minEdge=0`, { timeout: 10000 }).catch(() => ({ data: { bets: [] } }));
-    evBets = evResp.data?.bets || [];
+    if (redisCache && redisCache.isConnected()) {
+      const propsData = await redisCache.getProps('nba');
+      props = propsData ? (propsData.props || propsData.picks || []) : [];
+      const evData = await redisCache.getEV();
+      evBets = Array.isArray(evData) ? evData : [];
+      console.log(`[POTD] Got ${props.length} props from Redis, ${evBets.length} EV bets`);
+    } else {
+      // Fall back to localhost HTTP
+      const baseUrl = `http://localhost:${PORT}`;
+      console.log(`[POTD] Fetching props from ${baseUrl}`);
+      const propsResp = await axios.get(`${baseUrl}/api/props/nba`, { timeout: 20000 });
+      props = propsResp.data?.props || [];
+      const evResp = await axios.get(`${baseUrl}/api/ev/bets?minEdge=0`, { timeout: 10000 }).catch(() => ({ data: { bets: [] } }));
+      evBets = evResp.data?.bets || [];
+    }
 
     console.log(`[POTD] Got ${props.length} props, ${props.filter(p => p.enriched).length} enriched`);
   } catch (e) {
