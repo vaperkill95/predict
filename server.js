@@ -555,212 +555,216 @@ try {
     }
   })();
 
-  // Sync memory caches TO Redis every 30 seconds
+  // === SYNC TO REDIS — Single internal call collects ALL data, writes to Redis ===
+  // This replaces the broken individual module access approach.
+  // The worker's Express routes already format data correctly — we just call them once.
+  
+  // Internal endpoint that dumps all data for Redis sync (not exposed publicly)
+  app.get("/internal/sync-dump", async function(req, res) {
+    var dump = {};
+    try {
+      // Props — use getCachedProps which works reliably
+      for (var sport of ['nba', 'nhl', 'mlb']) {
+        try {
+          if (typeof getCachedProps === 'function') {
+            var p = await getCachedProps(sport);
+            if (p && p.props && p.props.length > 0) dump['props_' + sport] = p;
+          }
+        } catch(e) {}
+      }
+      // Smart picks
+      if (smartPicks && smartPicks.picksCache) {
+        for (var sp of Object.keys(smartPicks.picksCache)) {
+          var c = smartPicks.picksCache[sp];
+          if (c && ((c.picks && c.picks.length > 0) || (c.props && c.props.length > 0))) {
+            dump['picks_' + sp] = c;
+          }
+        }
+      }
+      // Games
+      if (gamePredictions && gamePredictions.gamesCache) {
+        for (var gs of Object.keys(gamePredictions.gamesCache)) {
+          var gc = gamePredictions.gamesCache[gs];
+          if (gc && gc.games && gc.games.length > 0) dump['games_' + gs] = gc;
+        }
+      }
+      // EV
+      if (evEngine && evEngine.cache && evEngine.cache.evBets && evEngine.cache.evBets.length > 0) {
+        dump.ev = evEngine.cache.evBets;
+      }
+      // POTD
+      if (potd && potd.cache && potd.cache.picks) {
+        dump.potd = potd.cache.picks;
+      }
+      // Line movement
+      if (lineMovement && lineMovement.lineHistory) {
+        dump.lineHistory = lineMovement.lineHistory;
+      }
+      // Trending
+      try {
+        var tp = require("./services/trending-picks");
+        if (tp && tp.trendingCache) dump.trending = tp.trendingCache;
+      } catch(e) {}
+      // Accuracy
+      if (parlayBuilder && parlayBuilder.getHistoricalStats) {
+        try { dump.accuracy = parlayBuilder.getHistoricalStats(); } catch(e) {}
+      }
+      // Sharp
+      if (sharpTools && sharpTools.getSnapshot) {
+        try { dump.sharp = sharpTools.getSnapshot(); } catch(e) {}
+      }
+      res.json({ ok: true, keys: Object.keys(dump).length, dump: dump });
+    } catch(e) {
+      res.json({ ok: false, error: e.message });
+    }
+  });
+
+  // Sync loop — calls internal endpoint once, writes everything to Redis
   setInterval(async function() {
     try {
       var synced = 0;
+      var http = require("http");
+      var PORT = process.env.PORT || 8080;
       
-      // Sync RAW props from Odds API (the actual props with odds from all books)
-      for (const sport of ['nba', 'nhl', 'mlb', 'nfl']) {
-        try {
-          // Use the same function that serves /api/props/:sport
-          var rawProps = null;
-          if (typeof getCachedProps === 'function') {
-            rawProps = await getCachedProps(sport);
-          }
-          if (rawProps && rawProps.props && rawProps.props.length > 0) {
-            await redisCache.setProps(sport, { props: rawProps.props, picks: rawProps.props, count: rawProps.props.length, timestamp: Date.now() });
-            synced++;
-          }
-        } catch(e) {}
+      // Single internal call to collect all data
+      var dumpData = await new Promise(function(resolve) {
+        var data = '';
+        var req = http.get("http://localhost:" + PORT + "/internal/sync-dump", { timeout: 15000 }, function(resp) {
+          resp.on('data', function(chunk) { data += chunk; });
+          resp.on('end', function() {
+            try { resolve(JSON.parse(data)); } catch(e) { resolve(null); }
+            data = null;
+          });
+        });
+        req.on('error', function() { resolve(null); });
+        req.on('timeout', function() { req.destroy(); resolve(null); });
+      });
+
+      if (!dumpData || !dumpData.ok) {
+        console.warn("[Redis] Sync dump failed");
+        return;
       }
 
-      // Sync smart picks (AI-analyzed picks with grades)
-      if (smartPicks && smartPicks.picksCache) {
-        for (const sport of Object.keys(smartPicks.picksCache)) {
-          const cached = smartPicks.picksCache[sport];
-          const items = (cached && cached.picks) || (cached && cached.props) || [];
-          if (items.length > 0) {
-            await redisCache.setPicks(sport, { picks: items, timestamp: cached.timestamp || Date.now() });
-            synced++;
-          }
-        }
-      }
-      // Sync games
-      if (gamePredictions && gamePredictions.gamesCache) {
-        for (const sport of Object.keys(gamePredictions.gamesCache)) {
-          const cached = gamePredictions.gamesCache[sport];
-          if (cached && cached.games && cached.games.length > 0) {
-            await redisCache.setGames(sport, cached);
-            synced++;
-          }
-        }
-      }
-      // Sync EV bets — direct from evEngine cache (NO HTTP)
-      if (evEngine && evEngine.cache && evEngine.cache.evBets && evEngine.cache.evBets.length > 0) {
-        await redisCache.setEV(evEngine.cache.evBets);
-        synced++;
-      }
-      // Sync sharp snapshot — build directly from memory (NO HTTP)
-      try {
-        var sharpEvBets = evEngine && evEngine.cache && evEngine.cache.evBets ? evEngine.cache.evBets : [];
-        var sharpMovements = [];
-        // lineMovement exports lineHistory (object keyed by player|market)
-        if (lineMovement && lineMovement.lineHistory) {
-          var lh = lineMovement.lineHistory;
-          Object.keys(lh).forEach(function(key) {
-            var entry = lh[key];
-            if (entry && entry.snapshots && entry.snapshots.length >= 2) {
-              var first = entry.snapshots[0];
-              var last = entry.snapshots[entry.snapshots.length - 1];
-              if (first.line !== last.line) {
-                sharpMovements.push({ player: entry.player, market: entry.market, sport: entry.sport, oldLine: first.line, newLine: last.line, change: last.line - first.line, snapshots: entry.snapshots.length });
-              }
-            }
-          });
-        }
-        var sharpData = { evBets: sharpEvBets, movements: sharpMovements, timestamp: new Date().toISOString() };
-        if (sharpEvBets.length > 0 || sharpMovements.length > 0) {
-          await redisCache.set("oracle:sharp_snapshot", sharpData, 1800);
+      var d = dumpData.dump;
+
+      // Write props
+      for (var sport of ['nba', 'nhl', 'mlb']) {
+        if (d['props_' + sport]) {
+          var p = d['props_' + sport];
+          await redisCache.setProps(sport, { props: p.props, picks: p.props, count: p.props.length, timestamp: Date.now() });
           synced++;
         }
-      } catch(e) {}
-      // Sync line movement — from lineHistory export
-      if (lineMovement && lineMovement.lineHistory) {
-        try {
-          for (var mvSport of ['nba', 'nhl', 'mlb', 'nfl']) {
-            var movements = [];
-            var lh = lineMovement.lineHistory;
-            Object.keys(lh).forEach(function(key) {
-              var entry = lh[key];
-              if (entry && entry.sport === mvSport && entry.snapshots && entry.snapshots.length >= 2) {
-                var first = entry.snapshots[0];
-                var last = entry.snapshots[entry.snapshots.length - 1];
-                movements.push({ player: entry.player, market: entry.market, oldLine: first.line, newLine: last.line, change: Math.abs(last.line - first.line), direction: last.line > first.line ? 'up' : 'down', snapshots: entry.snapshots.length });
-              }
-            });
-            if (movements.length > 0) {
-              movements.sort(function(a, b) { return b.change - a.change; });
-              await redisCache.setMovement(mvSport, { movements: movements, count: movements.length, timestamp: Date.now() });
-              synced++;
-            }
-          }
-        } catch(e) {}
       }
-      // Sync trending picks — from trendingCache export
-      try {
-        var trendingPicks = require("./services/trending-picks");
-        if (trendingPicks && trendingPicks.trendingCache) {
-          for (var trSport of ['nba', 'nhl', 'mlb']) {
-            var trData = trendingPicks.trendingCache[trSport];
-            if (trData && trData.length > 0) {
-              await redisCache.set("oracle:trending:" + trSport, { trending: trData, count: trData.length }, 1800);
-              synced++;
-            }
-          }
+      // Write picks
+      for (var sp of ['nba', 'nhl', 'mlb']) {
+        if (d['picks_' + sp]) {
+          await redisCache.setPicks(sp, d['picks_' + sp]);
+          synced++;
         }
-      } catch(e) {}
-      // Sync POTD — direct from potd cache (NO HTTP)
-      if (potd && potd.cache && potd.cache.picks) {
-        await redisCache.setPOTD(potd.cache.picks);
+      }
+      // Write games
+      for (var gs of ['nba', 'nhl', 'mlb']) {
+        if (d['games_' + gs]) {
+          await redisCache.setGames(gs, d['games_' + gs]);
+          synced++;
+        }
+      }
+      // Write EV
+      if (d.ev && d.ev.length > 0) {
+        await redisCache.setEV(d.ev);
         synced++;
       }
-      // Sync accuracy / pick history
-      if (parlayBuilder) {
+      // Write POTD
+      if (d.potd) {
+        await redisCache.setPOTD(d.potd);
+        synced++;
+      }
+      // Write line movement
+      if (d.lineHistory) {
+        for (var mvSport of ['nba', 'nhl', 'mlb']) {
+          var movements = [];
+          Object.keys(d.lineHistory).forEach(function(key) {
+            var entry = d.lineHistory[key];
+            if (entry && entry.sport === mvSport && entry.snapshots && entry.snapshots.length >= 2) {
+              var first = entry.snapshots[0];
+              var last = entry.snapshots[entry.snapshots.length - 1];
+              movements.push({ player: entry.player, market: entry.market, oldLine: first.consensus, newLine: last.consensus, change: Math.abs(last.consensus - first.consensus), direction: last.consensus > first.consensus ? 'up' : 'down' });
+            }
+          });
+          if (movements.length > 0) {
+            movements.sort(function(a, b) { return b.change - a.change; });
+            await redisCache.setMovement(mvSport, { movements: movements, count: movements.length, timestamp: Date.now() });
+            synced++;
+          }
+        }
+      }
+      // Write trending
+      if (d.trending) {
+        for (var ts of Object.keys(d.trending)) {
+          if (d.trending[ts] && d.trending[ts].length > 0) {
+            await redisCache.set("oracle:trending:" + ts, { trending: d.trending[ts], count: d.trending[ts].length }, 1800);
+            synced++;
+          }
+        }
+      }
+      // Write accuracy
+      if (d.accuracy) {
+        await redisCache.setAccuracy(d.accuracy);
+        synced++;
+      }
+      // Write sharp snapshot
+      var sharpData = { evBets: d.ev || [], movements: [], timestamp: new Date().toISOString() };
+      if (d.lineHistory) {
+        Object.keys(d.lineHistory).forEach(function(key) {
+          var entry = d.lineHistory[key];
+          if (entry && entry.snapshots && entry.snapshots.length >= 2) {
+            var first = entry.snapshots[0], last = entry.snapshots[entry.snapshots.length - 1];
+            if (first.consensus !== last.consensus) sharpData.movements.push({ player: entry.player, market: entry.market, oldLine: first.consensus, newLine: last.consensus, change: last.consensus - first.consensus });
+          }
+        });
+      }
+      await redisCache.set("oracle:sharp_snapshot", sharpData, 1800);
+      synced++;
+
+      // ESPN scores — native https (no axios)
+      var https = require("https");
+      var espnSports = { nba: 'basketball/nba', nhl: 'hockey/nhl', mlb: 'baseball/mlb' };
+      for (var [es, ep] of Object.entries(espnSports)) {
         try {
-          const stats = parlayBuilder.getHistoricalStats();
-          if (stats) { await redisCache.setAccuracy(stats); synced++; }
-          const history = parlayBuilder.getPickHistory ? parlayBuilder.getPickHistory() : null;
-          if (history) { await redisCache.setPickHistory(history); synced++; }
+          await new Promise(function(resolve) {
+            var sdata = '';
+            var sreq = https.get("https://site.api.espn.com/apis/site/v2/sports/" + ep + "/scoreboard", { timeout: 8000 }, function(resp) {
+              resp.on('data', function(chunk) { sdata += chunk; });
+              resp.on('end', function() { try { redisCache.set("oracle:scores:" + es, JSON.parse(sdata), 300); synced++; } catch(e) {} sdata = null; resolve(); });
+            });
+            sreq.on('error', function() { resolve(); });
+            sreq.on('timeout', function() { sreq.destroy(); resolve(); });
+          });
         } catch(e) {}
       }
-      // Sync game grades
-      try {
-        const gameGrader = require("./services/game-grader");
-        if (gameGrader && gameGrader.getAccuracy) {
-          const grades = gameGrader.getAccuracy();
-          if (grades) { await redisCache.setGameGrades(grades); synced++; }
-        }
-      } catch(e) {}
 
-      // Sync live scores for ticker (ESPN) — use native https to avoid axios memory leak
+      // CDL matches — single native http call
       try {
-        const https = require("https");
-        const sports = { nba: 'basketball/nba', nhl: 'hockey/nhl', mlb: 'baseball/mlb' };
-        for (const [sport, espnPath] of Object.entries(sports)) {
-          try {
-            await new Promise(function(resolve) {
-              var data = '';
-              var req = https.get("https://site.api.espn.com/apis/site/v2/sports/" + espnPath + "/scoreboard", { timeout: 8000 }, function(resp) {
-                resp.on('data', function(chunk) { data += chunk; });
-                resp.on('end', function() {
-                  try {
-                    var parsed = JSON.parse(data);
-                    redisCache.set("oracle:scores:" + sport, parsed, 300);
-                    synced++;
-                  } catch(e) {}
-                  data = null; // Free memory
-                  resolve();
-                });
-              });
-              req.on('error', function() { resolve(); });
-              req.on('timeout', function() { req.destroy(); resolve(); });
-            });
-          } catch(e) {}
-        }
-      } catch(e) {}
-
-      // Sync CDL matches — CDL module doesn't export cache, use single native http call
-      try {
-        var http = require("http");
         await new Promise(function(resolve) {
-          var data = '';
-          var req = http.get("http://localhost:" + (process.env.PORT || 8080) + "/api/cdl/matches", { timeout: 10000 }, function(resp) {
-            resp.on('data', function(chunk) { data += chunk; });
-            resp.on('end', function() {
-              try {
-                var parsed = JSON.parse(data);
-                if (parsed && parsed.matches && parsed.matches.length > 0) {
-                  redisCache.set("oracle:cdl_matches", parsed, 1800);
-                  synced++;
-                }
-              } catch(e) {}
-              data = null;
-              resolve();
-            });
+          var cdata = '';
+          var creq = http.get("http://localhost:" + PORT + "/api/cdl/matches", { timeout: 10000 }, function(resp) {
+            resp.on('data', function(chunk) { cdata += chunk; });
+            resp.on('end', function() { try { var p = JSON.parse(cdata); if (p.matches && p.matches.length > 0) { redisCache.set("oracle:cdl_matches", p, 1800); synced++; } } catch(e) {} cdata = null; resolve(); });
           });
-          req.on('error', function() { resolve(); });
-          req.on('timeout', function() { req.destroy(); resolve(); });
+          creq.on('error', function() { resolve(); });
+          creq.on('timeout', function() { creq.destroy(); resolve(); });
         });
       } catch(e) {}
 
-      // Sync DVP data
-      try {
-        if (dvp && dvp.getSmashSpots) {
-          for (var dvpSport of ['nba']) {
-            var smashData = dvp.getSmashSpots(dvpSport);
-            if (smashData) {
-              await redisCache.set("oracle:dvp:" + dvpSport, { smash: smashData, matchups: smashData }, 1800);
-              synced++;
-            }
-          }
-        }
-      } catch(e) {}
-      
-      if (synced > 0) {
-        var mem = process.memoryUsage();
-        var heapMB = Math.round(mem.heapUsed / 1024 / 1024);
-        var rssMB = Math.round(mem.rss / 1024 / 1024);
-        console.log("[Redis] Synced " + synced + " entries | Heap: " + heapMB + "MB | RSS: " + rssMB + "MB");
-        // Warn if memory is getting high
-        if (rssMB > 2048) {
-          console.warn("[Memory] WARNING: RSS at " + rssMB + "MB — approaching limits");
-        }
-      }
+      var mem = process.memoryUsage();
+      var heapMB = Math.round(mem.heapUsed / 1024 / 1024);
+      var rssMB = Math.round(mem.rss / 1024 / 1024);
+      console.log("[Redis] Synced " + synced + " entries | Heap: " + heapMB + "MB | RSS: " + rssMB + "MB");
+      if (rssMB > 2048) console.warn("[Memory] WARNING: RSS at " + rssMB + "MB");
     } catch(e) {
-      // Silent fail — Redis sync is best-effort
+      console.warn("[Redis] Sync error:", e.message);
     }
-  }, 60000); // Every 60 seconds (was 30s — reduced to lower memory pressure)
+  }, 60000); // Every 60 seconds
 
   // Force garbage collection every 5 minutes to prevent memory creep
   if (global.gc) {

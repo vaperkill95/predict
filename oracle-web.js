@@ -740,9 +740,12 @@ app.get("/api/sharp/rlm", async (req, res) => {
   try {
     var mvData = await redisCache.getMovement("nba");
     var movements = mvData && mvData.movements ? mvData.movements : [];
+    // Also check NHL
+    var nhlData = await redisCache.getMovement("nhl");
+    if (nhlData && nhlData.movements) movements = movements.concat(nhlData.movements);
     // RLM = lines that moved DOWN (books adjusting against public money)
-    var rlm = movements.filter(function(m) { return m.direction === 'down' && m.change >= 0.5; })
-      .map(function(m) { return { player: m.player, market: m.market, oldLine: m.oldLine, newLine: m.newLine, change: m.change, direction: 'DOWN', type: 'rlm', reason: 'Line dropped ' + m.change.toFixed(1) + ' points against public action' }; });
+    var rlm = movements.filter(function(m) { return m.direction === 'down' && m.change > 0 && m.oldLine; })
+      .map(function(m) { return { player: m.player, market: m.market, oldLine: m.oldLine, newLine: m.newLine, change: m.change, direction: 'DOWN', type: 'rlm', reason: 'Line dropped ' + (m.change || 0).toFixed(1) + ' points against public action' }; });
     res.json({ alerts: rlm, count: rlm.length });
   } catch(e) { res.json({ alerts: [], count: 0 }); }
 });
@@ -752,9 +755,12 @@ app.get("/api/sharp/steam", async (req, res) => {
   try {
     var mvData = await redisCache.getMovement("nba");
     var movements = mvData && mvData.movements ? mvData.movements : [];
-    // Steam = big moves (1+ point change)
-    var steam = movements.filter(function(m) { return m.change >= 1.0; })
-      .map(function(m) { return { player: m.player, market: m.market, oldLine: m.oldLine, newLine: m.newLine, change: m.change, direction: m.direction === 'up' ? 'UP' : 'DOWN', type: 'steam', reason: 'Line moved ' + m.change.toFixed(1) + ' points rapidly' }; });
+    var nhlData = await redisCache.getMovement("nhl");
+    if (nhlData && nhlData.movements) movements = movements.concat(nhlData.movements);
+    // Steam = any movement with change > 0 (lines that actually moved)
+    var steam = movements.filter(function(m) { return m.change > 0 && m.oldLine; })
+      .sort(function(a, b) { return (b.change || 0) - (a.change || 0); })
+      .map(function(m) { return { player: m.player, market: m.market, oldLine: m.oldLine, newLine: m.newLine, change: m.change, direction: m.direction === 'up' ? 'UP' : 'DOWN', type: 'steam', reason: 'Line moved ' + (m.change || 0).toFixed(1) + ' points' }; });
     res.json({ moves: steam, count: steam.length });
   } catch(e) { res.json({ moves: [], count: 0 }); }
 });
