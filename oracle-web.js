@@ -43,7 +43,7 @@ app.use("/api/", function(req, res, next) {
   if (!rateLimitMap[ip]) rateLimitMap[ip] = { count: 0, reset: now + 60000 };
   if (now > rateLimitMap[ip].reset) { rateLimitMap[ip] = { count: 0, reset: now + 60000 }; }
   rateLimitMap[ip].count++;
-  if (rateLimitMap[ip].count > 200) {
+  if (rateLimitMap[ip].count > 1000) {
     return res.status(429).json({ error: "Too many requests. Try again in a minute." });
   }
   next();
