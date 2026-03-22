@@ -772,6 +772,25 @@ try {
     }, 5 * 60 * 1000);
   }
 
+  // MEMORY WATCHDOG — auto-restart when memory exceeds 3GB
+  // Since all data lives in Redis, a restart loses nothing.
+  // The web server keeps serving users during restart.
+  setInterval(function() {
+    var rss = process.memoryUsage().rss;
+    var rssMB = Math.round(rss / 1024 / 1024);
+    if (rssMB > 3072) { // 3GB threshold
+      console.warn("[WATCHDOG] Memory at " + rssMB + "MB — exceeds 3GB limit. Graceful restart in 5 seconds...");
+      console.warn("[WATCHDOG] All data is in Redis. Web server unaffected. Worker will be back in 30 seconds.");
+      setTimeout(function() {
+        process.exit(1); // Railway will auto-restart due to restartPolicyType = ON_FAILURE
+      }, 5000);
+    } else if (rssMB > 2048) {
+      console.warn("[WATCHDOG] Memory at " + rssMB + "MB — approaching 3GB restart threshold");
+      // Try aggressive GC
+      if (global.gc) global.gc();
+    }
+  }, 60000); // Check every 60 seconds
+
   // Run advanced features every 5 minutes (grading, SGP, bankroll sim, alerts)
   try {
     var features = require("./services/oracle-features");
