@@ -619,33 +619,55 @@ try {
     }
   });
 
-  // Sync loop — calls internal endpoint once, writes everything to Redis
+  // Sync loop — direct memory access (no HTTP self-calls)
   setInterval(async function() {
     try {
       var synced = 0;
       var http = require("http");
       var PORT = process.env.PORT || 8080;
       
-      // Single internal call to collect all data
-      var dumpData = await new Promise(function(resolve) {
-        var data = '';
-        var req = http.get("http://localhost:" + PORT + "/internal/sync-dump", { timeout: 15000 }, function(resp) {
-          resp.on('data', function(chunk) { data += chunk; });
-          resp.on('end', function() {
-            try { resolve(JSON.parse(data)); } catch(e) { resolve(null); }
-            data = null;
-          });
-        });
-        req.on('error', function() { resolve(null); });
-        req.on('timeout', function() { req.destroy(); resolve(null); });
-      });
-
-      if (!dumpData || !dumpData.ok) {
-        console.warn("[Redis] Sync dump failed");
+      // Direct memory access — no HTTP call, no timeout risk
+      var d = {};
+      try {
+        // Props
+        for (var sport of ['nba', 'nhl', 'mlb']) {
+          try {
+            if (typeof getCachedProps === 'function') {
+              var p = await getCachedProps(sport);
+              if (p && p.props && p.props.length > 0) d['props_' + sport] = p;
+            }
+          } catch(e) {}
+        }
+        // Smart picks
+        if (smartPicks && smartPicks.picksCache) {
+          for (var sp of Object.keys(smartPicks.picksCache)) {
+            var c = smartPicks.picksCache[sp];
+            if (c && ((c.picks && c.picks.length > 0) || (c.props && c.props.length > 0))) d['picks_' + sp] = c;
+          }
+        }
+        // Games
+        if (gamePredictions && gamePredictions.gamesCache) {
+          for (var gs of Object.keys(gamePredictions.gamesCache)) {
+            var gc = gamePredictions.gamesCache[gs];
+            if (gc && gc.games && gc.games.length > 0) d['games_' + gs] = gc;
+          }
+        }
+        // EV
+        if (evEngine && evEngine.cache && evEngine.cache.evBets && evEngine.cache.evBets.length > 0) d.ev = evEngine.cache.evBets;
+        // POTD
+        if (potd && potd.cache && potd.cache.picks) d.potd = potd.cache.picks;
+        // Line movement
+        if (lineMovement && lineMovement.lineHistory) d.lineHistory = lineMovement.lineHistory;
+        // Trending
+        try { var tp = require("./services/trending-picks"); if (tp && tp.trendingCache) d.trending = tp.trendingCache; } catch(e) {}
+        // Accuracy
+        if (parlayBuilder && parlayBuilder.getHistoricalStats) { try { d.accuracy = parlayBuilder.getHistoricalStats(); } catch(e) {} }
+        // Sharp
+        if (sharpTools && sharpTools.getSnapshot) { try { d.sharp = sharpTools.getSnapshot(); } catch(e) {} }
+      } catch(e) {
+        console.warn("[Redis] Sync dump collect failed:", e.message);
         return;
       }
-
-      var d = dumpData.dump;
 
       // Write props
       for (var sport of ['nba', 'nhl', 'mlb']) {
@@ -679,7 +701,7 @@ try {
         await redisCache.setPOTD(d.potd);
         synced++;
       }
-      // Write line movement
+      // Write line movement — include ALL tracked props with snapshots
       if (d.lineHistory) {
         for (var mvSport of ['nba', 'nhl', 'mlb']) {
           var movements = [];
@@ -688,21 +710,22 @@ try {
             if (entry && entry.sport === mvSport && entry.snapshots && entry.snapshots.length >= 2) {
               var first = entry.snapshots[0];
               var last = entry.snapshots[entry.snapshots.length - 1];
-              movements.push({ player: entry.player, market: entry.market, oldLine: first.consensus, newLine: last.consensus, change: Math.abs(last.consensus - first.consensus), direction: last.consensus > first.consensus ? 'up' : 'down' });
+              var change = Math.abs(last.consensus - first.consensus);
+              movements.push({ player: entry.player, market: entry.market, sport: mvSport, oldLine: first.consensus, newLine: last.consensus, change: Math.round(change * 10) / 10, direction: last.consensus > first.consensus ? 'up' : 'down' });
             }
           });
-          if (movements.length > 0) {
-            movements.sort(function(a, b) { return b.change - a.change; });
-            await redisCache.setMovement(mvSport, { movements: movements, count: movements.length, timestamp: Date.now() });
-            synced++;
-          }
+          // Always write movement data (even empty) so web server has fresh timestamp
+          movements.sort(function(a, b) { return b.change - a.change; });
+          await redisCache.setMovement(mvSport, { movements: movements, count: movements.length, timestamp: Date.now() });
+          if (movements.length > 0) synced++;
         }
       }
-      // Write trending
+      // Write trending — web server reads data.picks (NOT data.trending)
       if (d.trending) {
         for (var ts of Object.keys(d.trending)) {
-          if (d.trending[ts] && d.trending[ts].length > 0) {
-            await redisCache.set("oracle:trending:" + ts, { trending: d.trending[ts], count: d.trending[ts].length }, 1800);
+          var trendData = d.trending[ts];
+          if (trendData && Array.isArray(trendData) && trendData.length > 0) {
+            await redisCache.set("oracle:trending:" + ts, { picks: trendData, count: trendData.length }, 1800);
             synced++;
           }
         }
@@ -800,14 +823,17 @@ try {
         }
       } catch(e) {}
 
-      // Auto-grader grades — sync from auto-grader module
+      // Auto-grader grades — sync to keys web server reads
       try {
         var autoGrader = require("./services/auto-grader");
         if (autoGrader && autoGrader.gradingStats) {
+          // Write to BOTH legacy and standard keys so web server can find them
+          await redisCache.set("oracle:grading_stats", autoGrader.gradingStats, 86400);
           await redisCache.set("oracle:grading_stats_legacy", autoGrader.gradingStats, 86400);
           synced++;
         }
         if (autoGrader && autoGrader.gradedPicks && autoGrader.gradedPicks.length > 0) {
+          await redisCache.set("oracle:graded_picks", autoGrader.gradedPicks, 86400);
           await redisCache.set("oracle:graded_picks_legacy", autoGrader.gradedPicks, 86400);
           synced++;
         }
