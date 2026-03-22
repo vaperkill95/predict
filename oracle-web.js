@@ -647,12 +647,26 @@ app.get("/api/cdl/props", async (req, res) => {
                 player: playerData.player, playerId: playerData.playerId,
                 team: playerData.team, teamName: playerData.teamName,
                 headshot: playerData.headshot, kd: playerData.kd,
+                // Enhanced player fields
+                bpRating: playerData.bpRating,
+                recentForm: playerData.recentForm,
+                matchWinPct: playerData.matchWinPct,
+                mapWinPct: playerData.mapWinPct,
+                firstBloods: playerData.firstBloods,
+                clutchTotal: playerData.clutchTotal,
+                // Prop fields
                 market: prop.market, marketLabel: prop.label,
                 line: prop.line, consensusLine: prop.line,
-                avg: prop.avg, games: prop.games,
+                avg: prop.avg, adjustedAvg: prop.adjustedAvg, games: prop.games,
                 edge: prop.edge,
                 suggestion: prop.suggestion || (prop.edge ? prop.edge.direction : null),
                 confidence: prop.edge ? prop.edge.confidence : 50,
+                // Enhanced prop fields
+                form: prop.form,
+                paceAdj: prop.paceAdj,
+                h2hAdj: prop.h2hAdj,
+                avgPerRound: prop.avgPerRound,
+                // Match context
                 game: (match.team1?.name || '?') + ' vs ' + (match.team2?.name || '?'),
                 matchId: match.matchId, scheduledAt: match.scheduledAt, status: match.status,
                 bookCount: prop.games || 1,
@@ -664,7 +678,7 @@ app.get("/api/cdl/props", async (req, res) => {
           });
         });
       });
-      return res.json({ props: props, matches: data.matches, count: props.length, source: "breakingpoint", lastUpdated: data.lastUpdated, totalPlayers: data.totalPlayers });
+      return res.json({ props: props, matches: data.matches, count: props.length, source: "breakingpoint", lastUpdated: data.lastUpdated, totalPlayers: data.totalPlayers, h2hRecord: data.matches?.[0]?.h2hRecord, teamPace: data.matches?.[0]?.team1?.pace });
     }
     // If worker stored flat format
     if (data && data.props && data.props.length > 0) return res.json(data);
@@ -748,18 +762,32 @@ app.get("/api/trending/:sport", async (req, res) => {
               pl.props.forEach(function(prop) {
                 if (!prop.edge || prop.edge.confidence < 50) return;
                 var signals = [];
-                if (prop.edge.confidence >= 65) signals.push({ type: 'demon', label: 'High Confidence (' + prop.edge.confidence + '%)' });
-                if (prop.edge.confidence >= 55) signals.push({ type: 'edge', label: 'Edge: ' + prop.edge.direction });
-                if (prop.games >= 5) signals.push({ type: 'books', label: prop.games + ' games sample' });
+                // Enhanced signal generation
+                if (prop.edge.confidence >= 70) signals.push({ type: 'demon', label: '🎯 Strong Edge (' + prop.edge.confidence + '%)' });
+                else if (prop.edge.confidence >= 60) signals.push({ type: 'edge', label: 'Edge: ' + prop.edge.direction + ' (' + prop.edge.confidence + '%)' });
+                if (prop.edge.consistency === 'very_consistent') signals.push({ type: 'consistent', label: '🔒 Very Consistent' });
+                else if (prop.edge.consistency === 'consistent') signals.push({ type: 'consistent', label: '📊 Consistent' });
+                if (prop.form === 'hot') signals.push({ type: 'movement', label: '🔥 Hot Streak', direction: 'UP' });
+                else if (prop.form === 'cold') signals.push({ type: 'movement', label: '❄️ Cold Streak', direction: 'DOWN' });
+                if (prop.games >= 10) signals.push({ type: 'books', label: prop.games + ' games sample' });
+                if (prop.paceAdj && prop.paceAdj > 1.03) signals.push({ type: 'pace', label: '⚡ Fast Pace Matchup' });
+
+                // Enhanced trending score: weighted combination of confidence, consistency, sample size, form
+                var consistencyBonus = prop.edge.consistency === 'very_consistent' ? 15 : prop.edge.consistency === 'consistent' ? 8 : 0;
+                var formBonus = prop.form === 'hot' ? 8 : prop.form === 'cold' ? -5 : 0;
+                var sampleBonus = Math.min(10, (prop.games || 0) * 0.5);
+                var trendingScore = Math.min(100, prop.edge.confidence + consistencyBonus + formBonus + sampleBonus);
+
                 cdlPicks.push({
                   player: pl.player, team: pl.team, market: prop.market, marketLabel: prop.label,
-                  consensusLine: prop.line, line: prop.line,
+                  consensusLine: prop.line, line: prop.line, avg: prop.avg, adjustedAvg: prop.adjustedAvg,
                   bookCount: prop.games || 1, lineType: prop.edge.confidence >= 65 ? 'demon' : 'standard',
                   hasEdge: prop.edge.confidence >= 55,
                   game: (match.team1?.name || '?') + ' vs ' + (match.team2?.name || '?'),
-                  trendingScore: Math.min(100, prop.edge.confidence + (prop.games || 0) * 2),
+                  trendingScore: trendingScore,
                   signals: signals,
-                  kd: pl.kd, avg: prop.avg,
+                  kd: pl.kd, bpRating: pl.bpRating, recentForm: pl.recentForm,
+                  edge: prop.edge,
                 });
               });
             });
