@@ -213,9 +213,11 @@ app.get("/api/games/:sport", async (req, res) => {
         var awayName = away ? away.team.displayName : 'TBD';
         // Parse spread value from odds.details (e.g. "DEN -8.5")
         var spreadVal = 0;
+        var spreadAbbr = home ? home.team.abbreviation : '';
         if (odds.details) {
-          var parts = odds.details.match(/([-+]?\d+\.?\d*)/);
-          if (parts) spreadVal = parseFloat(parts[1]);
+          var teamMatch = odds.details.match(/([A-Z]{2,4})\s*([-+]?\d+\.?\d*)/);
+          if (teamMatch) { spreadAbbr = teamMatch[1]; spreadVal = parseFloat(teamMatch[2]); }
+          else { var numMatch = odds.details.match(/([-+]?\d+\.?\d*)/); if (numMatch) spreadVal = parseFloat(numMatch[1]); }
         }
         // Build consensus object that game-predictions.html expects
         var consensus = {
@@ -228,7 +230,9 @@ app.get("/api/games/:sport", async (req, res) => {
         var homeWins = parseInt(homeRecord) || 0;
         var awayWins = parseInt(awayRecord) || 0;
         var favorite = homeWins > awayWins ? homeName : awayName;
+        var favAbbr = homeWins > awayWins ? (home ? home.team.abbreviation : '') : (away ? away.team.abbreviation : '');
         var conf = Math.min(78, 55 + Math.abs(homeWins - awayWins));
+        var totalConf = Math.max(50, conf - 5);
         return {
           id: e.id,
           homeTeam: homeName,
@@ -246,13 +250,17 @@ app.get("/api/games/:sport", async (req, res) => {
           awayScore: away ? away.score : '0',
           consensus: consensus,
           odds: { spread: odds.details, overUnder: odds.overUnder, provider: odds.provider ? odds.provider.name : null },
-          prediction: {
-            winner: favorite,
-            confidence: conf,
-            spread: { pick: homeName, line: spreadVal, confidence: conf },
-            total: { side: 'OVER', line: odds.overUnder || 220, confidence: Math.max(50, conf - 5) },
-            moneyline: { pick: favorite, confidence: conf },
+          predictions: {
+            spread: { confidence: conf, abbr: spreadAbbr, spread: spreadVal || 0, direction: spreadAbbr === (home ? home.team.abbreviation : '') ? 'home' : 'away', bestOdds: null },
+            total: { confidence: totalConf, side: (odds.overUnder || 220) >= 220 ? 'OVER' : 'UNDER', total: odds.overUnder || 220, bestOver: null, bestUnder: null },
+            winner: { abbr: favAbbr, confidence: conf, bestOdds: null },
           },
+          prediction: { winner: favorite, confidence: conf, spread: { pick: homeName, line: spreadVal, confidence: conf }, total: { side: 'OVER', line: odds.overUnder || 220, confidence: totalConf }, moneyline: { pick: favorite, confidence: conf } },
+          bestBet: conf >= 65 ? { pick: favAbbr + ' ' + (spreadVal > 0 ? '+' : '') + (spreadVal || 0), type: 'Spread', confidence: conf } : null,
+          bestOdds: null,
+          lineShop: null,
+          bookCount: 1,
+          environment: conf >= 70 ? 'Blowout Expected' : conf >= 60 ? 'Standard' : 'Toss-Up',
           venue: comp.venue ? comp.venue.fullName : null,
           broadcast: comp.broadcasts && comp.broadcasts[0] ? comp.broadcasts[0].names.join(', ') : null,
         };

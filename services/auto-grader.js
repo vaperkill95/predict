@@ -23,9 +23,13 @@ const fs = require('fs');
 const path = require('path');
 const router = express.Router();
 
-const PORT = process.env.PORT || 3001;
+const PORT = process.env.PORT || 8080;
 const GRADE_INTERVAL_MS = 30 * 60 * 1000; // 30 min
 const GRADES_FILE = path.join(__dirname, '..', 'data', 'graded-picks.json');
+
+// Redis cache for persistence across deploys
+let redisCache = null;
+try { redisCache = require('./redis-cache'); } catch(e) {}
 
 // Graded picks storage
 let gradedPicks = []; // [{ date, player, market, line, pick, actual, result, hit, confidence, grade, game, sport }]
@@ -34,14 +38,41 @@ let gradingStats = { total: 0, hits: 0, misses: 0, pending: 0, lastGraded: null,
   get overall() { return { total: this.total, hits: this.hits, misses: this.misses, hitRate: this.total > 0 ? Math.round((this.hits / this.total) * 1000) / 10 : 0, pending: this.pending }; }
 };
 
-// Load persisted grades on startup
-function loadGrades() {
+// Load persisted grades — try Redis first, then disk
+async function loadGrades() {
+  // Try Redis first (survives deploys)
+  try {
+    if (redisCache) {
+      var rGrades = await redisCache.get("oracle:graded_picks");
+      var rStats = await redisCache.get("oracle:grading_stats");
+      if (!rGrades) rGrades = await redisCache.get("oracle:graded_picks_legacy");
+      if (!rStats) rStats = await redisCache.get("oracle:grading_stats_legacy");
+      if (rGrades && rGrades.length > 0) {
+        gradedPicks = rGrades;
+        console.log('[AutoGrader] Loaded ' + gradedPicks.length + ' graded picks from Redis');
+      }
+      if (rStats && rStats.total > 0) {
+        gradingStats.total = rStats.total || rStats.overall?.total || 0;
+        gradingStats.hits = rStats.hits || rStats.overall?.hits || 0;
+        gradingStats.misses = rStats.misses || rStats.overall?.misses || 0;
+        gradingStats.pending = rStats.pending || rStats.overall?.pending || 0;
+        gradingStats.lastGraded = rStats.lastGraded || null;
+        console.log('[AutoGrader] Loaded stats from Redis: ' + gradingStats.total + ' total, ' + gradingStats.hits + ' hits');
+      }
+      if (gradedPicks.length > 0) return; // Got data from Redis, skip disk
+    }
+  } catch(e) { console.warn('[AutoGrader] Redis load failed:', e.message); }
+  // Fallback to disk
   try {
     if (fs.existsSync(GRADES_FILE)) {
       const data = JSON.parse(fs.readFileSync(GRADES_FILE, 'utf8'));
       gradedPicks = data.picks || [];
-      gradingStats = data.stats || gradingStats;
-      console.log(`[AutoGrader] Loaded ${gradedPicks.length} graded picks from disk`);
+      if (data.stats) {
+        gradingStats.total = data.stats.total || 0;
+        gradingStats.hits = data.stats.hits || 0;
+        gradingStats.misses = data.stats.misses || 0;
+      }
+      console.log('[AutoGrader] Loaded ' + gradedPicks.length + ' graded picks from disk');
     }
   } catch (e) {
     console.warn('[AutoGrader] Could not load grades file:', e.message);
@@ -49,13 +80,22 @@ function loadGrades() {
 }
 
 function saveGrades() {
+  // Save to Redis (survives deploys)
+  try {
+    if (redisCache) {
+      var statsObj = { total: gradingStats.total, hits: gradingStats.hits, misses: gradingStats.misses, pending: gradingStats.pending, lastGraded: gradingStats.lastGraded, overall: gradingStats.overall };
+      redisCache.set("oracle:grading_stats", statsObj, 86400);
+      redisCache.set("oracle:grading_stats_legacy", statsObj, 86400);
+      redisCache.set("oracle:graded_picks", gradedPicks.slice(-500), 86400);
+      redisCache.set("oracle:graded_picks_legacy", gradedPicks.slice(-500), 86400);
+    }
+  } catch(e) { console.warn('[AutoGrader] Redis save failed:', e.message); }
+  // Also save to disk as backup
   try {
     const dir = path.dirname(GRADES_FILE);
     if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-    fs.writeFileSync(GRADES_FILE, JSON.stringify({ picks: gradedPicks.slice(-500), stats: gradingStats }, null, 2));
-  } catch (e) {
-    console.warn('[AutoGrader] Could not save grades:', e.message);
-  }
+    fs.writeFileSync(GRADES_FILE, JSON.stringify({ picks: gradedPicks.slice(-500), stats: { total: gradingStats.total, hits: gradingStats.hits, misses: gradingStats.misses, pending: gradingStats.pending, lastGraded: gradingStats.lastGraded } }, null, 2));
+  } catch (e) {}
 }
 
 // ============================================================
@@ -166,20 +206,29 @@ async function fetchFinishedGames() {
 // Grading Engine
 // ============================================================
 
-function mapMarketToStat(market) {
+function mapMarketToStat(market, sport) {
   if (!market) return null;
   const m = market.toLowerCase();
   // NBA
-  if (m.includes('point') || m === 'pts') return 'pts';
-  if (m.includes('rebound') || m === 'reb') return 'reb';
-  if (m.includes('assist') || m === 'ast') return 'ast';
-  if (m.includes('3pt') || m.includes('three') || m.includes('fg3') || m.includes('3-pointer')) return 'fg3';
-  if (m.includes('steal')) return 'stl';
-  if (m.includes('block')) return 'blk';
+  if (sport === 'nba') {
+    if (m.includes('point') || m === 'pts' || m === 'player_points') return 'pts';
+    if (m.includes('rebound') || m === 'reb' || m === 'player_rebounds') return 'reb';
+    if (m.includes('assist') || m === 'ast' || m === 'player_assists') return 'ast';
+    if (m.includes('3pt') || m.includes('three') || m.includes('fg3') || m.includes('3-pointer') || m === 'player_threes') return 'fg3';
+    if (m.includes('steal')) return 'stl';
+    if (m.includes('block')) return 'blk';
+    if (m.includes('pra') || m.includes('pts+reb+ast') || m === 'player_points_rebounds_assists') return 'pra'; // special combo
+  }
   // NHL
+  if (sport === 'nhl') {
+    if (m.includes('goal') || m === 'player_goals') return 'goals';
+    if (m.includes('shot') || m.includes('sog') || m === 'player_shots_on_goal') return 'sog';
+    if (m.includes('assist') || m === 'player_assists') return 'assists_nhl';
+    if (m.includes('point') || m === 'player_points') return 'pts_nhl';
+  }
+  // Generic fallbacks
+  if (m.includes('point') || m === 'pts') return 'pts';
   if (m.includes('goal')) return 'goals';
-  if (m.includes('shot') || m.includes('sog')) return 'sog';
-  if (m === 'points' || m === 'player_points') return 'pts'; // Could be NBA pts or NHL pts
   return null;
 }
 
@@ -193,7 +242,7 @@ async function gradePicksRound() {
   for (const gradeSport of ['nba', 'nhl']) {
     var picks = [];
     try {
-      // Try direct cache access first
+      // Try direct cache access first (no HTTP)
       try {
         var smartPicks = require('./smart-picks');
         if (smartPicks && smartPicks.picksCache && smartPicks.picksCache[gradeSport]) {
@@ -204,19 +253,26 @@ async function gradePicksRound() {
         }
       } catch(e) {}
 
-      // Fallback to HTTP
-      if (picks.length === 0) {
+      // Fallback: try Redis cache
+      if (picks.length === 0 && redisCache) {
         try {
-          var resp = await axios.get('http://localhost:' + PORT + '/api/picks/' + gradeSport, { timeout: 10000 });
-          picks = resp.data && resp.data.picks ? resp.data.picks : [];
+          var rPicks = await redisCache.getPicks(gradeSport);
+          if (rPicks && rPicks.picks && rPicks.picks.length > 0) picks = rPicks.picks;
         } catch(e) {}
       }
 
-      // Fallback: build grading picks from raw demon/edge props
+      // Fallback: build grading picks from raw demon/edge props (direct cache or Redis)
       if (picks.length === 0) {
         try {
-          var propsResp = await axios.get('http://localhost:' + PORT + '/api/props/' + gradeSport, { timeout: 10000 });
-          var rawProps = propsResp.data && propsResp.data.props ? propsResp.data.props : [];
+          var rawProps = [];
+          // Try direct props cache
+          if (typeof getCachedProps === 'function') {
+            try { var p = await getCachedProps(gradeSport); rawProps = p && p.props ? p.props : []; } catch(e) {}
+          }
+          // Try Redis
+          if (rawProps.length === 0 && redisCache) {
+            try { var rp = await redisCache.getProps(gradeSport); rawProps = rp && rp.props ? rp.props : []; } catch(e) {}
+          }
           var demons = rawProps.filter(function(p) { return p.lineType === 'demon' || (p.hasEdge && p.bookCount >= 5); });
           picks = demons.map(function(p) {
             return {
@@ -234,36 +290,70 @@ async function gradePicksRound() {
       }
     } catch (e) {}
 
-    if (picks.length === 0) continue;
+    if (picks.length === 0) {
+      console.log('[AutoGrader] ' + gradeSport + ': No picks found to grade');
+      continue;
+    }
+    console.log('[AutoGrader] ' + gradeSport + ': Found ' + picks.length + ' picks to grade');
 
     // Get finished games for this sport
     var espnPath = gradeSport === 'nba' ? 'basketball/nba' : gradeSport === 'nhl' ? 'hockey/nhl' : null;
     if (!espnPath) continue;
 
     var finishedGames = [];
+    // Try Redis first (scores already synced by worker)
     try {
-      var fResp = await axios.get('https://site.api.espn.com/apis/site/v2/sports/' + espnPath + '/scoreboard', { timeout: 10000 });
-      for (var event of (fResp.data?.events || [])) {
-        if (event.status?.type?.name === 'STATUS_FINAL') {
-          finishedGames.push({
-            id: event.id,
-            name: event.name,
-            date: event.date,
-            homeTeam: event.competitions?.[0]?.competitors?.find(c => c.homeAway === 'home')?.team?.abbreviation,
-            awayTeam: event.competitions?.[0]?.competitors?.find(c => c.homeAway === 'away')?.team?.abbreviation,
-          });
+      if (redisCache) {
+        var scoresData = await redisCache.get("oracle:scores:" + gradeSport);
+        if (scoresData && scoresData.events) {
+          for (var event of scoresData.events) {
+            if (event.status?.type?.name === 'STATUS_FINAL') {
+              finishedGames.push({
+                id: event.id,
+                name: event.name,
+                date: event.date,
+                homeTeam: event.competitions?.[0]?.competitors?.find(c => c.homeAway === 'home')?.team?.abbreviation,
+                awayTeam: event.competitions?.[0]?.competitors?.find(c => c.homeAway === 'away')?.team?.abbreviation,
+              });
+            }
+          }
         }
       }
     } catch(e) {}
+    // Fallback to ESPN API
+    if (finishedGames.length === 0) {
+      try {
+        var fResp = await axios.get('https://site.api.espn.com/apis/site/v2/sports/' + espnPath + '/scoreboard', { timeout: 10000 });
+        for (var event of (fResp.data?.events || [])) {
+          if (event.status?.type?.name === 'STATUS_FINAL') {
+            finishedGames.push({
+              id: event.id,
+              name: event.name,
+              date: event.date,
+              homeTeam: event.competitions?.[0]?.competitors?.find(c => c.homeAway === 'home')?.team?.abbreviation,
+              awayTeam: event.competitions?.[0]?.competitors?.find(c => c.homeAway === 'away')?.team?.abbreviation,
+            });
+          }
+        }
+      } catch(e) {}
+    }
 
-    if (finishedGames.length === 0) continue;
+    if (finishedGames.length === 0) {
+      console.log('[AutoGrader] ' + gradeSport + ': No finished games found');
+      continue;
+    }
+    console.log('[AutoGrader] ' + gradeSport + ': Found ' + finishedGames.length + ' finished games');
 
     var newGrades = 0;
 
     for (const game of finishedGames) {
+      // Match picks to games — check team abbreviation OR full team name in game string
       var gamePicks = picks.filter(function(p) {
         var gameStr = (p.game || '').toLowerCase();
-        return gameStr.includes((game.homeTeam || '').toLowerCase()) || gameStr.includes((game.awayTeam || '').toLowerCase());
+        var homeAbbr = (game.homeTeam || '').toLowerCase();
+        var awayAbbr = (game.awayTeam || '').toLowerCase();
+        var homeName = (game.name || '').toLowerCase();
+        return gameStr.includes(homeAbbr) || gameStr.includes(awayAbbr) || homeName.includes(gameStr.split(' ')[0] || '---');
       });
       if (gamePicks.length === 0) continue;
 
@@ -319,10 +409,15 @@ async function gradePicksRound() {
         var playerStats = players[pick.player];
         if (!playerStats) continue;
 
-        var statKey = mapMarketToStat(pick.market);
+        var statKey = mapMarketToStat(pick.market, gradeSport);
         if (!statKey) continue;
 
-        var actual = playerStats[statKey];
+        var actual;
+        if (statKey === 'pra' && playerStats.pts !== undefined) {
+          actual = (playerStats.pts || 0) + (playerStats.reb || 0) + (playerStats.ast || 0);
+        } else {
+          actual = playerStats[statKey];
+        }
         if (actual === undefined) continue;
 
         var hit = pick.pick === 'OVER' ? actual > pick.line : actual < pick.line;
@@ -367,7 +462,9 @@ async function gradePicksRound() {
 
 function startGrading() {
   console.log('[AutoGrader] Starting auto-grading (every 30 min)');
-  loadGrades();
+  
+  // Load grades from Redis/disk (async)
+  loadGrades().catch(function(e) { console.warn('[AutoGrader] Load grades error:', e.message); });
 
   // Initial grade after 2 minutes
   setTimeout(() => {
