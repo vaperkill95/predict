@@ -43,13 +43,14 @@ table{width:100%;border-collapse:collapse;font-size:12px;}th{text-align:left;pad
   <div class="card">
     <h3 style="font-family:var(--font-display);font-weight:700;margin-bottom:12px;">Add Legs to Your Parlay</h3>
     <div style="display:grid;grid-template-columns:1fr 1fr 1fr 80px 90px auto;gap:8px;align-items:end;margin-bottom:12px;" id="legForm">
-      <div><label style="font-size:10px;color:var(--text-muted);">Player</label><input type="text" id="legPlayer" placeholder="Brunson" style="width:100%"></div>
+      <div><label style="font-size:10px;color:var(--text-muted);">Player</label><input type="text" id="legPlayer" placeholder="Start typing..." list="playerSuggestions" style="width:100%" autocomplete="off"><datalist id="playerSuggestions"></datalist></div>
       <div><label style="font-size:10px;color:var(--text-muted);">Market</label><select id="legMarket" style="width:100%"><option>Points</option><option>Rebounds</option><option>Assists</option><option>3-Pointers</option></select></div>
-      <div><label style="font-size:10px;color:var(--text-muted);">Game</label><input type="text" id="legGame" placeholder="NYK vs BOS" style="width:100%"></div>
+      <div><label style="font-size:10px;color:var(--text-muted);">Game</label><select id="legGame" style="width:100%"><option value="">Select game...</option></select></div>
       <div><label style="font-size:10px;color:var(--text-muted);">Line</label><input type="number" id="legLine" placeholder="27.5" step="0.5" style="width:100%"></div>
       <div><label style="font-size:10px;color:var(--text-muted);">Direction</label><select id="legDir" style="width:100%"><option value="OVER">OVER</option><option value="UNDER">UNDER</option></select></div>
       <button class="btn btn-primary" onclick="addLeg()" style="height:34px;">+ Add</button>
     </div>
+    <div id="legError" style="display:none;color:var(--red);font-size:12px;margin-bottom:8px;padding:6px 10px;background:#ef444415;border-radius:6px;">Please enter a player name and line value</div>
     <div id="parlayLegs"></div>
   </div>
   <div id="parlayAnalysis"></div>
@@ -116,17 +117,115 @@ document.querySelectorAll('.tab').forEach(tab => {
 
 // ========== PARLAY BUILDER ==========
 let parlayLegs = [];
+let _propsCache = [];
+
+// Auto-populate games dropdown and player suggestions from live props
+(async function populateForm() {
+  try {
+    // Load today's games
+    var gamesResp = await fetch('/api/sports/scores/nba');
+    var gamesData = await gamesResp.json();
+    var gameSelect = document.getElementById('legGame');
+    if (gamesData.games && gamesData.games.length > 0) {
+      gamesData.games.forEach(function(g) {
+        var opt = document.createElement('option');
+        var away = g.away ? g.away.abbreviation || g.away.name : g.awayTeam || '';
+        var home = g.home ? g.home.abbreviation || g.home.name : g.homeTeam || '';
+        opt.value = (away + ' @ ' + home) || g.name || g.shortName || '';
+        opt.textContent = opt.value;
+        gameSelect.appendChild(opt);
+      });
+    }
+    // Load props for player suggestions
+    var propsResp = await fetch('/api/props/nba');
+    var propsData = await propsResp.json();
+    _propsCache = propsData.props || [];
+    var datalist = document.getElementById('playerSuggestions');
+    var seen = {};
+    _propsCache.forEach(function(p) {
+      if (p.player && !seen[p.player]) {
+        seen[p.player] = true;
+        var opt = document.createElement('option');
+        opt.value = p.player;
+        datalist.appendChild(opt);
+      }
+    });
+    // Auto-fill line when player is selected
+    document.getElementById('legPlayer').addEventListener('change', function() {
+      var name = this.value;
+      var market = document.getElementById('legMarket').value.toLowerCase();
+      var match = _propsCache.find(function(p) {
+        return p.player === name && (p.marketLabel || '').toLowerCase().includes(market);
+      });
+      if (match) {
+        document.getElementById('legLine').value = match.consensusLine || match.line || '';
+        if (match.game) {
+          var opts = document.getElementById('legGame').options;
+          for (var i = 0; i < opts.length; i++) {
+            if (match.game.includes(opts[i].value) || opts[i].value.includes(match.game)) {
+              document.getElementById('legGame').selectedIndex = i;
+              break;
+            }
+          }
+        }
+      }
+    });
+  } catch(e) { console.warn('Form populate failed:', e.message); }
+})();
+let loadedProps = []; // Props from API for autocomplete
+
+// Load today's props for player autocomplete and game dropdown
+async function loadPropsForBuilder() {
+  try {
+    const resp = await fetch('/api/props/nba');
+    const data = await resp.json();
+    loadedProps = data.props || [];
+    // Populate player datalist
+    const dl = document.getElementById('playerSuggestions');
+    const seen = new Set();
+    dl.innerHTML = loadedProps.map(p => {
+      if (seen.has(p.player)) return '';
+      seen.add(p.player);
+      return '<option value="' + p.player + '">';
+    }).join('');
+    // Populate game dropdown
+    const gameSelect = document.getElementById('legGame');
+    const games = new Set();
+    loadedProps.forEach(p => { if (p.game) games.add(p.game); });
+    gameSelect.innerHTML = '<option value="">Select game...</option>' + Array.from(games).map(g => '<option value="' + g + '">' + g + '</option>').join('');
+  } catch(e) {}
+}
+
+// When player is selected, auto-fill line from props
+document.getElementById('legPlayer').addEventListener('change', function() {
+  const name = this.value;
+  const market = document.getElementById('legMarket').value;
+  const marketMap = { 'Points': 'player_points', 'Rebounds': 'player_rebounds', 'Assists': 'player_assists', '3-Pointers': 'player_threes' };
+  const prop = loadedProps.find(p => p.player === name && (p.market === marketMap[market] || (p.marketLabel || '').includes(market)));
+  if (prop) {
+    document.getElementById('legLine').value = prop.consensusLine || prop.line || '';
+    if (prop.game) document.getElementById('legGame').value = prop.game;
+  }
+});
 
 function addLeg() {
+  const player = document.getElementById('legPlayer').value.trim();
+  const line = parseFloat(document.getElementById('legLine').value);
+  const errEl = document.getElementById('legError');
+  if (!player || !line) {
+    errEl.style.display = 'block';
+    setTimeout(() => { errEl.style.display = 'none'; }, 3000);
+    return;
+  }
+  errEl.style.display = 'none';
   const leg = {
-    player: document.getElementById('legPlayer').value,
+    player: player,
     market: document.getElementById('legMarket').value,
     game: document.getElementById('legGame').value,
-    line: parseFloat(document.getElementById('legLine').value) || 0,
+    line: line,
     direction: document.getElementById('legDir').value,
     odds: -110,
   };
-  if (!leg.player || !leg.line) return;
   parlayLegs.push(leg);
   document.getElementById('legPlayer').value = '';
   document.getElementById('legLine').value = '';
@@ -296,6 +395,7 @@ renderParlay();
 loadLive();
 loadHistory();
 renderAlerts();
+loadPropsForBuilder();
 setInterval(loadLive, 30000);
 </script>
 </body>

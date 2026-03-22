@@ -555,9 +555,12 @@ try {
     }
   })();
 
-  // === SYNC TO REDIS — Single internal call collects ALL data, writes to Redis ===
-  // This replaces the broken individual module access approach.
-  // The worker's Express routes already format data correctly — we just call them once.
+  // === BUILT-IN LINE MOVEMENT TRACKER ===
+  // The external lineMovement module snapshots 0 changes, so we track inline.
+  // Each sync cycle: save current lines, compare to previous, write movements to Redis.
+  var _prevLineSnapshots = {}; // { "player__market__sport": consensusLine }
+
+  // === SYNC TO REDIS — Direct memory access, writes to Redis ===
   
   // Internal endpoint that dumps all data for Redis sync (not exposed publicly)
   app.get("/internal/sync-dump", async function(req, res) {
@@ -619,17 +622,16 @@ try {
     }
   });
 
-  // Sync loop — direct memory access (no HTTP self-calls)
+  // Sync loop — direct memory access (no HTTP self-calls that timeout)
   setInterval(async function() {
     try {
       var synced = 0;
       var http = require("http");
       var PORT = process.env.PORT || 8080;
       
-      // Direct memory access — no HTTP call, no timeout risk
+      // Collect all data directly from memory — no HTTP call needed
       var d = {};
       try {
-        // Props
         for (var sport of ['nba', 'nhl', 'mlb']) {
           try {
             if (typeof getCachedProps === 'function') {
@@ -638,35 +640,26 @@ try {
             }
           } catch(e) {}
         }
-        // Smart picks
         if (smartPicks && smartPicks.picksCache) {
           for (var sp of Object.keys(smartPicks.picksCache)) {
             var c = smartPicks.picksCache[sp];
             if (c && ((c.picks && c.picks.length > 0) || (c.props && c.props.length > 0))) d['picks_' + sp] = c;
           }
         }
-        // Games
         if (gamePredictions && gamePredictions.gamesCache) {
           for (var gs of Object.keys(gamePredictions.gamesCache)) {
             var gc = gamePredictions.gamesCache[gs];
             if (gc && gc.games && gc.games.length > 0) d['games_' + gs] = gc;
           }
         }
-        // EV
         if (evEngine && evEngine.cache && evEngine.cache.evBets && evEngine.cache.evBets.length > 0) d.ev = evEngine.cache.evBets;
-        // POTD
         if (potd && potd.cache && potd.cache.picks) d.potd = potd.cache.picks;
-        // Line movement
         if (lineMovement && lineMovement.lineHistory) d.lineHistory = lineMovement.lineHistory;
-        // Trending
         try { var tp = require("./services/trending-picks"); if (tp && tp.trendingCache) d.trending = tp.trendingCache; } catch(e) {}
-        // Accuracy
         if (parlayBuilder && parlayBuilder.getHistoricalStats) { try { d.accuracy = parlayBuilder.getHistoricalStats(); } catch(e) {} }
-        // Sharp
         if (sharpTools && sharpTools.getSnapshot) { try { d.sharp = sharpTools.getSnapshot(); } catch(e) {} }
       } catch(e) {
-        console.warn("[Redis] Sync dump collect failed:", e.message);
-        return;
+        console.warn("[Redis] Data collection error:", e.message);
       }
 
       // Write props
@@ -701,31 +694,63 @@ try {
         await redisCache.setPOTD(d.potd);
         synced++;
       }
-      // Write line movement — include ALL tracked props with snapshots
-      if (d.lineHistory) {
-        for (var mvSport of ['nba', 'nhl', 'mlb']) {
-          var movements = [];
+      // Write line movement — built-in tracker (compare current vs previous snapshot)
+      var _currentSnapshots = {};
+      var allMovements = {};
+      for (var mvSport of ['nba', 'nhl', 'mlb']) {
+        allMovements[mvSport] = [];
+        if (d['props_' + mvSport]) {
+          var mvProps = d['props_' + mvSport].props || [];
+          for (var mp of mvProps) {
+            if (!mp.player || !mp.market || !mp.consensusLine) continue;
+            var snapKey = mp.player + '__' + mp.market + '__' + mvSport;
+            _currentSnapshots[snapKey] = { line: mp.consensusLine, player: mp.player, market: mp.market, sport: mvSport, game: mp.game };
+            // Compare to previous snapshot
+            if (_prevLineSnapshots[snapKey] && _prevLineSnapshots[snapKey].line !== mp.consensusLine) {
+              var oldLine = _prevLineSnapshots[snapKey].line;
+              var newLine = mp.consensusLine;
+              var change = Math.abs(newLine - oldLine);
+              if (change > 0) {
+                allMovements[mvSport].push({
+                  player: mp.player, market: mp.market, sport: mvSport, game: mp.game,
+                  oldLine: oldLine, newLine: newLine,
+                  change: Math.round(change * 10) / 10,
+                  direction: newLine > oldLine ? 'up' : 'down',
+                });
+              }
+            }
+          }
+        }
+        // Also merge in any from the external lineMovement module
+        if (d.lineHistory) {
           Object.keys(d.lineHistory).forEach(function(key) {
             var entry = d.lineHistory[key];
             if (entry && entry.sport === mvSport && entry.snapshots && entry.snapshots.length >= 2) {
               var first = entry.snapshots[0];
               var last = entry.snapshots[entry.snapshots.length - 1];
-              var change = Math.abs(last.consensus - first.consensus);
-              movements.push({ player: entry.player, market: entry.market, sport: mvSport, oldLine: first.consensus, newLine: last.consensus, change: Math.round(change * 10) / 10, direction: last.consensus > first.consensus ? 'up' : 'down' });
+              if (first.consensus !== last.consensus) {
+                var exists = allMovements[mvSport].find(function(m) { return m.player === entry.player && m.market === entry.market; });
+                if (!exists) {
+                  allMovements[mvSport].push({ player: entry.player, market: entry.market, sport: mvSport, oldLine: first.consensus, newLine: last.consensus, change: Math.round(Math.abs(last.consensus - first.consensus) * 10) / 10, direction: last.consensus > first.consensus ? 'up' : 'down' });
+                }
+              }
             }
           });
-          // Always write movement data (even empty) so web server has fresh timestamp
-          movements.sort(function(a, b) { return b.change - a.change; });
-          await redisCache.setMovement(mvSport, { movements: movements, count: movements.length, timestamp: Date.now() });
-          if (movements.length > 0) synced++;
         }
+        allMovements[mvSport].sort(function(a, b) { return b.change - a.change; });
+        await redisCache.setMovement(mvSport, { movements: allMovements[mvSport], count: allMovements[mvSport].length, timestamp: Date.now() });
+        if (allMovements[mvSport].length > 0) synced++;
       }
-      // Write trending — web server reads data.picks (NOT data.trending)
+      // Update previous snapshots for next cycle
+      _prevLineSnapshots = _currentSnapshots;
+      var totalMoves = Object.values(allMovements).reduce(function(sum, arr) { return sum + arr.length; }, 0);
+      if (totalMoves > 0) console.log("Line movement: detected " + totalMoves + " changes across " + Object.keys(allMovements).length + " sports");
+      // Write trending — web server reads data.picks NOT data.trending
       if (d.trending) {
         for (var ts of Object.keys(d.trending)) {
-          var trendData = d.trending[ts];
-          if (trendData && Array.isArray(trendData) && trendData.length > 0) {
-            await redisCache.set("oracle:trending:" + ts, { picks: trendData, count: trendData.length }, 1800);
+          var tArr = d.trending[ts];
+          if (tArr && Array.isArray(tArr) && tArr.length > 0) {
+            await redisCache.set("oracle:trending:" + ts, { picks: tArr, count: tArr.length }, 1800);
             synced++;
           }
         }
@@ -735,17 +760,25 @@ try {
         await redisCache.setAccuracy(d.accuracy);
         synced++;
       }
-      // Write sharp snapshot
-      var sharpData = { evBets: d.ev || [], movements: [], timestamp: new Date().toISOString() };
-      if (d.lineHistory) {
+      // Write sharp snapshot — include movements from our built-in tracker
+      var sharpMovements = [];
+      if (allMovements) {
+        for (var shSport of Object.keys(allMovements)) {
+          sharpMovements = sharpMovements.concat(allMovements[shSport]);
+        }
+      }
+      // Also merge from external lineHistory if we have it
+      if (sharpMovements.length === 0 && d.lineHistory) {
         Object.keys(d.lineHistory).forEach(function(key) {
           var entry = d.lineHistory[key];
           if (entry && entry.snapshots && entry.snapshots.length >= 2) {
             var first = entry.snapshots[0], last = entry.snapshots[entry.snapshots.length - 1];
-            if (first.consensus !== last.consensus) sharpData.movements.push({ player: entry.player, market: entry.market, oldLine: first.consensus, newLine: last.consensus, change: last.consensus - first.consensus });
+            if (first.consensus !== last.consensus) sharpMovements.push({ player: entry.player, market: entry.market, oldLine: first.consensus, newLine: last.consensus, change: Math.round(Math.abs(last.consensus - first.consensus) * 10) / 10 });
           }
         });
       }
+      sharpMovements.sort(function(a, b) { return (b.change || 0) - (a.change || 0); });
+      var sharpData = { evBets: d.ev || [], movements: sharpMovements, propsTracked: Object.keys(_currentSnapshots || {}).length, timestamp: new Date().toISOString() };
       await redisCache.set("oracle:sharp_snapshot", sharpData, 1800);
       synced++;
 
@@ -827,7 +860,6 @@ try {
       try {
         var autoGrader = require("./services/auto-grader");
         if (autoGrader && autoGrader.gradingStats) {
-          // Write to BOTH legacy and standard keys so web server can find them
           await redisCache.set("oracle:grading_stats", autoGrader.gradingStats, 86400);
           await redisCache.set("oracle:grading_stats_legacy", autoGrader.gradingStats, 86400);
           synced++;

@@ -199,21 +199,62 @@ app.get("/api/games/:sport", async (req, res) => {
     if (data && data.games && data.games.length > 0) {
       return res.json({ games: data.games, count: data.games.length, source: "redis" });
     }
-    // Fallback: build basic game cards from ESPN scoreboard data
+    // Fallback: build game cards from ESPN scoreboard data WITH odds/consensus
     var scores = await cachedRedisGet("scores:" + req.params.sport, function() { return redisCache.get("oracle:scores:" + req.params.sport); });
     if (scores && scores.events && scores.events.length > 0) {
       var games = scores.events.map(function(e) {
-        var home = e.competitions && e.competitions[0] ? e.competitions[0].competitors.find(function(c){return c.homeAway==='home'}) : null;
-        var away = e.competitions && e.competitions[0] ? e.competitions[0].competitors.find(function(c){return c.homeAway==='away'}) : null;
+        var comp = e.competitions && e.competitions[0] ? e.competitions[0] : {};
+        var home = (comp.competitors || []).find(function(c){return c.homeAway==='home'});
+        var away = (comp.competitors || []).find(function(c){return c.homeAway==='away'});
+        var odds = comp.odds && comp.odds[0] ? comp.odds[0] : {};
+        var homeRecord = home && home.records && home.records[0] ? home.records[0].summary : '';
+        var awayRecord = away && away.records && away.records[0] ? away.records[0].summary : '';
+        var homeName = home ? home.team.displayName : 'TBD';
+        var awayName = away ? away.team.displayName : 'TBD';
+        // Parse spread value from odds.details (e.g. "DEN -8.5")
+        var spreadVal = 0;
+        if (odds.details) {
+          var parts = odds.details.match(/([-+]?\d+\.?\d*)/);
+          if (parts) spreadVal = parseFloat(parts[1]);
+        }
+        // Build consensus object that game-predictions.html expects
+        var consensus = {
+          spread: spreadVal || 0,
+          total: odds.overUnder || 220,
+          moneyline: spreadVal < 0 ? homeName : awayName,
+          provider: odds.provider ? odds.provider.name : null,
+        };
+        // Build basic prediction
+        var homeWins = parseInt(homeRecord) || 0;
+        var awayWins = parseInt(awayRecord) || 0;
+        var favorite = homeWins > awayWins ? homeName : awayName;
+        var conf = Math.min(78, 55 + Math.abs(homeWins - awayWins));
         return {
           id: e.id,
-          homeTeam: home ? home.team.displayName : 'TBD',
-          awayTeam: away ? away.team.displayName : 'TBD',
+          homeTeam: homeName,
+          awayTeam: awayName,
+          homeAbbr: home ? home.team.abbreviation : '',
+          awayAbbr: away ? away.team.abbreviation : '',
+          homeLogo: home ? home.team.logo : null,
+          awayLogo: away ? away.team.logo : null,
+          homeRecord: homeRecord,
+          awayRecord: awayRecord,
           commenceTime: e.date,
           status: e.status ? e.status.type.description : 'Scheduled',
           completed: e.status ? e.status.type.completed : false,
           homeScore: home ? home.score : '0',
           awayScore: away ? away.score : '0',
+          consensus: consensus,
+          odds: { spread: odds.details, overUnder: odds.overUnder, provider: odds.provider ? odds.provider.name : null },
+          prediction: {
+            winner: favorite,
+            confidence: conf,
+            spread: { pick: homeName, line: spreadVal, confidence: conf },
+            total: { side: 'OVER', line: odds.overUnder || 220, confidence: Math.max(50, conf - 5) },
+            moneyline: { pick: favorite, confidence: conf },
+          },
+          venue: comp.venue ? comp.venue.fullName : null,
+          broadcast: comp.broadcasts && comp.broadcasts[0] ? comp.broadcasts[0].names.join(', ') : null,
         };
       });
       res.json({ games: games, count: games.length, source: "espn-derived" });
@@ -257,17 +298,13 @@ app.get("/api/parlay/history", async (req, res) => {
     }
     // Fall back to new grading engine
     var grades = await redisCache.get("oracle:grading_stats");
+    if (!grades) grades = await redisCache.get("oracle:grading_stats_legacy");
     if (grades && grades.overall && grades.overall.total > 0) {
       return res.json(grades);
     }
-    // Try legacy key (worker writes to this)
-    var gradesLegacy = await redisCache.get("oracle:grading_stats_legacy");
-    if (gradesLegacy && gradesLegacy.overall && gradesLegacy.overall.total > 0) {
-      return res.json(gradesLegacy);
-    }
-    // Build from raw graded picks (try both key names)
+    // Build from raw graded picks
     var picks = await redisCache.get("oracle:graded_picks");
-    if (!picks || picks.length === 0) picks = await redisCache.get("oracle:graded_picks_legacy");
+    if (!picks || !picks.length) picks = await redisCache.get("oracle:graded_picks_legacy");
     if (picks && picks.length > 0) {
       var graded = picks.filter(function(p) { return p.result === 'hit' || p.result === 'miss'; });
       var hits = graded.filter(function(p) { return p.result === 'hit'; });
@@ -337,6 +374,88 @@ app.get("/api/game-grades/accuracy", async (req, res) => {
 app.get("/api/game-grades/grades", async (req, res) => {
   const data = await redisCache.getGameGrades();
   res.json(data || { grades: [] });
+});
+
+// Consensus Picks — cross-reference AI picks, book consensus, and sharp signals
+app.get("/api/consensus", async (req, res) => {
+  try {
+    var sport = req.query.sport || 'nba';
+    // Get props (book consensus)
+    var propsData = await cachedRedisGet("props:" + sport, function() { return redisCache.getProps(sport); });
+    var props = propsData ? (propsData.props || propsData.picks || []) : [];
+    // Get AI picks
+    var picksData = await redisCache.getPicks(sport);
+    var picks = picksData && picksData.picks ? picksData.picks : [];
+    // Get EV bets (sharp signal)
+    var evData = await redisCache.getEV();
+    var evBets = Array.isArray(evData) ? evData : [];
+    // Get movement data (sharp signal)
+    var mvData = await redisCache.getMovement(sport);
+    var movements = mvData && mvData.movements ? mvData.movements : [];
+    
+    var strong = [];
+    var moderate = [];
+    
+    // Find consensus: props with high book count + AI pick agreement + EV/movement signal
+    var demons = props.filter(function(p) { return p.lineType === 'demon' && p.bookCount >= 6; });
+    
+    for (var prop of demons) {
+      var signals = [];
+      // Signal 1: Book consensus (demon = 6+ books agree)
+      signals.push({ type: 'books', label: prop.bookCount + ' books agree on ' + prop.consensusLine });
+      
+      // Signal 2: AI pick match
+      var aiMatch = picks.find(function(pk) { return pk.player === prop.player && pk.market === prop.market; });
+      if (aiMatch) signals.push({ type: 'ai', label: 'AI picks ' + (aiMatch.pick || aiMatch.suggestion || 'OVER') + ' (' + (aiMatch.confidence || 0) + '% conf)' });
+      
+      // Signal 3: +EV signal
+      var evMatch = evBets.find(function(ev) { return ev.player === prop.player; });
+      if (evMatch) signals.push({ type: 'ev', label: '+' + (evMatch.edgePercent || 0).toFixed(1) + '% EV edge' });
+      
+      // Signal 4: Line movement
+      var mvMatch = movements.find(function(m) { return m.player === prop.player; });
+      if (mvMatch && mvMatch.change > 0) signals.push({ type: 'movement', label: 'Line moved ' + mvMatch.direction });
+      
+      var entry = {
+        player: prop.player,
+        market: prop.market,
+        marketLabel: prop.marketLabel || prop.market,
+        line: prop.consensusLine,
+        game: prop.game,
+        bookCount: prop.bookCount,
+        lineType: prop.lineType,
+        signals: signals,
+        signalCount: signals.length,
+        strength: signals.length >= 3 ? 'strong' : 'moderate',
+      };
+      
+      if (signals.length >= 3) strong.push(entry);
+      else if (signals.length >= 2) moderate.push(entry);
+    }
+    
+    // Also check edge props with AI agreement
+    var edges = props.filter(function(p) { return p.hasEdge && p.bookCount >= 4 && p.lineType !== 'demon'; });
+    for (var prop of edges) {
+      var signals = [];
+      if (prop.bookCount >= 4) signals.push({ type: 'books', label: prop.bookCount + ' books agree' });
+      signals.push({ type: 'edge', label: 'Edge detected' });
+      var aiMatch = picks.find(function(pk) { return pk.player === prop.player; });
+      if (aiMatch) signals.push({ type: 'ai', label: 'AI agrees' });
+      var evMatch = evBets.find(function(ev) { return ev.player === prop.player; });
+      if (evMatch) signals.push({ type: 'ev', label: '+EV' });
+      
+      if (signals.length >= 3) {
+        strong.push({ player: prop.player, market: prop.market, marketLabel: prop.marketLabel, line: prop.consensusLine, game: prop.game, bookCount: prop.bookCount, signals: signals, signalCount: signals.length, strength: 'strong' });
+      } else if (signals.length >= 2) {
+        moderate.push({ player: prop.player, market: prop.market, marketLabel: prop.marketLabel, line: prop.consensusLine, game: prop.game, bookCount: prop.bookCount, signals: signals, signalCount: signals.length, strength: 'moderate' });
+      }
+    }
+    
+    strong.sort(function(a, b) { return b.signalCount - a.signalCount || b.bookCount - a.bookCount; });
+    moderate.sort(function(a, b) { return b.signalCount - a.signalCount || b.bookCount - a.bookCount; });
+    
+    res.json({ strong: strong, moderate: moderate, strongCount: strong.length, moderateCount: moderate.length, propsAnalyzed: props.length });
+  } catch(e) { trackError("/api/consensus", e); res.json({ strong: [], moderate: [], strongCount: 0, moderateCount: 0 }); }
 });
 
 // Sports scores — read from Redis ticker cache
@@ -480,38 +599,8 @@ app.get("/api/providers", (req, res) => {
 
 // CDL props
 app.get("/api/cdl/props", async (req, res) => {
-  try {
-    const data = await redisCache.get("oracle:cdl_props");
-    if (data && ((data.props && data.props.length > 0) || (data.picks && data.picks.length > 0))) {
-      return res.json(data);
-    }
-    // Fallback: try to build props from current CDL matches
-    var matches = await redisCache.get("oracle:cdl_matches");
-    if (matches && matches.matches && matches.matches.length > 0) {
-      var props = [];
-      matches.matches.forEach(function(m) {
-        if (m.status === 'not_started' || m.status === 'running') {
-          var team1 = m.team1 || m.opponents?.[0]?.opponent || {};
-          var team2 = m.team2 || m.opponents?.[1]?.opponent || {};
-          // Create match-level props as a fallback
-          props.push({
-            player: (team1.name || 'Team 1') + ' vs ' + (team2.name || 'Team 2'),
-            market: 'match_winner',
-            marketLabel: 'Match Winner',
-            game: m.tournament || m.league || 'CDL',
-            line: null,
-            bookCount: 0,
-            lineType: 'standard',
-            books: [],
-            matchId: m.id,
-            status: m.status,
-          });
-        }
-      });
-      return res.json({ props: props, count: props.length, source: "matches-derived" });
-    }
-    res.json({ props: [], count: 0 });
-  } catch(e) { trackError("/api/cdl/props", e); res.json({ props: [], count: 0 }); }
+  const data = await redisCache.get("oracle:cdl_props");
+  res.json(data || { props: [], count: 0 });
 });
 
 // CDL matches
@@ -530,102 +619,6 @@ app.get("/api/cdl-predictions/:matchId", async (req, res) => {
   res.json(data || { available: false });
 });
 
-// CDL Standings — fetch from PandaScore if not cached
-app.get("/api/cdl/standings", async (req, res) => {
-  try {
-    // Try Redis cache first
-    var cached = await redisCache.get("oracle:cdl_standings");
-    if (cached && cached.standings && cached.standings.length > 0) {
-      return res.json({ available: true, standings: cached.standings });
-    }
-    // Fallback: fetch from PandaScore API directly
-    var apiKey = process.env.PANDASCORE_API_KEY;
-    if (!apiKey) return res.json({ available: false, standings: [], message: "PandaScore API key not configured" });
-    var https = require("https");
-    await new Promise(function(resolve) {
-      var data = '';
-      var opts = {
-        hostname: 'api.pandascore.co',
-        path: '/codmw/tournaments/running?per_page=5&token=' + apiKey,
-        timeout: 10000,
-      };
-      var r = https.get(opts, function(resp) {
-        resp.on('data', function(c) { data += c; });
-        resp.on('end', function() {
-          try {
-            var tournaments = JSON.parse(data);
-            if (!Array.isArray(tournaments) || tournaments.length === 0) {
-              // Try completed tournaments if no running ones
-              var data2 = '';
-              var r2 = https.get({
-                hostname: 'api.pandascore.co',
-                path: '/codmw/tournaments?sort=-begin_at&per_page=3&token=' + apiKey,
-                timeout: 10000,
-              }, function(resp2) {
-                resp2.on('data', function(c) { data2 += c; });
-                resp2.on('end', function() {
-                  try {
-                    var t2 = JSON.parse(data2);
-                    var standingsData = buildCDLStandings(t2);
-                    res.json(standingsData);
-                    if (standingsData.standings.length > 0) {
-                      redisCache.set("oracle:cdl_standings", standingsData, 3600);
-                    }
-                  } catch(e) { res.json({ available: false, standings: [] }); }
-                  resolve();
-                });
-              });
-              r2.on('error', function() { res.json({ available: false, standings: [] }); resolve(); });
-              return;
-            }
-            // Build standings from tournament teams
-            var standingsData = buildCDLStandings(tournaments);
-            res.json(standingsData);
-            if (standingsData.standings.length > 0) {
-              redisCache.set("oracle:cdl_standings", standingsData, 3600);
-            }
-          } catch(e) { res.json({ available: false, standings: [] }); }
-          resolve();
-        });
-      });
-      r.on('error', function() { res.json({ available: false, standings: [] }); resolve(); });
-      r.on('timeout', function() { r.destroy(); res.json({ available: false, standings: [] }); resolve(); });
-    });
-  } catch(e) { trackError("/api/cdl/standings", e); res.json({ available: false, standings: [] }); }
-});
-
-function buildCDLStandings(tournaments) {
-  var teamMap = {};
-  for (var t of (Array.isArray(tournaments) ? tournaments : [])) {
-    var teams = t.teams || t.expected_roster || [];
-    for (var team of teams) {
-      if (!team || !team.name) continue;
-      if (!teamMap[team.id || team.name]) {
-        teamMap[team.id || team.name] = {
-          team: { id: team.id, name: team.name, acronym: team.acronym, logo: team.image_url },
-          wins: 0, losses: 0,
-        };
-      }
-    }
-    // Check for standings in the tournament
-    if (t.standings && Array.isArray(t.standings)) {
-      for (var s of t.standings) {
-        var id = s.team?.id || s.team?.name;
-        if (id && teamMap[id]) {
-          teamMap[id].wins += s.wins || 0;
-          teamMap[id].losses += s.losses || 0;
-        }
-      }
-    }
-  }
-  var standings = Object.values(teamMap).sort(function(a, b) {
-    var aWR = a.wins + a.losses > 0 ? a.wins / (a.wins + a.losses) : 0;
-    var bWR = b.wins + b.losses > 0 ? b.wins / (b.wins + b.losses) : 0;
-    return bWR - aWR || b.wins - a.wins;
-  });
-  return { available: standings.length > 0, standings: standings };
-}
-
 // Trending
 app.get("/api/trending/:sport", async (req, res) => {
   try {
@@ -633,7 +626,7 @@ app.get("/api/trending/:sport", async (req, res) => {
     if (data && data.picks && data.picks.length > 0) {
       return res.json(data);
     }
-    // Also check if worker wrote with 'trending' field name
+    // Backwards compat: worker may write 'trending' field
     if (data && data.trending && data.trending.length > 0) {
       return res.json({ picks: data.trending, count: data.trending.length, source: "redis-trending" });
     }
@@ -742,7 +735,7 @@ app.get("/api/props/history/all", async (req, res) => {
   try {
     // Try graded picks from the new grading engine
     var grades = await redisCache.get("oracle:graded_picks");
-    if (!grades || grades.length === 0) grades = await redisCache.get("oracle:graded_picks_legacy");
+    if (!grades || !grades.length) grades = await redisCache.get("oracle:graded_picks_legacy");
     if (grades && grades.length > 0) {
       // Group by date
       var byDate = {};
@@ -895,21 +888,14 @@ app.get("/api/sharp/snapshot", async (req, res) => {
 // RLM Alerts — reverse line movement (lines moving opposite to public action)
 app.get("/api/sharp/rlm", async (req, res) => {
   try {
-    var movements = [];
-    for (var sp of ['nba', 'nhl', 'mlb']) {
-      var mvData = await redisCache.getMovement(sp);
-      if (mvData && mvData.movements) movements = movements.concat(mvData.movements);
-    }
+    var mvData = await redisCache.getMovement("nba");
+    var movements = mvData && mvData.movements ? mvData.movements : [];
+    // Also check NHL
+    var nhlData = await redisCache.getMovement("nhl");
+    if (nhlData && nhlData.movements) movements = movements.concat(nhlData.movements);
     // RLM = lines that moved DOWN (books adjusting against public money)
-    // Also include movements where change is null but oldLine and newLine differ
-    var rlm = movements.filter(function(m) {
-      if (m.oldLine && m.newLine && m.newLine < m.oldLine) return true;
-      if (m.direction === 'down' && m.change && m.change > 0) return true;
-      return false;
-    }).map(function(m) {
-      var change = m.change || (m.oldLine && m.newLine ? Math.abs(m.newLine - m.oldLine) : 0);
-      return { player: m.player, market: m.market, sport: m.sport, oldLine: m.oldLine, newLine: m.newLine, change: Math.round(change * 10) / 10, direction: 'DOWN', type: 'rlm', reason: 'Line dropped ' + (change || 0).toFixed(1) + ' points against public action' };
-    });
+    var rlm = movements.filter(function(m) { return m.direction === 'down' && m.change > 0 && m.oldLine; })
+      .map(function(m) { return { player: m.player, market: m.market, oldLine: m.oldLine, newLine: m.newLine, change: m.change, direction: 'DOWN', type: 'rlm', reason: 'Line dropped ' + (m.change || 0).toFixed(1) + ' points against public action' }; });
     res.json({ alerts: rlm, count: rlm.length });
   } catch(e) { res.json({ alerts: [], count: 0 }); }
 });
@@ -917,20 +903,14 @@ app.get("/api/sharp/rlm", async (req, res) => {
 // Steam Moves — rapid line movement across multiple books
 app.get("/api/sharp/steam", async (req, res) => {
   try {
-    var movements = [];
-    for (var sp of ['nba', 'nhl', 'mlb']) {
-      var mvData = await redisCache.getMovement(sp);
-      if (mvData && mvData.movements) movements = movements.concat(mvData.movements);
-    }
-    // Steam = any movement where the line actually changed
-    var steam = movements.filter(function(m) {
-      if (m.change && m.change > 0) return true;
-      if (m.oldLine && m.newLine && m.oldLine !== m.newLine) return true;
-      return false;
-    }).map(function(m) {
-      var change = m.change || (m.oldLine && m.newLine ? Math.abs(m.newLine - m.oldLine) : 0);
-      return { player: m.player, market: m.market, sport: m.sport, oldLine: m.oldLine, newLine: m.newLine, change: Math.round(change * 10) / 10, direction: m.direction === 'up' ? 'UP' : m.newLine > m.oldLine ? 'UP' : 'DOWN', type: 'steam', reason: 'Line moved ' + (change || 0).toFixed(1) + ' points' };
-    }).sort(function(a, b) { return (b.change || 0) - (a.change || 0); });
+    var mvData = await redisCache.getMovement("nba");
+    var movements = mvData && mvData.movements ? mvData.movements : [];
+    var nhlData = await redisCache.getMovement("nhl");
+    if (nhlData && nhlData.movements) movements = movements.concat(nhlData.movements);
+    // Steam = any movement with change > 0 (lines that actually moved)
+    var steam = movements.filter(function(m) { return m.change > 0 && m.oldLine; })
+      .sort(function(a, b) { return (b.change || 0) - (a.change || 0); })
+      .map(function(m) { return { player: m.player, market: m.market, oldLine: m.oldLine, newLine: m.newLine, change: m.change, direction: m.direction === 'up' ? 'UP' : 'DOWN', type: 'steam', reason: 'Line moved ' + (m.change || 0).toFixed(1) + ' points' }; });
     res.json({ moves: steam, count: steam.length });
   } catch(e) { res.json({ moves: [], count: 0 }); }
 });
@@ -938,16 +918,12 @@ app.get("/api/sharp/steam", async (req, res) => {
 // CLV (Closing Line Value) — track how lines move over time
 app.get("/api/sharp/clv/all", async (req, res) => {
   try {
-    var movements = [];
-    var totalProps = 0;
-    for (var sp of ['nba', 'nhl', 'mlb']) {
-      var mvData = await redisCache.getMovement(sp);
-      if (mvData && mvData.movements) movements = movements.concat(mvData.movements);
-      var propsData = await redisCache.getProps(sp);
-      if (propsData) totalProps += (propsData.props || []).length;
-    }
-    var series = movements.filter(function(m) { return m.oldLine && m.newLine; }).map(function(m) {
-      return { player: m.player, market: m.market, sport: m.sport, openingLine: m.oldLine, currentLine: m.newLine, movement: Math.round((m.newLine - m.oldLine) * 10) / 10, snapshots: 2, hoursTracked: 4 };
+    var mvData = await redisCache.getMovement("nba");
+    var movements = mvData && mvData.movements ? mvData.movements : [];
+    var propsData = await redisCache.getProps("nba");
+    var totalProps = propsData ? (propsData.props || []).length : 0;
+    var series = movements.map(function(m) {
+      return { player: m.player, market: m.market, openingLine: m.oldLine, currentLine: m.newLine, movement: m.newLine - m.oldLine, snapshots: 2, hoursTracked: 4 };
     });
     res.json({ tracked: totalProps, series: series, count: series.length });
   } catch(e) { res.json({ tracked: 0, series: [], count: 0 }); }
@@ -966,7 +942,7 @@ app.get("/api/features/grades", async (req, res) => {
 
 app.get("/api/features/grades/recent", async (req, res) => {
   var grades = await redisCache.get("oracle:graded_picks");
-  if (!grades || grades.length === 0) grades = await redisCache.get("oracle:graded_picks_legacy");
+  if (!grades || !grades.length) grades = await redisCache.get("oracle:graded_picks_legacy");
   var limit = parseInt(req.query.limit) || 50;
   res.json({ picks: (grades || []).slice(-limit).reverse(), total: (grades || []).length });
 });
@@ -1005,8 +981,7 @@ app.get("/api/esports/:game/matches", async (req, res) => {
   res.json(data || { matches: [], count: 0 });
 });
 
-// Note: /api/sports/scores/:sport and /api/sports/standings/:sport are defined above (lines ~337 and ~630)
-// Do NOT duplicate them here — Express uses first match
+// Note: /api/sports/scores/:sport and /api/sports/standings/:sport defined above — not duplicated
 
 // Parlay related
 // Parlay Builder — build a parlay from legs

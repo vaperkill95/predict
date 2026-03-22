@@ -28,8 +28,11 @@ const GRADE_INTERVAL_MS = 30 * 60 * 1000; // 30 min
 const GRADES_FILE = path.join(__dirname, '..', 'data', 'graded-picks.json');
 
 // Graded picks storage
-let gradedPicks = []; // [{ date, player, market, line, pick, actual, hit, confidence, grade, game, sport }]
-let gradingStats = { total: 0, hits: 0, misses: 0, pending: 0, lastGraded: null };
+let gradedPicks = []; // [{ date, player, market, line, pick, actual, result, hit, confidence, grade, game, sport }]
+let gradingStats = { total: 0, hits: 0, misses: 0, pending: 0, lastGraded: null,
+  // Web server reads this format via oracle:grading_stats
+  get overall() { return { total: this.total, hits: this.hits, misses: this.misses, hitRate: this.total > 0 ? Math.round((this.hits / this.total) * 1000) / 10 : 0, pending: this.pending }; }
+};
 
 // Load persisted grades on startup
 function loadGrades() {
@@ -166,12 +169,17 @@ async function fetchFinishedGames() {
 function mapMarketToStat(market) {
   if (!market) return null;
   const m = market.toLowerCase();
-  if (m.includes('point') || m.includes('pts')) return 'pts';
-  if (m.includes('rebound') || m.includes('reb')) return 'reb';
-  if (m.includes('assist') || m.includes('ast')) return 'ast';
-  if (m.includes('3pt') || m.includes('three') || m.includes('fg3')) return 'fg3';
+  // NBA
+  if (m.includes('point') || m === 'pts') return 'pts';
+  if (m.includes('rebound') || m === 'reb') return 'reb';
+  if (m.includes('assist') || m === 'ast') return 'ast';
+  if (m.includes('3pt') || m.includes('three') || m.includes('fg3') || m.includes('3-pointer')) return 'fg3';
   if (m.includes('steal')) return 'stl';
   if (m.includes('block')) return 'blk';
+  // NHL
+  if (m.includes('goal')) return 'goals';
+  if (m.includes('shot') || m.includes('sog')) return 'sog';
+  if (m === 'points' || m === 'player_points') return 'pts'; // Could be NBA pts or NHL pts
   return null;
 }
 
@@ -181,136 +189,180 @@ function mapMarketToStat(market) {
 async function gradePicksRound() {
   console.log('[AutoGrader] Starting grading round...');
 
-  // Get today's smart picks — use direct cache access to avoid rate limiting
-  let picks = [];
-  try {
-    // Try direct cache access first (no HTTP needed)
+  // Grade NBA and NHL (skip MLB during spring training — avoids 404 spam)
+  for (const gradeSport of ['nba', 'nhl']) {
+    var picks = [];
     try {
-      var smartPicks = require('./smart-picks');
-      if (smartPicks && smartPicks.picksCache) {
-        var cached = smartPicks.picksCache['nba'];
-        if (cached && cached.picks && cached.picks.length > 0) {
-          picks = cached.picks;
-          console.log('[AutoGrader] Got ' + picks.length + ' picks from cache');
-        }
-      }
-    } catch(e) {}
-
-    // Also check parlay builder history for ungraded picks
-    try {
-      var parlayBuilder = require('./parlay-builder');
-      if (parlayBuilder && parlayBuilder.getPickHistory) {
-        var history = parlayBuilder.getPickHistory();
-        var ungraded = (history || []).filter(function(p) { return !p.result || p.result === 'pending'; });
-        if (ungraded.length > 0 && picks.length === 0) {
-          picks = ungraded;
-          console.log('[AutoGrader] Got ' + picks.length + ' ungraded picks from history');
-        }
-      }
-    } catch(e) {}
-
-    // Fallback to HTTP if no cache
-    if (picks.length === 0) {
-      var resp = await axios.get('http://localhost:' + PORT + '/api/picks/nba', { timeout: 15000 });
-      picks = resp.data && resp.data.picks ? resp.data.picks : [];
-    }
-  } catch (e) {
-    console.warn('[AutoGrader] Could not fetch picks:', e.message);
-    return;
-  }
-
-  if (picks.length === 0) return;
-
-  // Get finished games
-  const finishedGames = await fetchFinishedGames();
-  if (finishedGames.length === 0) {
-    console.log('[AutoGrader] No finished games yet');
-    return;
-  }
-
-  let newGrades = 0;
-
-  for (const game of finishedGames) {
-    // Find picks for this game
-    const gamePicks = picks.filter(p => {
-      const gameStr = (p.game || '').toLowerCase();
-      return gameStr.includes((game.homeTeam || '').toLowerCase()) ||
-             gameStr.includes((game.awayTeam || '').toLowerCase());
-    });
-
-    if (gamePicks.length === 0) continue;
-
-    // Fetch box score
-    const { players, gameStatus } = await fetchBoxScore(game.id);
-    if (Object.keys(players).length === 0) continue;
-
-    for (const pick of gamePicks) {
-      // Check if already graded
-      const alreadyGraded = gradedPicks.some(g =>
-        g.player === pick.player && g.market === pick.market &&
-        g.line === pick.line && g.date === new Date().toISOString().split('T')[0]
-      );
-      if (alreadyGraded) continue;
-
-      // Find player in box score
-      const playerStats = players[pick.player];
-      if (!playerStats) continue;
-
-      const statKey = mapMarketToStat(pick.market);
-      if (!statKey) continue;
-
-      const actual = playerStats[statKey];
-      if (actual === undefined) continue;
-
-      // Grade: did the pick hit?
-      const hit = pick.pick === 'OVER' ? actual > pick.line : actual < pick.line;
-      const push = actual === pick.line;
-
-      const graded = {
-        date: new Date().toISOString().split('T')[0],
-        timestamp: new Date().toISOString(),
-        player: pick.player,
-        market: pick.market,
-        line: pick.line,
-        pick: pick.pick,
-        actual,
-        hit: push ? 'push' : hit,
-        confidence: pick.confidence,
-        grade: pick.grade,
-        projection: pick.projection,
-        game: pick.game || game.name,
-        sport: 'nba',
-      };
-
-      gradedPicks.push(graded);
-      newGrades++;
-
-      if (hit && !push) gradingStats.hits++;
-      else if (!push) gradingStats.misses++;
-      gradingStats.total++;
-
-      // Also update parlay-builder history with the grading result
+      // Try direct cache access first
       try {
-        var parlayBuilder = require('./parlay-builder');
-        if (parlayBuilder && parlayBuilder.gradePick) {
-          parlayBuilder.gradePick(pick.player, pick.market, pick.line, push ? 'push' : (hit ? 'hit' : 'miss'), actual);
+        var smartPicks = require('./smart-picks');
+        if (smartPicks && smartPicks.picksCache && smartPicks.picksCache[gradeSport]) {
+          var cached = smartPicks.picksCache[gradeSport];
+          if (cached && cached.picks && cached.picks.length > 0) {
+            picks = cached.picks;
+          }
         }
       } catch(e) {}
+
+      // Fallback to HTTP
+      if (picks.length === 0) {
+        try {
+          var resp = await axios.get('http://localhost:' + PORT + '/api/picks/' + gradeSport, { timeout: 10000 });
+          picks = resp.data && resp.data.picks ? resp.data.picks : [];
+        } catch(e) {}
+      }
+
+      // Fallback: build grading picks from raw demon/edge props
+      if (picks.length === 0) {
+        try {
+          var propsResp = await axios.get('http://localhost:' + PORT + '/api/props/' + gradeSport, { timeout: 10000 });
+          var rawProps = propsResp.data && propsResp.data.props ? propsResp.data.props : [];
+          var demons = rawProps.filter(function(p) { return p.lineType === 'demon' || (p.hasEdge && p.bookCount >= 5); });
+          picks = demons.map(function(p) {
+            return {
+              player: p.player,
+              market: p.marketLabel || p.market,
+              line: p.consensusLine || p.line,
+              pick: p.lineType === 'goblin' ? 'UNDER' : 'OVER',
+              confidence: Math.min(95, 40 + (p.bookCount || 1) * 5),
+              grade: p.bookCount >= 8 ? 'A+' : p.bookCount >= 6 ? 'A' : 'B+',
+              game: p.game,
+            };
+          });
+          if (picks.length > 0) console.log('[AutoGrader] Built ' + picks.length + ' picks from raw ' + gradeSport + ' demon props');
+        } catch(e) {}
+      }
+    } catch (e) {}
+
+    if (picks.length === 0) continue;
+
+    // Get finished games for this sport
+    var espnPath = gradeSport === 'nba' ? 'basketball/nba' : gradeSport === 'nhl' ? 'hockey/nhl' : null;
+    if (!espnPath) continue;
+
+    var finishedGames = [];
+    try {
+      var fResp = await axios.get('https://site.api.espn.com/apis/site/v2/sports/' + espnPath + '/scoreboard', { timeout: 10000 });
+      for (var event of (fResp.data?.events || [])) {
+        if (event.status?.type?.name === 'STATUS_FINAL') {
+          finishedGames.push({
+            id: event.id,
+            name: event.name,
+            date: event.date,
+            homeTeam: event.competitions?.[0]?.competitors?.find(c => c.homeAway === 'home')?.team?.abbreviation,
+            awayTeam: event.competitions?.[0]?.competitors?.find(c => c.homeAway === 'away')?.team?.abbreviation,
+          });
+        }
+      }
+    } catch(e) {}
+
+    if (finishedGames.length === 0) continue;
+
+    var newGrades = 0;
+
+    for (const game of finishedGames) {
+      var gamePicks = picks.filter(function(p) {
+        var gameStr = (p.game || '').toLowerCase();
+        return gameStr.includes((game.homeTeam || '').toLowerCase()) || gameStr.includes((game.awayTeam || '').toLowerCase());
+      });
+      if (gamePicks.length === 0) continue;
+
+      // Fetch box score
+      var summaryUrl = gradeSport === 'nba'
+        ? 'https://site.web.api.espn.com/apis/site/v2/sports/basketball/nba/summary?event=' + game.id
+        : 'https://site.web.api.espn.com/apis/site/v2/sports/hockey/nhl/summary?event=' + game.id;
+
+      var players = {};
+      try {
+        var bsResp = await axios.get(summaryUrl, { timeout: 12000 });
+        var bsData = bsResp.data;
+        for (var team of (bsData.boxscore?.teams || [])) {
+          for (var statGroup of (team.statistics || [])) {
+            for (var athlete of (statGroup.athletes || [])) {
+              var name = athlete.athlete?.displayName;
+              if (!name) continue;
+              var stats = {};
+              var labels = statGroup.labels || [];
+              var values = athlete.stats || [];
+              for (var i = 0; i < labels.length && i < values.length; i++) {
+                var label = labels[i];
+                var val = values[i];
+                if (label === 'PTS') stats.pts = parseInt(val) || 0;
+                else if (label === 'REB') stats.reb = parseInt(val) || 0;
+                else if (label === 'AST') stats.ast = parseInt(val) || 0;
+                else if (label === 'STL') stats.stl = parseInt(val) || 0;
+                else if (label === 'BLK') stats.blk = parseInt(val) || 0;
+                else if (label === '3PM' || label === '3PT') {
+                  var parts = val.split('-');
+                  stats.fg3 = parseInt(parts[0]) || 0;
+                }
+                // NHL specific
+                else if (label === 'G') stats.goals = parseInt(val) || 0;
+                else if (label === 'A') stats.assists_nhl = parseInt(val) || 0;
+                else if (label === 'SOG') stats.sog = parseInt(val) || 0;
+                else if (label === 'P') stats.pts_nhl = parseInt(val) || 0;
+              }
+              players[name] = stats;
+            }
+          }
+        }
+      } catch(e) { continue; }
+
+      if (Object.keys(players).length === 0) continue;
+
+      for (var pick of gamePicks) {
+        var alreadyGraded = gradedPicks.some(function(g) {
+          return g.player === pick.player && g.market === pick.market && g.line === pick.line && g.date === new Date().toISOString().split('T')[0];
+        });
+        if (alreadyGraded) continue;
+
+        var playerStats = players[pick.player];
+        if (!playerStats) continue;
+
+        var statKey = mapMarketToStat(pick.market);
+        if (!statKey) continue;
+
+        var actual = playerStats[statKey];
+        if (actual === undefined) continue;
+
+        var hit = pick.pick === 'OVER' ? actual > pick.line : actual < pick.line;
+        var push = actual === pick.line;
+
+        gradedPicks.push({
+          date: new Date().toISOString().split('T')[0],
+          timestamp: Date.now(),
+          player: pick.player,
+          market: pick.market,
+          line: pick.line,
+          pick: pick.pick,
+          actual: actual,
+          hit: push ? 'push' : hit,
+          result: push ? 'push' : (hit ? 'hit' : 'miss'),
+          confidence: pick.confidence,
+          grade: pick.grade,
+          game: pick.game || game.name,
+          sport: gradeSport,
+        });
+        newGrades++;
+
+        if (hit && !push) gradingStats.hits++;
+        else if (!push) gradingStats.misses++;
+        gradingStats.total++;
+      }
+
+      // Small delay between box score fetches
+      await new Promise(function(r) { setTimeout(r, 300); });
     }
 
-    // Rate limit between box score fetches
-    await new Promise(r => setTimeout(r, 500));
+    gradingStats.lastGraded = new Date().toISOString();
+
+    if (newGrades > 0) {
+      console.log('[AutoGrader] ' + gradeSport.toUpperCase() + ': Graded ' + newGrades + ' picks. Hit rate: ' + (gradingStats.total > 0 ? ((gradingStats.hits / gradingStats.total) * 100).toFixed(1) : 0) + '%');
+      saveGrades();
+    }
   }
 
-  gradingStats.lastGraded = new Date().toISOString();
-  gradingStats.pending = picks.length - newGrades;
-
-  if (newGrades > 0) {
-    console.log(`[AutoGrader] Graded ${newGrades} picks. Hit rate: ${gradingStats.total > 0 ? ((gradingStats.hits / gradingStats.total) * 100).toFixed(1) : 0}%`);
-    saveGrades();
-  } else {
-    console.log('[AutoGrader] No new picks to grade');
-  }
+  gradingStats.pending = 0;
 }
 
 function startGrading() {
