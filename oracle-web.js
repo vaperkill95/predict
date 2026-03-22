@@ -664,7 +664,7 @@ app.get("/api/cdl/props", async (req, res) => {
           });
         });
       });
-      return res.json({ props: props, count: props.length, source: "breakingpoint", lastUpdated: data.lastUpdated });
+      return res.json({ props: props, matches: data.matches, count: props.length, source: "breakingpoint", lastUpdated: data.lastUpdated, totalPlayers: data.totalPlayers });
     }
     // If worker stored flat format
     if (data && data.props && data.props.length > 0) return res.json(data);
