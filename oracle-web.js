@@ -287,9 +287,42 @@ app.get("/api/game-grades/grades", async (req, res) => {
 
 // Sports scores — read from Redis ticker cache
 app.get("/api/sports/scores/:sport", async (req, res) => {
-  const data = await redisCache.get("oracle:scores:" + req.params.sport);
-  if (data) { res.json(data); }
-  else { res.json({ games: [], sport: req.params.sport }); }
+  try {
+    var raw = await cachedRedisGet("scores:" + req.params.sport, function() { return redisCache.get("oracle:scores:" + req.params.sport); });
+    if (raw && raw.events) {
+      // Transform raw ESPN data into the format the React GameCard expects
+      var games = raw.events.map(function(event) {
+        var comp = event.competitions && event.competitions[0] ? event.competitions[0] : {};
+        var competitors = comp.competitors || [];
+        var home = competitors.find(function(c) { return c.homeAway === 'home'; });
+        var away = competitors.find(function(c) { return c.homeAway === 'away'; });
+        return {
+          id: event.id,
+          name: event.name,
+          shortName: event.shortName,
+          date: event.date,
+          status: {
+            type: comp.status && comp.status.type ? comp.status.type.name : 'STATUS_SCHEDULED',
+            detail: comp.status && comp.status.type ? comp.status.type.detail : '',
+            displayClock: comp.status ? comp.status.displayClock : '',
+            period: comp.status ? comp.status.period : 0,
+            completed: comp.status && comp.status.type ? comp.status.type.completed : false,
+          },
+          home: home ? { id: home.team.id, name: home.team.displayName, abbreviation: home.team.abbreviation, logo: home.team.logo, score: home.score ? parseInt(home.score) : null, record: home.records && home.records[0] ? home.records[0].summary : null, winner: home.winner } : { name: 'TBD', score: null },
+          away: away ? { id: away.team.id, name: away.team.displayName, abbreviation: away.team.abbreviation, logo: away.team.logo, score: away.score ? parseInt(away.score) : null, record: away.records && away.records[0] ? away.records[0].summary : null, winner: away.winner } : { name: 'TBD', score: null },
+          odds: comp.odds && comp.odds[0] ? { spread: comp.odds[0].details, overUnder: comp.odds[0].overUnder, provider: comp.odds[0].provider ? comp.odds[0].provider.name : null } : null,
+          venue: comp.venue ? comp.venue.fullName : null,
+          broadcast: comp.broadcasts && comp.broadcasts[0] ? comp.broadcasts[0].names.join(', ') : null,
+        };
+      });
+      res.json({ sport: req.params.sport, games: games, count: games.length, date: raw.day ? raw.day.date : null });
+    } else if (raw && raw.games) {
+      // Already transformed
+      res.json(raw);
+    } else {
+      res.json({ games: [], sport: req.params.sport, count: 0 });
+    }
+  } catch(e) { trackError("/api/sports/scores", e); res.json({ games: [], sport: req.params.sport, count: 0 }); }
 });
 
 // AI Predict — read cached prediction or return processing message
@@ -360,7 +393,7 @@ app.get("/api/cdl-predictions/:matchId", async (req, res) => {
 app.get("/api/trending/:sport", async (req, res) => {
   try {
     var data = await redisCache.get("oracle:trending:" + req.params.sport);
-    if (data && data.trending && data.trending.length > 0) {
+    if (data && data.picks && data.picks.length > 0) {
       return res.json(data);
     }
     // Fallback: build trending from props + movement data
@@ -369,42 +402,44 @@ app.get("/api/trending/:sport", async (req, res) => {
     var movements = mvData && mvData.movements ? mvData.movements : [];
     if (propsData) {
       var props = propsData.props || propsData.picks || [];
-      var trending = props.filter(function(p) { return p.bookCount >= 5; })
+      var picks = props.filter(function(p) { return p.bookCount >= 5; })
         .sort(function(a, b) { return (b.bookCount || 0) - (a.bookCount || 0); })
         .slice(0, 30)
         .map(function(p) {
           var bc = p.bookCount || 1;
           var isDemon = p.lineType === 'demon';
           var isEdge = p.lineType === 'edge' || p.hasEdge;
-          var hasMvmt = movements.some(function(m) { return m.player === p.player && m.market === (p.marketLabel || p.market); });
+          var mvMatch = movements.find(function(m) { return m.player === p.player; });
+          // Signals must be objects with { type, label } for the React SignalBadge component
           var signals = [];
-          if (isDemon) signals.push('demon');
-          if (isEdge) signals.push('edge');
-          if (hasMvmt) signals.push('movement');
-          if (bc >= 7) signals.push('consensus');
-          var trendingScore = Math.min(100, (signals.length * 20) + (bc * 3));
+          if (isDemon) signals.push({ type: 'demon', label: 'Demon (' + bc + ' books)' });
+          if (isEdge) signals.push({ type: 'edge', label: 'Edge Detected' });
+          if (mvMatch) signals.push({ type: 'movement', label: 'Line Moving', direction: mvMatch.direction === 'up' ? 'UP' : 'DOWN' });
+          if (bc >= 7) signals.push({ type: 'books', label: bc + ' Books Agree' });
+          var trendingScore = Math.min(100, (signals.length * 22) + (bc * 4));
           return {
             player: p.player,
-            market: p.marketLabel || p.market,
+            market: p.market,
+            marketLabel: p.marketLabel || p.market,
+            consensusLine: p.consensusLine || p.line,
             line: p.consensusLine || p.line,
-            pick: isDemon ? 'OVER' : 'UNDER',
             bookCount: bc,
             lineType: p.lineType,
+            hasEdge: isEdge,
             game: p.game,
+            books: p.books,
             trendingScore: trendingScore,
             signals: signals,
-            signalCount: signals.length,
-            grade: isDemon ? 'A+' : isEdge ? 'A' : 'B+',
-            confidence: Math.min(95, 40 + (bc * 5)),
-            direction: p.lineType === 'goblin' ? 'UNDER' : 'OVER',
+            movement: mvMatch ? { openLine: mvMatch.oldLine, currentLine: mvMatch.newLine, direction: mvMatch.direction === 'up' ? 'UP' : 'DOWN', amount: mvMatch.change } : null,
           };
         });
-      trending.sort(function(a, b) { return b.trendingScore - a.trendingScore; });
-      res.json({ trending: trending, count: trending.length, source: "props-derived" });
+      picks.sort(function(a, b) { return b.trendingScore - a.trendingScore; });
+      // React TrendingPicksTab reads data.picks (NOT data.trending)
+      res.json({ picks: picks, count: picks.length, source: "props-derived" });
     } else {
-      res.json({ trending: [], count: 0 });
+      res.json({ picks: [], count: 0 });
     }
-  } catch(e) { trackError("/api/trending/" + req.params.sport, e); res.json({ trending: [], count: 0 }); }
+  } catch(e) { trackError("/api/trending/" + req.params.sport, e); res.json({ picks: [], count: 0 }); }
 });
 
 // Player headshots — proxy to ESPN CDN (handles /api/headshots/:sport/:player)
@@ -458,6 +493,73 @@ app.get("/api/movement/:sport/biggest", async (req, res) => {
   } else {
     res.json({ movements: [], count: 0 });
   }
+});
+
+// Pick History — React History tab calls /api/props/history/all
+// Expects: { entries: [{ sport, date, picks: [{ player, pick, line, result, actual }] }] }
+app.get("/api/props/history/all", async (req, res) => {
+  try {
+    // Try graded picks from the new grading engine
+    var grades = await redisCache.get("oracle:graded_picks");
+    if (grades && grades.length > 0) {
+      // Group by date
+      var byDate = {};
+      grades.forEach(function(g) {
+        var key = g.date + ':' + g.sport;
+        if (!byDate[key]) byDate[key] = { sport: g.sport, date: g.date, picks: [] };
+        byDate[key].picks.push({ player: g.player, market: g.market, line: g.line, pick: g.pick, result: g.result, actual: g.actual, game: g.game });
+      });
+      var entries = Object.values(byDate).sort(function(a, b) { return b.date.localeCompare(a.date); });
+      return res.json({ entries: entries });
+    }
+    // Fallback: try old parlay builder data
+    var accuracy = await redisCache.getAccuracy();
+    if (accuracy && accuracy.recentPicks && accuracy.recentPicks.length > 0) {
+      return res.json({ entries: [{ sport: 'nba', date: new Date().toISOString().split('T')[0], picks: accuracy.recentPicks }] });
+    }
+    res.json({ entries: [] });
+  } catch(e) { trackError("/api/props/history/all", e); res.json({ entries: [] }); }
+});
+
+// Standings — proxy ESPN standings with transformation
+app.get("/api/sports/standings/:sport", async (req, res) => {
+  try {
+    var cached = await cachedRedisGet("standings:" + req.params.sport, function() { return redisCache.get("oracle:standings:" + req.params.sport); });
+    if (cached && cached.groups) return res.json(cached);
+    // Fallback: fetch from ESPN directly via native https
+    var https = require("https");
+    var sportMap = { nba: 'basketball/nba', nhl: 'hockey/nhl', mlb: 'baseball/mlb', nfl: 'football/nfl' };
+    var espnPath = sportMap[req.params.sport];
+    if (!espnPath) return res.json({ groups: [] });
+    await new Promise(function(resolve) {
+      var data = '';
+      var r = https.get("https://site.api.espn.com/apis/v2/sports/" + espnPath + "/standings", { timeout: 10000 }, function(resp) {
+        resp.on('data', function(c) { data += c; });
+        resp.on('end', function() {
+          try {
+            var parsed = JSON.parse(data);
+            var groups = (parsed.children || []).map(function(child) {
+              return {
+                name: child.name || child.abbreviation || 'Division',
+                teams: (child.standings && child.standings.entries ? child.standings.entries : []).map(function(entry) {
+                  var team = entry.team || {};
+                  var stats = {};
+                  (entry.stats || []).forEach(function(s) { stats[s.abbreviation || s.name] = s.displayValue || s.value; });
+                  return { id: team.id, name: team.displayName || team.name, logo: team.logos && team.logos[0] ? team.logos[0].href : null, stats: stats, record: stats.W && stats.L ? stats.W + '-' + stats.L : null };
+                }),
+              };
+            });
+            res.json({ groups: groups, sport: req.params.sport });
+            redisCache.set("oracle:standings:" + req.params.sport, { groups: groups, sport: req.params.sport }, 3600);
+          } catch(e) { res.json({ groups: [] }); }
+          data = null;
+          resolve();
+        });
+      });
+      r.on('error', function() { res.json({ groups: [] }); resolve(); });
+      r.on('timeout', function() { r.destroy(); res.json({ groups: [] }); resolve(); });
+    });
+  } catch(e) { trackError("/api/sports/standings", e); res.json({ groups: [] }); }
 });
 
 // Enriched props
