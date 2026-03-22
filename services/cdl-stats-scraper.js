@@ -44,9 +44,15 @@ const CDL_TEAM_MAP = Object.fromEntries(CDL_TEAMS.map(t => [t.id, t]));
 // Caches (in-memory, synced to Redis by server.js)
 // ============================================================
 var playerStatsCache = {};   // { playerId: { ...fullStats } }
-var matchHistoryCache = {};  // { playerId: [ { date, opponent, mode, kills, deaths, damage, ... } ] }
-var teamPaceCache = {};      // { teamId: { hp: avgTeamKills, snd: ..., ovl: ... } }
+var matchHistoryCache = {};  // { _h2h: { "teamA_vs_teamB": [...] }, _lastFetched }
+var teamPaceCache = {};      // { teamId: { hp: paceMultiplier, snd: ..., ovl: ... } }
 var lastScraped = null;
+
+// v3 Caches
+var playerMatchKills = {};   // { playerId: [ { matchId, date, opponentId, mode, mapNum, kills } ] }
+var teamMapWinRates = {};    // { teamId: { "mapId_modeId": { wins, losses, pct } } }
+var mapPickHistory = {};     // { teamId: [ { matchId, action: 'Pick'|'Ban', mapId, modeId } ] }
+var recentMatchIds = [];     // Match IDs already scraped (avoid re-scraping)
 
 // ============================================================
 // Utility: extract __NEXT_DATA__ from BreakingPoint pages
@@ -299,10 +305,247 @@ async function scrapeMatchHistory() {
     // Store in cache
     matchHistoryCache._h2h = h2hData;
     matchHistoryCache._lastFetched = new Date().toISOString();
+    matchHistoryCache._matchIds = matches.map(function(m) { return m.id; });
     console.log('[CDL] Fetched ' + matches.length + ' past matches for H2H data');
   } catch (err) {
     console.warn('[CDL] Match history fetch failed:', err.message);
   }
+}
+
+// ============================================================
+// v3: SCRAPE per-match scoreboards from BreakingPoint match pages
+// Gets actual kills per player per mode per match for:
+//   - True H2H player-level kill data vs specific opponents
+//   - Recent 5-match form with actual kill numbers
+//   - Per-map kill variance (real stddev from match data)
+// ============================================================
+async function scrapeMatchScoreboards() {
+  try {
+    // Get list of recent match IDs from PandaScore
+    var apiKey = process.env.PANDASCORE_API_KEY;
+    if (!apiKey) return;
+
+    var resp = await axios.get('https://api.pandascore.co/codmw/matches/past', {
+      headers: { Authorization: 'Bearer ' + apiKey },
+      params: { 'page[size]': 20, sort: '-scheduled_at', 'filter[league_id]': 4747, 'filter[status]': 'finished' },
+      timeout: 15000,
+    });
+
+    var pandaMatches = resp.data || [];
+    // Map PandaScore match to BreakingPoint match IDs
+    // We'll scrape individual match pages on BreakingPoint using team IDs + dates
+    // For now, scrape recent completed matches from BreakingPoint /matches page
+    var bpMatchIds = [];
+    
+    // Get recent BP match IDs from the matches page
+    try {
+      var bpResp = await axios.get('https://www.breakingpoint.gg/matches', {
+        headers: { 'User-Agent': 'ORACLE-CDL-Props/2.0' },
+        timeout: 15000,
+      });
+      var bpData = extractNextData(bpResp.data);
+      var trpc = bpData.props.pageProps.trpcState;
+      if (trpc && trpc.json && trpc.json.queries) {
+        for (var i = 0; i < trpc.json.queries.length; i++) {
+          var q = trpc.json.queries[i];
+          var qk = JSON.stringify(q.queryKey || '');
+          if (qk.includes('fetchMatches') && q.state && q.state.data) {
+            var matchData = q.state.data;
+            if (Array.isArray(matchData)) {
+              matchData.forEach(function(m) {
+                if (m.id && m.winner_id && !recentMatchIds.includes(m.id)) {
+                  bpMatchIds.push(m.id);
+                }
+              });
+            } else if (matchData.pages) {
+              // Paginated format
+              (matchData.pages || []).forEach(function(page) {
+                (page || []).forEach(function(m) {
+                  if (m.id && m.winner_id && !recentMatchIds.includes(m.id)) {
+                    bpMatchIds.push(m.id);
+                  }
+                });
+              });
+            }
+          }
+        }
+      }
+    } catch(e) { /* matches page may fail */ }
+
+    // Limit to 10 matches per scrape cycle to avoid rate limits
+    var toScrape = bpMatchIds.slice(0, 10);
+    var totalNewKills = 0;
+
+    for (var mi = 0; mi < toScrape.length; mi++) {
+      var matchId = toScrape[mi];
+      try {
+        var mResp = await axios.get('https://lab.breakingpoint.gg/match/' + matchId, {
+          headers: { 'User-Agent': 'ORACLE-CDL-Props/2.0' },
+          timeout: 15000,
+        });
+        var mData = extractNextData(mResp.data);
+        var pp = mData.props.pageProps;
+
+        // Extract playersLastFiveMatchStats — per-player, per-mode, per-map kills
+        var plfms = pp.playersLastFiveMatchStats;
+        if (plfms) {
+          var entries = Object.values(plfms);
+          entries.forEach(function(e) {
+            if (!e.player_id || !e.kills) return;
+            var pid = e.player_id;
+            if (!playerMatchKills[pid]) playerMatchKills[pid] = [];
+
+            // Determine opponent
+            var opponentId = e.matches.team_1_id === e.team_id ? e.matches.team_2_id : e.matches.team_1_id;
+
+            playerMatchKills[pid].push({
+              matchId: e.match_id,
+              date: e.matches.datetime,
+              opponentId: opponentId,
+              teamId: e.team_id,
+              modeId: e.mode_id, // 1=HP, 2=SnD, 3=CTL, 5=OVL
+              mapNum: e.games ? e.games.game_num : null,
+              kills: e.kills,
+              firstBloods: e.first_blood_count || 0,
+              won: e.matches.winner_id === e.team_id,
+              seriesScore: e.matches.team_1_id === e.team_id
+                ? e.matches.team_1_score + '-' + e.matches.team_2_score
+                : e.matches.team_2_score + '-' + e.matches.team_1_score,
+            });
+            totalNewKills++;
+          });
+        }
+
+        // Extract map pick/ban data from trpcState
+        if (pp.trpcState && pp.trpcState.json && pp.trpcState.json.queries) {
+          pp.trpcState.json.queries.forEach(function(q) {
+            var qk = JSON.stringify(q.queryKey || '');
+            // Map picks and vetoes
+            if (qk.includes('fetchMapPicksAndVetoes') && q.state && q.state.data) {
+              var picks = q.state.data;
+              if (Array.isArray(picks)) {
+                picks.forEach(function(p) {
+                  var tid = p.team_id;
+                  if (!tid) return;
+                  if (!mapPickHistory[tid]) mapPickHistory[tid] = [];
+                  mapPickHistory[tid].push({
+                    matchId: p.match_id,
+                    action: p.action, // 'Pick' or 'Ban'
+                    mapId: p.map_id,
+                    modeId: p.mode_id,
+                    mapNumber: p.map_number,
+                    order: p.order,
+                  });
+                });
+              }
+            }
+            // Team map-mode win rates (60 days)
+            if (qk.includes('fetchMapModeStatsForTeams') && q.state && q.state.data) {
+              var teamData = q.state.data;
+              for (var tid in teamData) {
+                if (!teamMapWinRates[tid]) teamMapWinRates[tid] = {};
+                var maps = teamData[tid];
+                if (Array.isArray(maps)) {
+                  maps.forEach(function(m) {
+                    var key = m.map_id + '_' + m.mode_id;
+                    teamMapWinRates[tid][key] = {
+                      mapName: m.map_name,
+                      modeName: m.mode_name,
+                      wins: m.wins || 0,
+                      losses: m.losses || 0,
+                      pct: m.percentage || (m.wins + m.losses > 0 ? Math.round(m.wins / (m.wins + m.losses) * 100) : 0),
+                    };
+                  });
+                }
+              }
+            }
+          });
+        }
+
+        recentMatchIds.push(matchId);
+        // Rate limit between match page scrapes
+        await new Promise(function(r) { setTimeout(r, 2000); });
+      } catch(e) {
+        // Individual match scrape failures are OK
+      }
+    }
+
+    console.log('[CDL-v3] Scraped ' + toScrape.length + ' match scoreboards, ' + totalNewKills + ' kill entries, ' + Object.keys(teamMapWinRates).length + ' team map stats, ' + Object.keys(mapPickHistory).length + ' team pick histories');
+  } catch(err) {
+    console.warn('[CDL-v3] Match scoreboard scrape failed:', err.message);
+  }
+}
+
+// ============================================================
+// v3: Get player's kill history vs a specific opponent (H2H)
+// ============================================================
+function getPlayerH2HKills(playerId, opponentTeamId, modeId) {
+  var kills = playerMatchKills[playerId] || [];
+  var h2h = kills.filter(function(k) {
+    return k.opponentId === opponentTeamId && (modeId === undefined || k.modeId === modeId);
+  });
+  if (h2h.length === 0) return null;
+
+  var killValues = h2h.map(function(k) { return k.kills; });
+  var avg = killValues.reduce(function(s, v) { return s + v; }, 0) / killValues.length;
+  var stddev = computeStddev(killValues);
+  var wins = h2h.filter(function(k) { return k.won; }).length;
+
+  return {
+    matches: h2h.length,
+    avgKills: +avg.toFixed(1),
+    stddev: stddev,
+    minKills: Math.min.apply(null, killValues),
+    maxKills: Math.max.apply(null, killValues),
+    winPct: +(wins / h2h.length * 100).toFixed(1),
+    recentKills: h2h.sort(function(a, b) { return new Date(b.date) - new Date(a.date); }).slice(0, 3).map(function(k) { return k.kills; }),
+  };
+}
+
+// ============================================================
+// v3: Get player's recent form from actual match kill data
+// More accurate than aggregated stats — uses real per-match kills
+// ============================================================
+function getPlayerRecentKills(playerId, modeId, count) {
+  var kills = playerMatchKills[playerId] || [];
+  var modeKills = kills.filter(function(k) { return modeId === undefined || k.modeId === modeId; });
+  // Sort by date descending
+  modeKills.sort(function(a, b) { return new Date(b.date) - new Date(a.date); });
+  var recent = modeKills.slice(0, count || 5);
+  if (recent.length === 0) return null;
+
+  var killValues = recent.map(function(k) { return k.kills; });
+  var avg = killValues.reduce(function(s, v) { return s + v; }, 0) / killValues.length;
+
+  return {
+    matches: recent.length,
+    avgKills: +avg.toFixed(1),
+    kills: killValues,
+    stddev: computeStddev(killValues),
+    trend: killValues.length >= 3 ? (killValues[0] > avg ? 'up' : killValues[0] < avg ? 'down' : 'flat') : 'unknown',
+  };
+}
+
+// ============================================================
+// v3: Get team's preferred maps from pick history
+// ============================================================
+function getTeamMapPreferences(teamId, modeId) {
+  var picks = mapPickHistory[teamId] || [];
+  var modePicks = picks.filter(function(p) {
+    return p.action === 'Pick' && (modeId === undefined || p.modeId === modeId);
+  });
+  // Count how often each map is picked
+  var mapCounts = {};
+  modePicks.forEach(function(p) {
+    var k = p.mapId;
+    if (!mapCounts[k]) mapCounts[k] = 0;
+    mapCounts[k]++;
+  });
+  // Sort by count
+  var sorted = Object.keys(mapCounts).sort(function(a, b) { return mapCounts[b] - mapCounts[a]; });
+  return sorted.map(function(mapId) {
+    return { mapId: parseInt(mapId), count: mapCounts[mapId] };
+  });
 }
 
 // ============================================================
@@ -432,6 +675,11 @@ async function scrapeCDLStats() {
   // Fetch match history for H2H data (non-blocking)
   scrapeMatchHistory().catch(function(e) { console.warn('[CDL] H2H fetch error:', e.message); });
 
+  // v3: Scrape per-match scoreboards for player-level H2H kills (non-blocking, runs after main scrape)
+  setTimeout(function() {
+    scrapeMatchScoreboards().catch(function(e) { console.warn('[CDL-v3] Scoreboard scrape error:', e.message); });
+  }, 5000); // Wait 5s after main scrape to avoid rate limits
+
   return { scraped: scraped, total: roster.length, timestamp: lastScraped };
 }
 
@@ -467,35 +715,84 @@ function generateProps(team1Name, team2Name) {
     var paceAdjSND = (1.0 + opponentPace.snd) / 2;
     var paceAdjOVL = (1.0 + opponentPace.ovl) / 2;
 
-    // 2. Recent form adjustment: if player is hot (+10% momentum), boost slightly
+    // 2. Recent form adjustment: use ACTUAL per-match kills if available (v3), fall back to aggregated (v2)
     var formMult = 1.0;
-    if (player.recentForm && player.recentForm.trend === 'hot') {
-      formMult = 1.0 + Math.min(player.recentForm.momentum, 15) / 200; // +7.5% max
+    var recentHP = getPlayerRecentKills(player.playerId, 1, 5); // mode 1 = HP
+    var recentSND = getPlayerRecentKills(player.playerId, 2, 5); // mode 2 = SnD
+    var recentOVL = getPlayerRecentKills(player.playerId, 5, 5); // mode 5 = OVL
+    // Use per-match recent form if available (more accurate than aggregated)
+    if (recentHP && recentHP.matches >= 3) {
+      var recentVsSeason = player.hp.avg > 0 ? (recentHP.avgKills - player.hp.avg) / player.hp.avg : 0;
+      formMult = 1.0 + Math.max(-0.075, Math.min(0.075, recentVsSeason)); // Clamp ±7.5%
+    } else if (player.recentForm && player.recentForm.trend === 'hot') {
+      formMult = 1.0 + Math.min(player.recentForm.momentum, 15) / 200;
     } else if (player.recentForm && player.recentForm.trend === 'cold') {
-      formMult = 1.0 + Math.max(player.recentForm.momentum, -15) / 200; // -7.5% max
+      formMult = 1.0 + Math.max(player.recentForm.momentum, -15) / 200;
     }
 
-    // 3. H2H adjustment: if we have head-to-head data, adjust based on results vs this opponent
+    // 3. H2H adjustment: v3 uses PLAYER-LEVEL kill data vs specific opponent
     var h2hMult = 1.0;
-    // (H2H per-player kill data would require per-match-per-player scraping, which we'll do in v3.
-    //  For now, use team-level W/L vs opponent as a proxy)
-    if (h2h && h2h.length >= 2) {
-      var h2hWins = h2h.filter(function(m) { return m.t1Score > m.t2Score; }).length;
-      var h2hTotal = h2h.length;
-      // If team wins most H2H, slight boost; if they lose most, slight reduction
-      var h2hWinPct = h2hWins / h2hTotal;
-      h2hMult = 0.95 + (h2hWinPct * 0.1); // Range: 0.95 to 1.05
+    var h2hHP = null, h2hSND = null, h2hOVL = null;
+    var h2hMultHP = 1.0, h2hMultSND = 1.0, h2hMultOVL = 1.0;
+    if (opponentTeam) {
+      // v3: per-player, per-mode kills vs this specific opponent
+      h2hHP = getPlayerH2HKills(player.playerId, opponentTeam.id, 1);
+      h2hSND = getPlayerH2HKills(player.playerId, opponentTeam.id, 2);
+      h2hOVL = getPlayerH2HKills(player.playerId, opponentTeam.id, 5);
+
+      // If we have H2H data, blend it with season avg (60% H2H, 40% season)
+      if (h2hHP && h2hHP.matches >= 2 && player.hp.avg > 0) {
+        var h2hRatio = h2hHP.avgKills / player.hp.avg;
+        h2hMultHP = 0.4 + 0.6 * h2hRatio; // Weighted: 60% H2H actual, 40% season
+      }
+      if (h2hSND && h2hSND.matches >= 2 && player.snd.avg > 0) {
+        var h2hRatio = h2hSND.avgKills / player.snd.avg;
+        h2hMultSND = 0.4 + 0.6 * h2hRatio;
+      }
+      if (h2hOVL && h2hOVL.matches >= 2) {
+        var mode3Avg = player.ovl.games > player.ctl.games ? player.ovl.avg : player.ctl.avg;
+        if (mode3Avg > 0) {
+          var h2hRatio = h2hOVL.avgKills / mode3Avg;
+          h2hMultOVL = 0.4 + 0.6 * h2hRatio;
+        }
+      }
+
+      // Fall back to team-level H2H if no player-level data
+      if (!h2hHP && h2h && h2h.length >= 2) {
+        var h2hWins = h2h.filter(function(m) { return m.t1Score > m.t2Score; }).length;
+        var h2hWinPct = h2hWins / h2h.length;
+        h2hMult = 0.95 + (h2hWinPct * 0.1);
+        h2hMultHP = h2hMult; h2hMultSND = h2hMult; h2hMultOVL = h2hMult;
+      }
     }
 
-    // Combined adjustment multiplier
-    var adjHP = paceAdjHP * formMult * h2hMult;
-    var adjSND = paceAdjSND * formMult * h2hMult;
-    var adjOVL = paceAdjOVL * formMult * h2hMult;
+    // 4. v3: Team map win rate adjustment — if opponent is strong/weak on the likely map
+    var mapWinAdj = 1.0;
+    if (opponentTeam && teamMapWinRates[opponentTeam.id]) {
+      var oppMaps = teamMapWinRates[opponentTeam.id];
+      // Count total win/loss across all HP maps to gauge overall mode strength
+      var hpWins = 0, hpLosses = 0;
+      for (var mk in oppMaps) {
+        if (mk.includes('_1')) { hpWins += oppMaps[mk].wins; hpLosses += oppMaps[mk].losses; }
+      }
+      if (hpWins + hpLosses >= 3) {
+        var oppHPwinPct = hpWins / (hpWins + hpLosses);
+        // If opponent wins 70% of HP maps, your kills might be lower; if 30%, higher
+        mapWinAdj = 1.0 + (0.5 - oppHPwinPct) * 0.15; // ±7.5% range
+      }
+    }
+
+    // Combined adjustment multipliers (per-mode for v3 accuracy)
+    var adjHP = paceAdjHP * formMult * h2hMultHP * mapWinAdj;
+    var adjSND = paceAdjSND * formMult * h2hMultSND;
+    var adjOVL = paceAdjOVL * formMult * h2hMultOVL;
 
     // ---- PROP GENERATION ----
 
     // Map 1: Hardpoint kills
     if (player.hp.games >= 3) {
+      // v3: Use actual H2H stddev if available, else fall back to aggregated
+      var hpStddev = (h2hHP && h2hHP.stddev > 0) ? h2hHP.stddev : (recentHP && recentHP.stddev > 0 ? recentHP.stddev : player.hp.stddev);
       var adjustedAvg = +(player.hp.avg * adjHP).toFixed(1);
       var line = Math.round(adjustedAvg * 2) / 2;
       props.push({
@@ -505,17 +802,20 @@ function generateProps(team1Name, team2Name) {
         avg: player.hp.avg,
         adjustedAvg: adjustedAvg,
         games: player.hp.games,
-        edge: calculateEdgeV2(adjustedAvg, line, 'hp', player.hp.stddev, player.hp.games),
+        edge: calculateEdgeV2(adjustedAvg, line, 'hp', hpStddev, player.hp.games),
         suggestion: adjustedAvg > line + 1.0 ? 'OVER' : adjustedAvg < line - 1.0 ? 'UNDER' : null,
         bpRating: player.bpRating.hp,
-        form: player.recentForm ? player.recentForm.trend : 'neutral',
+        form: recentHP ? recentHP.trend : (player.recentForm ? player.recentForm.trend : 'neutral'),
         paceAdj: +(paceAdjHP).toFixed(3),
-        h2hAdj: +(h2hMult).toFixed(3),
+        h2hAdj: +(h2hMultHP).toFixed(3),
+        h2hData: h2hHP ? { avg: h2hHP.avgKills, matches: h2hHP.matches, recent: h2hHP.recentKills } : null,
+        recentKills: recentHP ? recentHP.kills : null,
       });
     }
 
     // Map 2: Search & Destroy kills
     if (player.snd.games >= 3) {
+      var sndStddev = (h2hSND && h2hSND.stddev > 0) ? h2hSND.stddev : (recentSND && recentSND.stddev > 0 ? recentSND.stddev : player.snd.stddev);
       var adjustedAvg = +(player.snd.avg * adjSND).toFixed(1);
       var line = Math.round(adjustedAvg * 2) / 2;
       props.push({
@@ -525,11 +825,13 @@ function generateProps(team1Name, team2Name) {
         avg: player.snd.avg,
         adjustedAvg: adjustedAvg,
         games: player.snd.games,
-        edge: calculateEdgeV2(adjustedAvg, line, 'snd', player.snd.stddev, player.snd.games),
+        edge: calculateEdgeV2(adjustedAvg, line, 'snd', sndStddev, player.snd.games),
         suggestion: adjustedAvg > line + 0.5 ? 'OVER' : adjustedAvg < line - 0.5 ? 'UNDER' : null,
         bpRating: player.bpRating.snd,
         avgPerRound: player.snd.avgPerRound,
-        form: player.recentForm ? player.recentForm.trend : 'neutral',
+        form: recentSND ? recentSND.trend : (player.recentForm ? player.recentForm.trend : 'neutral'),
+        h2hAdj: +(h2hMultSND).toFixed(3),
+        h2hData: h2hSND ? { avg: h2hSND.avgKills, matches: h2hSND.matches, recent: h2hSND.recentKills } : null,
       });
     }
 
@@ -539,6 +841,7 @@ function generateProps(team1Name, team2Name) {
     var mode3Key = player.ovl.games > player.ctl.games ? 'ovl' : 'ctl';
     var mode3BPR = mode3Key === 'ovl' ? player.bpRating.ovl : player.bpRating.ctl;
     if (mode3.games >= 3) {
+      var ovlStddev = (h2hOVL && h2hOVL.stddev > 0) ? h2hOVL.stddev : (recentOVL && recentOVL.stddev > 0 ? recentOVL.stddev : mode3.stddev || 0);
       var adjustedAvg = +(mode3.avg * adjOVL).toFixed(1);
       var line = Math.round(adjustedAvg * 2) / 2;
       props.push({
@@ -548,9 +851,11 @@ function generateProps(team1Name, team2Name) {
         avg: mode3.avg,
         adjustedAvg: adjustedAvg,
         games: mode3.games,
-        edge: calculateEdgeV2(adjustedAvg, line, mode3Key, mode3.stddev || 0, mode3.games),
+        edge: calculateEdgeV2(adjustedAvg, line, mode3Key, ovlStddev, mode3.games),
         bpRating: mode3BPR,
-        form: player.recentForm ? player.recentForm.trend : 'neutral',
+        form: recentOVL ? recentOVL.trend : (player.recentForm ? player.recentForm.trend : 'neutral'),
+        h2hAdj: +(h2hMultOVL).toFixed(3),
+        h2hData: h2hOVL ? { avg: h2hOVL.avgKills, matches: h2hOVL.matches, recent: h2hOVL.recentKills } : null,
       });
     }
 
@@ -558,12 +863,11 @@ function generateProps(team1Name, team2Name) {
     var totalAvg = (player.hp.avg * adjHP) + (player.snd.avg * adjSND) + (mode3.avg * adjOVL);
     if (player.hp.games >= 3 && player.snd.games >= 3) {
       var line = Math.round(totalAvg * 2) / 2;
-      // Compute combined stddev (sqrt of sum of variances)
-      var combinedStd = Math.sqrt(
-        Math.pow(player.hp.stddev || 4, 2) +
-        Math.pow(player.snd.stddev || 2, 2) +
-        Math.pow(mode3.stddev || 3, 2)
-      );
+      // v3: Use real stddev from match data if available
+      var hpStd = (recentHP && recentHP.stddev > 0) ? recentHP.stddev : (player.hp.stddev || 4);
+      var sndStd = (recentSND && recentSND.stddev > 0) ? recentSND.stddev : (player.snd.stddev || 2);
+      var ovlStd = (recentOVL && recentOVL.stddev > 0) ? recentOVL.stddev : (mode3.stddev || 3);
+      var combinedStd = Math.sqrt(Math.pow(hpStd, 2) + Math.pow(sndStd, 2) + Math.pow(ovlStd, 2));
       props.push({
         market: 'total_kills',
         label: 'Total Kills (Maps 1-3)',
@@ -681,12 +985,20 @@ function calculateEdgeV2(adjustedAvg, line, mode, playerStddev, sampleSize) {
 // API: Get cached stats
 // ============================================================
 function getCachedStats() {
+  var totalMatchKills = 0;
+  for (var pid in playerMatchKills) totalMatchKills += playerMatchKills[pid].length;
   return {
     players: Object.values(playerStatsCache),
     lastUpdated: lastScraped,
     teamCount: CDL_TEAMS.length,
     teamPace: teamPaceCache,
     h2hAvailable: matchHistoryCache._h2h ? Object.keys(matchHistoryCache._h2h).length : 0,
+    // v3 data
+    matchScoreboards: recentMatchIds.length,
+    playerMatchKillEntries: totalMatchKills,
+    teamMapWinRates: Object.keys(teamMapWinRates).length,
+    mapPickHistoryTeams: Object.keys(mapPickHistory).length,
+    version: 'v3',
   };
 }
 
@@ -697,8 +1009,12 @@ module.exports = {
   scrapeCDLStats: scrapeCDLStats,
   scrapePlayerStats: scrapePlayerStats,
   scrapeMatchHistory: scrapeMatchHistory,
+  scrapeMatchScoreboards: scrapeMatchScoreboards,
   generateProps: generateProps,
   getCachedStats: getCachedStats,
+  getPlayerH2HKills: getPlayerH2HKills,
+  getPlayerRecentKills: getPlayerRecentKills,
+  getTeamMapPreferences: getTeamMapPreferences,
   CDL_TEAMS: CDL_TEAMS,
   CDL_TEAM_MAP: CDL_TEAM_MAP,
   matchTeam: matchTeam,
