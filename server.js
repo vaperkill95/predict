@@ -772,24 +772,48 @@ try {
     }, 5 * 60 * 1000);
   }
 
-  // MEMORY WATCHDOG — auto-restart when memory exceeds 3GB
-  // Since all data lives in Redis, a restart loses nothing.
-  // The web server keeps serving users during restart.
+  // === SCHEDULED RESTART — every 4 hours ===
+  // Production pattern: predictable restarts prevent memory leaks from accumulating.
+  // All data lives in Redis, so restarts are invisible to users.
+  var RESTART_INTERVAL = 4 * 60 * 60 * 1000; // 4 hours
+  setTimeout(function() {
+    console.log("[SCHEDULER] 4-hour scheduled restart. All data safe in Redis. Back in 30 seconds.");
+    // Sync one final time before restarting
+    (async function() {
+      try {
+        if (redisCache && redisCache.isConnected()) {
+          console.log("[SCHEDULER] Final Redis sync before restart...");
+          // Quick sync of essential data
+          for (var sport of ['nba', 'nhl', 'mlb']) {
+            try {
+              var rawProps = typeof getCachedProps === 'function' ? await getCachedProps(sport) : null;
+              if (rawProps && rawProps.props && rawProps.props.length > 0) {
+                await redisCache.setProps(sport, { props: rawProps.props, picks: rawProps.props, count: rawProps.props.length, timestamp: Date.now() });
+              }
+            } catch(e) {}
+          }
+          if (evEngine && evEngine.cache && evEngine.cache.evBets) await redisCache.setEV(evEngine.cache.evBets);
+          if (potd && potd.cache && potd.cache.picks) await redisCache.setPOTD(potd.cache.picks);
+          console.log("[SCHEDULER] Final sync complete. Restarting now.");
+        }
+      } catch(e) {}
+      process.exit(0);
+    })();
+  }, RESTART_INTERVAL);
+  console.log("[SCHEDULER] Worker will auto-restart in 4 hours (at " + new Date(Date.now() + RESTART_INTERVAL).toISOString() + ")");
+
+  // === MEMORY WATCHDOG — emergency restart if memory exceeds 3GB before scheduled restart ===
   setInterval(function() {
     var rss = process.memoryUsage().rss;
     var rssMB = Math.round(rss / 1024 / 1024);
-    if (rssMB > 3072) { // 3GB threshold
-      console.warn("[WATCHDOG] Memory at " + rssMB + "MB — exceeds 3GB limit. Graceful restart in 5 seconds...");
-      console.warn("[WATCHDOG] All data is in Redis. Web server unaffected. Worker will be back in 30 seconds.");
-      setTimeout(function() {
-        process.exit(1); // Railway will auto-restart due to restartPolicyType = ON_FAILURE
-      }, 5000);
+    if (rssMB > 3072) {
+      console.warn("[WATCHDOG] Memory at " + rssMB + "MB — emergency restart. All data safe in Redis.");
+      process.exit(1);
     } else if (rssMB > 2048) {
-      console.warn("[WATCHDOG] Memory at " + rssMB + "MB — approaching 3GB restart threshold");
-      // Try aggressive GC
+      console.warn("[WATCHDOG] Memory at " + rssMB + "MB — approaching limit");
       if (global.gc) global.gc();
     }
-  }, 60000); // Check every 60 seconds
+  }, 60000);
 
   // Run advanced features every 5 minutes (grading, SGP, bankroll sim, alerts)
   try {

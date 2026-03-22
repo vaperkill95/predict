@@ -1,11 +1,13 @@
 /**
- * oracle-web.js — Lightweight Web Server
+ * oracle-web.js — Production Web Server
  * 
- * ONLY serves pages and reads from Redis. No API calls, no background jobs.
- * Starts in 2 seconds. Never crashes from heavy work.
- * 
- * The worker (server.js) handles ALL heavy lifting and writes to Redis.
- * This server reads from Redis and serves pages to users.
+ * Features:
+ * - In-memory API cache (30-second TTL) — 500 users hit memory, not Redis
+ * - Rate limiting — prevents abuse
+ * - Error tracking — logs all errors with stack traces
+ * - Security headers via Helmet
+ * - Compression
+ * - Reads from Redis, never calls external APIs
  */
 
 require("dotenv").config();
@@ -19,11 +21,89 @@ const fs = require("fs");
 const app = express();
 const PORT = process.env.PORT || 3001;
 
-// Middleware
-app.use(helmet({ contentSecurityPolicy: false }));
+// ============================================================
+// SECURITY — Production-grade headers
+// ============================================================
+app.use(helmet({
+  contentSecurityPolicy: false,
+  crossOriginEmbedderPolicy: false,
+  hsts: { maxAge: 31536000, includeSubDomains: true, preload: true },
+}));
 app.use(compression());
-app.use(express.json());
+app.use(express.json({ limit: '1mb' }));
 app.use(cors({ origin: "*", credentials: true }));
+
+// ============================================================
+// RATE LIMITING — Prevent abuse (200 requests per minute per IP)
+// ============================================================
+var rateLimitMap = {};
+app.use("/api/", function(req, res, next) {
+  var ip = req.headers['x-forwarded-for'] || req.ip || 'unknown';
+  var now = Date.now();
+  if (!rateLimitMap[ip]) rateLimitMap[ip] = { count: 0, reset: now + 60000 };
+  if (now > rateLimitMap[ip].reset) { rateLimitMap[ip] = { count: 0, reset: now + 60000 }; }
+  rateLimitMap[ip].count++;
+  if (rateLimitMap[ip].count > 200) {
+    return res.status(429).json({ error: "Too many requests. Try again in a minute." });
+  }
+  next();
+});
+// Clean up rate limit map every 5 minutes
+setInterval(function() { rateLimitMap = {}; }, 5 * 60 * 1000);
+
+// ============================================================
+// IN-MEMORY API CACHE — 500 users hit memory, not Redis
+// ============================================================
+var apiCache = {};
+var API_CACHE_TTL = 30000; // 30 seconds
+
+function getCached(key) {
+  var entry = apiCache[key];
+  if (entry && Date.now() - entry.time < API_CACHE_TTL) return entry.data;
+  return null;
+}
+
+function setCache(key, data) {
+  apiCache[key] = { data: data, time: Date.now() };
+}
+
+// Clean stale cache entries every 2 minutes
+setInterval(function() {
+  var now = Date.now();
+  var keys = Object.keys(apiCache);
+  keys.forEach(function(k) { if (now - apiCache[k].time > API_CACHE_TTL * 2) delete apiCache[k]; });
+}, 120000);
+
+// Helper: cached Redis read
+async function cachedRedisGet(cacheKey, redisFn) {
+  var cached = getCached(cacheKey);
+  if (cached) return cached;
+  var data = typeof redisFn === 'function' ? await redisFn() : await redisCache.get(cacheKey);
+  if (data) setCache(cacheKey, data);
+  return data;
+}
+
+// ============================================================
+// ERROR TRACKING — Log all errors with context
+// ============================================================
+var errorLog = []; // Keep last 100 errors in memory
+function trackError(endpoint, error, context) {
+  var entry = {
+    timestamp: new Date().toISOString(),
+    endpoint: endpoint,
+    error: error.message || String(error),
+    stack: error.stack ? error.stack.split('\n').slice(0, 3).join(' | ') : '',
+    context: context || {},
+  };
+  errorLog.push(entry);
+  if (errorLog.length > 100) errorLog.shift();
+  console.error("[ERROR] " + endpoint + ": " + entry.error);
+}
+
+// Error tracking API endpoint
+app.get("/api/errors", function(req, res) {
+  res.json({ errors: errorLog.slice(-20), total: errorLog.length });
+});
 
 // ============================================================
 // Redis Connection
@@ -45,6 +125,9 @@ app.get("/api/health", async (req, res) => {
     timestamp: new Date().toISOString(),
     memory: { heapMB: Math.round(mem.heapUsed / 1024 / 1024), rssMB: Math.round(mem.rss / 1024 / 1024) },
     redis: redisHealth,
+    cache: { entries: Object.keys(apiCache).length, ttlSeconds: API_CACHE_TTL / 1000 },
+    errors: { recent: errorLog.length },
+    rateLimit: { activeIPs: Object.keys(rateLimitMap).length },
   });
 });
 
@@ -52,15 +135,18 @@ app.get("/api/redis/health", async (req, res) => {
   try { res.json(await redisCache.healthCheck()); } catch(e) { res.json({ status: "error", error: e.message }); }
 });
 
-// Props
+// Props — with in-memory cache
 app.get("/api/props/:sport", async (req, res) => {
-  const data = await redisCache.getProps(req.params.sport);
-  if (data) {
-    const props = data.props || data.picks || [];
-    res.json({ props: props, count: props.length, available: true, source: "redis" });
-  } else {
-    res.json({ props: [], count: 0, available: true, source: "redis-empty", message: "No props right now. Check back closer to game time." });
-  }
+  try {
+    var cacheKey = "props:" + req.params.sport;
+    var data = await cachedRedisGet(cacheKey, function() { return redisCache.getProps(req.params.sport); });
+    if (data) {
+      const props = data.props || data.picks || [];
+      res.json({ props: props, count: props.length, available: true, source: "redis" });
+    } else {
+      res.json({ props: [], count: 0, available: true, source: "redis-empty", message: "No props right now. Check back closer to game time." });
+    }
+  } catch(e) { trackError("/api/props/" + req.params.sport, e); res.json({ props: [], count: 0, available: true }); }
 });
 
 // Smart Picks
@@ -73,26 +159,30 @@ app.get("/api/props/:sport/picks", async (req, res) => {
   }
 });
 
-// Game Predictions
+// Game Predictions — with cache
 app.get("/api/games/:sport", async (req, res) => {
-  const data = await redisCache.getGames(req.params.sport);
-  if (data) {
-    res.json({ games: data.games || [], count: (data.games || []).length, source: "redis" });
-  } else {
-    res.json({ games: [], count: 0, source: "empty" });
-  }
+  try {
+    var data = await cachedRedisGet("games:" + req.params.sport, function() { return redisCache.getGames(req.params.sport); });
+    if (data) {
+      res.json({ games: data.games || [], count: (data.games || []).length, source: "redis" });
+    } else {
+      res.json({ games: [], count: 0, source: "empty" });
+    }
+  } catch(e) { trackError("/api/games/" + req.params.sport, e); res.json({ games: [], count: 0 }); }
 });
 
-// EV Bets
+// EV Bets — with cache
 app.get("/api/ev/bets", async (req, res) => {
-  const data = await redisCache.getEV();
-  const minEdge = parseFloat(req.query.minEdge) || 0;
-  if (data && Array.isArray(data)) {
-    const filtered = minEdge > 0 ? data.filter(b => (b.edgePercent || 0) >= minEdge) : data;
-    res.json({ bets: filtered, found: filtered.length });
-  } else {
-    res.json({ bets: [], found: 0 });
-  }
+  try {
+    var data = await cachedRedisGet("ev:bets", function() { return redisCache.getEV(); });
+    var minEdge = parseFloat(req.query.minEdge) || 0;
+    if (data && Array.isArray(data)) {
+      var filtered = minEdge > 0 ? data.filter(function(b) { return (b.edgePercent || 0) >= minEdge; }) : data;
+      res.json({ bets: filtered, found: filtered.length });
+    } else {
+      res.json({ bets: [], found: 0 });
+    }
+  } catch(e) { trackError("/api/ev/bets", e); res.json({ bets: [], found: 0 }); }
 });
 
 // POTD
