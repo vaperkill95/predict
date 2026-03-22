@@ -151,20 +151,55 @@ app.get("/api/props/:sport", async (req, res) => {
 
 // Smart Picks
 app.get("/api/props/:sport/picks", async (req, res) => {
-  const data = await redisCache.getPicks(req.params.sport);
-  if (data) {
-    res.json(data);
-  } else {
-    res.json({ picks: [], count: 0 });
-  }
+  try {
+    // Try AI-analyzed picks first
+    var data = await redisCache.getPicks(req.params.sport);
+    if (data && data.picks && data.picks.length > 0) {
+      return res.json(data);
+    }
+    // Fallback: use raw props sorted by confidence (demon lines first, then edges)
+    var propsData = await cachedRedisGet("props:" + req.params.sport, function() { return redisCache.getProps(req.params.sport); });
+    if (propsData) {
+      var props = propsData.props || propsData.picks || [];
+      var sorted = props.slice().sort(function(a, b) {
+        var typeOrder = { demon: 0, edge: 1, goblin: 2 };
+        var aType = typeOrder[a.lineType] !== undefined ? typeOrder[a.lineType] : 3;
+        var bType = typeOrder[b.lineType] !== undefined ? typeOrder[b.lineType] : 3;
+        if (aType !== bType) return aType - bType;
+        return (b.bookCount || 0) - (a.bookCount || 0);
+      });
+      res.json({ picks: sorted, count: sorted.length, source: "props-fallback" });
+    } else {
+      res.json({ picks: [], count: 0 });
+    }
+  } catch(e) { trackError("/api/props/" + req.params.sport + "/picks", e); res.json({ picks: [], count: 0 }); }
 });
 
-// Game Predictions — with cache
+// Game Predictions — with cache, falls back to ESPN schedule
 app.get("/api/games/:sport", async (req, res) => {
   try {
     var data = await cachedRedisGet("games:" + req.params.sport, function() { return redisCache.getGames(req.params.sport); });
-    if (data) {
-      res.json({ games: data.games || [], count: (data.games || []).length, source: "redis" });
+    if (data && data.games && data.games.length > 0) {
+      return res.json({ games: data.games, count: data.games.length, source: "redis" });
+    }
+    // Fallback: build basic game cards from ESPN scoreboard data
+    var scores = await cachedRedisGet("scores:" + req.params.sport, function() { return redisCache.get("oracle:scores:" + req.params.sport); });
+    if (scores && scores.events && scores.events.length > 0) {
+      var games = scores.events.map(function(e) {
+        var home = e.competitions && e.competitions[0] ? e.competitions[0].competitors.find(function(c){return c.homeAway==='home'}) : null;
+        var away = e.competitions && e.competitions[0] ? e.competitions[0].competitors.find(function(c){return c.homeAway==='away'}) : null;
+        return {
+          id: e.id,
+          homeTeam: home ? home.team.displayName : 'TBD',
+          awayTeam: away ? away.team.displayName : 'TBD',
+          commenceTime: e.date,
+          status: e.status ? e.status.type.description : 'Scheduled',
+          completed: e.status ? e.status.type.completed : false,
+          homeScore: home ? home.score : '0',
+          awayScore: away ? away.score : '0',
+        };
+      });
+      res.json({ games: games, count: games.length, source: "espn-derived" });
     } else {
       res.json({ games: [], count: 0, source: "empty" });
     }
@@ -306,8 +341,25 @@ app.get("/api/cdl-predictions/:matchId", async (req, res) => {
 
 // Trending
 app.get("/api/trending/:sport", async (req, res) => {
-  const data = await redisCache.get("oracle:trending:" + req.params.sport);
-  res.json(data || { trending: [], count: 0 });
+  try {
+    // Try trending cache first
+    var data = await redisCache.get("oracle:trending:" + req.params.sport);
+    if (data && data.trending && data.trending.length > 0) {
+      return res.json(data);
+    }
+    // Fallback: build trending from raw props (highest book count = most popular)
+    var propsData = await cachedRedisGet("props:" + req.params.sport, function() { return redisCache.getProps(req.params.sport); });
+    if (propsData) {
+      var props = propsData.props || propsData.picks || [];
+      var trending = props.filter(function(p) { return p.bookCount >= 6; })
+        .sort(function(a, b) { return (b.bookCount || 0) - (a.bookCount || 0); })
+        .slice(0, 20)
+        .map(function(p) { return { player: p.player, market: p.marketLabel || p.market, line: p.consensusLine, bookCount: p.bookCount, lineType: p.lineType, game: p.game, direction: p.analytics ? p.analytics.suggestion : 'OVER' }; });
+      res.json({ trending: trending, count: trending.length, source: "props-derived" });
+    } else {
+      res.json({ trending: [], count: 0 });
+    }
+  } catch(e) { trackError("/api/trending/" + req.params.sport, e); res.json({ trending: [], count: 0 }); }
 });
 
 // Player headshots — proxy to ESPN CDN (handles /api/headshots/:sport/:player)
@@ -424,18 +476,27 @@ app.post("/api/bot/ask", async (req, res) => {
 
 // Sharp snapshot
 app.get("/api/sharp/snapshot", async (req, res) => {
-  const cached = await redisCache.get("oracle:sharp_snapshot");
-  if (cached) {
-    res.json(cached);
-  } else {
-    const ev = await redisCache.getEV();
-    const movement = await redisCache.getMovement("nba");
+  try {
+    var cached = await redisCache.get("oracle:sharp_snapshot");
+    var ev = cached ? cached.evBets : (await redisCache.getEV()) || [];
+    var movements = cached ? cached.movements : [];
+    if (!movements || movements.length === 0) {
+      var mvData = await redisCache.getMovement("nba");
+      movements = mvData ? mvData.movements || [] : [];
+    }
+    // Count total props tracked across all sports
+    var propsTracked = 0;
+    for (var sp of ['nba', 'nhl', 'mlb']) {
+      var pd = await redisCache.getProps(sp);
+      if (pd && pd.props) propsTracked += pd.props.length;
+    }
     res.json({
-      evBets: ev || [],
-      movements: movement ? movement.movements || [] : [],
-      timestamp: new Date().toISOString(),
+      evBets: Array.isArray(ev) ? ev : [],
+      movements: movements,
+      propsTracked: propsTracked,
+      timestamp: cached ? cached.timestamp : new Date().toISOString(),
     });
-  }
+  } catch(e) { trackError("/api/sharp/snapshot", e); res.json({ evBets: [], movements: [], propsTracked: 0 }); }
 });
 
 // ============================================================
