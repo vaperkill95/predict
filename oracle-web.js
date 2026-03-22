@@ -381,23 +381,35 @@ app.post("/api/predictions/game", async (req, res) => {
     var gameId = body.gameId;
 
     // Try cached prediction first
-    var key = "oracle:prediction:" + (gameId || body.homeTeam + ":" + body.awayTeam);
+    var key = "oracle:prediction:" + (gameId || "");
     var cached = await redisCache.get(key);
     if (cached) return res.json(cached);
+
+    // Try proxy to worker for real AI prediction
+    try {
+      var workerUrl = process.env.WORKER_URL || "http://predict.railway.internal:8080";
+      var axios = require("axios");
+      var workerResp = await axios.post(workerUrl + "/api/predictions/game", body, { timeout: 25000, headers: { "Content-Type": "application/json" } });
+      if (workerResp.data && workerResp.data.prediction && !workerResp.data.prediction.fallback) {
+        // Cache the prediction
+        await redisCache.set(key, workerResp.data, 3600);
+        return res.json(workerResp.data);
+      }
+    } catch(proxyErr) {}
 
     // Try games cache with embedded predictions
     var games = await redisCache.getGames(sport);
     if (games && games.games) {
       var match = games.games.find(function(g) {
-        return g.id === gameId || ((g.homeTeam === body.homeTeam || g.homeAbbr === body.homeTeam) && (g.awayTeam === body.awayTeam || g.awayAbbr === body.awayTeam));
+        return g.id === gameId || ((g.homeTeam === body.homeTeam) && (g.awayTeam === body.awayTeam));
       });
       if (match && match.predictions) return res.json(match.predictions);
     }
 
-    // Generate a basic prediction from the game data in scores
+    // Generate prediction from ESPN scores data
     var scores = await redisCache.get("oracle:scores:" + sport);
     if (scores && scores.events) {
-      var event = scores.events.find(function(e) { return e.id === gameId; });
+      var event = scores.events.find(function(e) { return e.id === gameId || e.id === String(gameId); });
       if (event) {
         var comp = event.competitions && event.competitions[0] ? event.competitions[0] : {};
         var home = (comp.competitors || []).find(function(c) { return c.homeAway === 'home'; });
@@ -407,27 +419,35 @@ app.post("/api/predictions/game", async (req, res) => {
         var homeRecord = home && home.records && home.records[0] ? home.records[0].summary : '';
         var awayRecord = away && away.records && away.records[0] ? away.records[0].summary : '';
         var odds = comp.odds && comp.odds[0] ? comp.odds[0] : {};
+        
+        // Parse records to determine favorite
+        var homeWins = parseInt(homeRecord) || 0;
+        var awayWins = parseInt(awayRecord) || 0;
+        var favorite = homeWins > awayWins ? homeName : awayName;
+        var conf = Math.min(78, 55 + Math.abs(homeWins - awayWins));
 
-        var prediction = {
+        return res.json({
           prediction: {
             homeTeam: homeName,
             awayTeam: awayName,
-            predictedScore: { home: Math.round(100 + Math.random() * 20), away: Math.round(100 + Math.random() * 20) },
-            confidence: Math.round(55 + Math.random() * 20),
+            predictedScore: { home: Math.round(105 + (homeWins > awayWins ? 5 : -3)), away: Math.round(105 + (awayWins > homeWins ? 5 : -3)) },
+            winner: favorite,
+            confidence: conf,
+            spread: odds.details || null,
+            overUnder: odds.overUnder || null,
             keyFactors: [
-              homeName + ' record: ' + (homeRecord || 'N/A'),
-              awayName + ' record: ' + (awayRecord || 'N/A'),
-              odds.details ? 'Spread: ' + odds.details : 'No spread available',
-              odds.overUnder ? 'O/U: ' + odds.overUnder : 'No total available',
-              'Home court advantage factored in',
+              homeName + ' (' + (homeRecord || 'N/A') + ') vs ' + awayName + ' (' + (awayRecord || 'N/A') + ')',
+              odds.details ? 'Spread: ' + odds.details : 'No spread data available',
+              odds.overUnder ? 'Over/Under: ' + odds.overUnder : 'No total available',
+              'Home court advantage: ' + homeName,
+              favorite + ' favored based on season record',
             ],
-            hotTake: homeName + ' controls the pace in this one.',
+            hotTake: favorite + ' should control this game based on their ' + (homeWins > awayWins ? homeRecord : awayRecord) + ' record.',
           }
-        };
-        return res.json(prediction);
+        });
       }
     }
-    res.json({ prediction: { fallback: true, keyFactors: ['Game prediction is being processed. Try again in a moment.'] } });
+    res.json({ prediction: { fallback: true, keyFactors: ['Game data not available yet. Games will be predictable closer to tip-off.'] } });
   } catch(e) { trackError("/api/predictions/game", e); res.json({ prediction: { fallback: true, keyFactors: ['Error generating prediction.'] } }); }
 });
 
