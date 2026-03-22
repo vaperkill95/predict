@@ -651,17 +651,29 @@ try {
         }
       } catch(e) {}
 
-      // Sync live scores for ticker (ESPN)
+      // Sync live scores for ticker (ESPN) — use native https to avoid axios memory leak
       try {
-        const axios = require("axios");
-        const sports = { nba: 'basketball/nba', nhl: 'hockey/nhl', mlb: 'baseball/mlb', nfl: 'football/nfl' };
+        const https = require("https");
+        const sports = { nba: 'basketball/nba', nhl: 'hockey/nhl', mlb: 'baseball/mlb' };
         for (const [sport, espnPath] of Object.entries(sports)) {
           try {
-            const resp = await axios.get("https://site.api.espn.com/apis/site/v2/sports/" + espnPath + "/scoreboard", { timeout: 8000 });
-            if (resp.data) {
-              await redisCache.set("oracle:scores:" + sport, resp.data, 300); // 5 min TTL
-              synced++;
-            }
+            await new Promise(function(resolve) {
+              var data = '';
+              var req = https.get("https://site.api.espn.com/apis/site/v2/sports/" + espnPath + "/scoreboard", { timeout: 8000 }, function(resp) {
+                resp.on('data', function(chunk) { data += chunk; });
+                resp.on('end', function() {
+                  try {
+                    var parsed = JSON.parse(data);
+                    redisCache.set("oracle:scores:" + sport, parsed, 300);
+                    synced++;
+                  } catch(e) {}
+                  data = null; // Free memory
+                  resolve();
+                });
+              });
+              req.on('error', function() { resolve(); });
+              req.on('timeout', function() { req.destroy(); resolve(); });
+            });
           } catch(e) {}
         }
       } catch(e) {}
@@ -703,12 +715,29 @@ try {
       } catch(e) {}
       
       if (synced > 0) {
-        console.log("[Redis] Synced " + synced + " cache entries");
+        var mem = process.memoryUsage();
+        var heapMB = Math.round(mem.heapUsed / 1024 / 1024);
+        var rssMB = Math.round(mem.rss / 1024 / 1024);
+        console.log("[Redis] Synced " + synced + " entries | Heap: " + heapMB + "MB | RSS: " + rssMB + "MB");
+        // Warn if memory is getting high
+        if (rssMB > 2048) {
+          console.warn("[Memory] WARNING: RSS at " + rssMB + "MB — approaching limits");
+        }
       }
     } catch(e) {
       // Silent fail — Redis sync is best-effort
     }
   }, 60000); // Every 60 seconds (was 30s — reduced to lower memory pressure)
+
+  // Force garbage collection every 5 minutes to prevent memory creep
+  if (global.gc) {
+    setInterval(function() {
+      var before = Math.round(process.memoryUsage().heapUsed / 1024 / 1024);
+      global.gc();
+      var after = Math.round(process.memoryUsage().heapUsed / 1024 / 1024);
+      console.log("[GC] Manual garbage collection: " + before + "MB → " + after + "MB (freed " + (before - after) + "MB)");
+    }, 5 * 60 * 1000);
+  }
 
   // Run advanced features every 5 minutes (grading, SGP, bankroll sim, alerts)
   try {
