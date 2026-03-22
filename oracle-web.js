@@ -157,7 +157,7 @@ app.get("/api/props/:sport/picks", async (req, res) => {
     if (data && data.picks && data.picks.length > 0) {
       return res.json(data);
     }
-    // Fallback: use raw props sorted by confidence (demon lines first, then edges)
+    // Fallback: use raw props, add synthetic AI fields that React component expects
     var propsData = await cachedRedisGet("props:" + req.params.sport, function() { return redisCache.getProps(req.params.sport); });
     if (propsData) {
       var props = propsData.props || propsData.picks || [];
@@ -168,7 +168,24 @@ app.get("/api/props/:sport/picks", async (req, res) => {
         if (aType !== bType) return aType - bType;
         return (b.bookCount || 0) - (a.bookCount || 0);
       });
-      res.json({ picks: sorted, count: sorted.length, source: "props-fallback" });
+      // Add AI fields that the React TopPicks component expects
+      var enriched = sorted.map(function(p) {
+        var bc = p.bookCount || 1;
+        var conf = Math.min(95, 40 + (bc * 5));
+        var grade = bc >= 8 ? 'A+' : bc >= 6 ? 'A' : bc >= 4 ? 'B+' : bc >= 3 ? 'B' : 'C+';
+        var suggestion = p.lineType === 'goblin' ? 'UNDER' : 'OVER';
+        return Object.assign({}, p, {
+          grade: p.grade || grade,
+          confidence: p.confidence || conf,
+          projection: p.projection || null,
+          hitRate: p.hitRate || null,
+          suggestion: p.suggestion || suggestion,
+          pick: p.pick || suggestion,
+          reasoning: p.reasoning || (bc + ' books agree on ' + (p.consensusLine || 'this line') + ' — ' + (p.lineType === 'demon' ? 'highest consensus edge' : p.lineType === 'goblin' ? 'possible trap line' : 'solid value spot')),
+          enriched: true,
+        });
+      });
+      res.json({ picks: enriched, count: enriched.length, source: "props-enriched" });
     } else {
       res.json({ picks: [], count: 0 });
     }
@@ -342,19 +359,47 @@ app.get("/api/cdl-predictions/:matchId", async (req, res) => {
 // Trending
 app.get("/api/trending/:sport", async (req, res) => {
   try {
-    // Try trending cache first
     var data = await redisCache.get("oracle:trending:" + req.params.sport);
     if (data && data.trending && data.trending.length > 0) {
       return res.json(data);
     }
-    // Fallback: build trending from raw props (highest book count = most popular)
+    // Fallback: build trending from props + movement data
     var propsData = await cachedRedisGet("props:" + req.params.sport, function() { return redisCache.getProps(req.params.sport); });
+    var mvData = await redisCache.getMovement(req.params.sport);
+    var movements = mvData && mvData.movements ? mvData.movements : [];
     if (propsData) {
       var props = propsData.props || propsData.picks || [];
-      var trending = props.filter(function(p) { return p.bookCount >= 6; })
+      var trending = props.filter(function(p) { return p.bookCount >= 5; })
         .sort(function(a, b) { return (b.bookCount || 0) - (a.bookCount || 0); })
-        .slice(0, 20)
-        .map(function(p) { return { player: p.player, market: p.marketLabel || p.market, line: p.consensusLine, bookCount: p.bookCount, lineType: p.lineType, game: p.game, direction: p.analytics ? p.analytics.suggestion : 'OVER' }; });
+        .slice(0, 30)
+        .map(function(p) {
+          var bc = p.bookCount || 1;
+          var isDemon = p.lineType === 'demon';
+          var isEdge = p.lineType === 'edge' || p.hasEdge;
+          var hasMvmt = movements.some(function(m) { return m.player === p.player && m.market === (p.marketLabel || p.market); });
+          var signals = [];
+          if (isDemon) signals.push('demon');
+          if (isEdge) signals.push('edge');
+          if (hasMvmt) signals.push('movement');
+          if (bc >= 7) signals.push('consensus');
+          var trendingScore = Math.min(100, (signals.length * 20) + (bc * 3));
+          return {
+            player: p.player,
+            market: p.marketLabel || p.market,
+            line: p.consensusLine || p.line,
+            pick: isDemon ? 'OVER' : 'UNDER',
+            bookCount: bc,
+            lineType: p.lineType,
+            game: p.game,
+            trendingScore: trendingScore,
+            signals: signals,
+            signalCount: signals.length,
+            grade: isDemon ? 'A+' : isEdge ? 'A' : 'B+',
+            confidence: Math.min(95, 40 + (bc * 5)),
+            direction: p.lineType === 'goblin' ? 'UNDER' : 'OVER',
+          };
+        });
+      trending.sort(function(a, b) { return b.trendingScore - a.trendingScore; });
       res.json({ trending: trending, count: trending.length, source: "props-derived" });
     } else {
       res.json({ trending: [], count: 0 });
