@@ -603,31 +603,63 @@ try {
       }
       // Sync sharp snapshot — build directly from memory (NO HTTP)
       try {
-        var sharpData = {
-          evBets: evEngine && evEngine.cache && evEngine.cache.evBets ? evEngine.cache.evBets : [],
-          movements: [],
-          timestamp: new Date().toISOString(),
-        };
-        if (lineMovement && lineMovement.getSnapshot) {
-          sharpData.movements = lineMovement.getSnapshot('nba') || [];
+        var sharpEvBets = evEngine && evEngine.cache && evEngine.cache.evBets ? evEngine.cache.evBets : [];
+        var sharpMovements = [];
+        // lineMovement exports lineHistory (object keyed by player|market)
+        if (lineMovement && lineMovement.lineHistory) {
+          var lh = lineMovement.lineHistory;
+          Object.keys(lh).forEach(function(key) {
+            var entry = lh[key];
+            if (entry && entry.snapshots && entry.snapshots.length >= 2) {
+              var first = entry.snapshots[0];
+              var last = entry.snapshots[entry.snapshots.length - 1];
+              if (first.line !== last.line) {
+                sharpMovements.push({ player: entry.player, market: entry.market, sport: entry.sport, oldLine: first.line, newLine: last.line, change: last.line - first.line, snapshots: entry.snapshots.length });
+              }
+            }
+          });
         }
-        if (sharpData.evBets.length > 0 || sharpData.movements.length > 0) {
+        var sharpData = { evBets: sharpEvBets, movements: sharpMovements, timestamp: new Date().toISOString() };
+        if (sharpEvBets.length > 0 || sharpMovements.length > 0) {
           await redisCache.set("oracle:sharp_snapshot", sharpData, 1800);
           synced++;
         }
       } catch(e) {}
-      // Sync line movement — direct from lineMovement module (NO HTTP)
-      if (lineMovement && lineMovement.getSnapshot) {
-        for (var mvSport of ['nba', 'nhl', 'mlb', 'nfl']) {
-          try {
-            var snap = lineMovement.getSnapshot(mvSport);
-            if (snap && snap.length > 0) {
-              await redisCache.setMovement(mvSport, { movements: snap, count: snap.length, timestamp: Date.now() });
+      // Sync line movement — from lineHistory export
+      if (lineMovement && lineMovement.lineHistory) {
+        try {
+          for (var mvSport of ['nba', 'nhl', 'mlb', 'nfl']) {
+            var movements = [];
+            var lh = lineMovement.lineHistory;
+            Object.keys(lh).forEach(function(key) {
+              var entry = lh[key];
+              if (entry && entry.sport === mvSport && entry.snapshots && entry.snapshots.length >= 2) {
+                var first = entry.snapshots[0];
+                var last = entry.snapshots[entry.snapshots.length - 1];
+                movements.push({ player: entry.player, market: entry.market, oldLine: first.line, newLine: last.line, change: Math.abs(last.line - first.line), direction: last.line > first.line ? 'up' : 'down', snapshots: entry.snapshots.length });
+              }
+            });
+            if (movements.length > 0) {
+              movements.sort(function(a, b) { return b.change - a.change; });
+              await redisCache.setMovement(mvSport, { movements: movements, count: movements.length, timestamp: Date.now() });
               synced++;
             }
-          } catch(e) {}
-        }
+          }
+        } catch(e) {}
       }
+      // Sync trending picks — from trendingCache export
+      try {
+        var trendingPicks = require("./services/trending-picks");
+        if (trendingPicks && trendingPicks.trendingCache) {
+          for (var trSport of ['nba', 'nhl', 'mlb']) {
+            var trData = trendingPicks.trendingCache[trSport];
+            if (trData && trData.length > 0) {
+              await redisCache.set("oracle:trending:" + trSport, { trending: trData, count: trData.length }, 1800);
+              synced++;
+            }
+          }
+        }
+      } catch(e) {}
       // Sync POTD — direct from potd cache (NO HTTP)
       if (potd && potd.cache && potd.cache.picks) {
         await redisCache.setPOTD(potd.cache.picks);
@@ -678,28 +710,29 @@ try {
         }
       } catch(e) {}
 
-      // Sync CDL matches — direct from cdlPredictions module (NO HTTP)
+      // Sync CDL matches — CDL module doesn't export cache, use single native http call
       try {
-        if (cdlPredictions && cdlPredictions.cache && cdlPredictions.cache.matches) {
-          var cdlData = cdlPredictions.cache.matches;
-          if (cdlData && cdlData.length > 0) {
-            await redisCache.set("oracle:cdl_matches", { available: true, matches: cdlData, liveCount: 0, upcomingCount: cdlData.filter(function(m){return m.status==='upcoming'}).length, recentCount: cdlData.filter(function(m){return m.status==='completed'}).length }, 1800);
-            synced++;
-          }
-        }
-      } catch(e) {
-        // Fallback: try the esports module
-        try {
-          var esportsModule = require("./services/esports");
-          if (esportsModule && esportsModule.getMatches) {
-            var matches = await esportsModule.getMatches('cod');
-            if (matches && matches.length > 0) {
-              await redisCache.set("oracle:cdl_matches", { available: true, matches: matches }, 1800);
-              synced++;
-            }
-          }
-        } catch(e2) {}
-      }
+        var http = require("http");
+        await new Promise(function(resolve) {
+          var data = '';
+          var req = http.get("http://localhost:" + (process.env.PORT || 8080) + "/api/cdl/matches", { timeout: 10000 }, function(resp) {
+            resp.on('data', function(chunk) { data += chunk; });
+            resp.on('end', function() {
+              try {
+                var parsed = JSON.parse(data);
+                if (parsed && parsed.matches && parsed.matches.length > 0) {
+                  redisCache.set("oracle:cdl_matches", parsed, 1800);
+                  synced++;
+                }
+              } catch(e) {}
+              data = null;
+              resolve();
+            });
+          });
+          req.on('error', function() { resolve(); });
+          req.on('timeout', function() { req.destroy(); resolve(); });
+        });
+      } catch(e) {}
 
       // Sync DVP data
       try {
