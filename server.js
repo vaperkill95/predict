@@ -890,109 +890,61 @@ trendingPicks.startRefresh(fetchPropsInternal, fetchPicksInternal, getMovementIn
 // Start Discord alerts (every 10 min)
 discordAlerts.start(fetchPropsInternal, fetchPicksInternal);
 
-// Start Discord auto-poster (posts picks, EV, games, POTD, results to channels)
+// Start Discord auto-poster — ALL callbacks use direct memory/Redis, ZERO HTTP calls
 try {
   const discordPoster = require("./services/discord-poster");
   discordPoster.startPosting(
+    // Get picks — direct from smartPicks cache
     async (sport) => {
       try {
-        if (smartPicks && smartPicks.picksCache) {
+        if (smartPicks && smartPicks.picksCache && smartPicks.picksCache[sport]) {
           var cached = smartPicks.picksCache[sport];
           if (cached && cached.picks && cached.picks.length > 0) return { picks: cached.picks };
         }
-        const posterAxios = require("axios");
-        const r = await posterAxios.get(`http://localhost:${PORT}/api/props/${sport}/picks`, { timeout: 10000 });
-        return r.data;
+        return { picks: [] };
       } catch(e) { return { picks: [] }; }
     },
+    // Get EV bets — direct from evEngine cache
     async () => {
       try {
-        if (evEngine && evEngine.scanForEV) {
-          const bets = await evEngine.scanForEV('nba');
-          return { bets: bets || [], found: bets ? bets.length : 0 };
+        if (evEngine && evEngine.cache && evEngine.cache.evBets && evEngine.cache.evBets.length > 0) {
+          return { bets: evEngine.cache.evBets, found: evEngine.cache.evBets.length };
         }
-        const posterAxios = require("axios");
-        const r = await posterAxios.get(`http://localhost:${PORT}/api/ev/bets?minEdge=0`, { timeout: 10000 });
-        return r.data;
-      } catch(e) { return { bets: [] }; }
+        return { bets: [], found: 0 };
+      } catch(e) { return { bets: [], found: 0 }; }
     },
+    // Get games — direct from gamePredictions cache
     async () => {
       try {
-        // Try cache first
-        if (gamePredictions && gamePredictions.getCachedGames) {
-          var cached = gamePredictions.getCachedGames('nba') || gamePredictions.getCachedGames('nhl');
-          if (cached && cached.length > 0) return { games: cached };
-        }
-        // If no cache, fetch directly from Odds API and analyze
-        if (gamePredictions && gamePredictions.analyzeGame && process.env.ODDS_API_KEY) {
-          const posterAxios = require("axios");
-          const ODDS_KEY = process.env.ODDS_API_KEY;
-          // Fetch ESPN data + odds in parallel
-          const [espnTeams, espnInjuries, b2bTeams, oddsResp] = await Promise.all([
-            gamePredictions.fetchESPNTeams ? gamePredictions.fetchESPNTeams('nba') : Promise.resolve(null),
-            gamePredictions.fetchESPNInjuries ? gamePredictions.fetchESPNInjuries('nba') : Promise.resolve({}),
-            gamePredictions.fetchYesterdayGames ? gamePredictions.fetchYesterdayGames('nba') : Promise.resolve({}),
-            posterAxios.get('https://api.the-odds-api.com/v4/sports/basketball_nba/odds', {
-              params: { apiKey: ODDS_KEY, regions: 'us,us2', markets: 'spreads,totals,h2h', oddsFormat: 'american' },
-              timeout: 15000,
-            }),
-          ]);
-          const games = (oddsResp.data || []).map(g => gamePredictions.analyzeGame({
-            id: g.id, homeTeam: g.home_team, awayTeam: g.away_team, commenceTime: g.commence_time,
-            bookmakers: (g.bookmakers || []).map(b => ({ title: b.title, key: b.key, markets: b.markets })),
-          }, 'nba', espnTeams, espnInjuries, b2bTeams));
-          // Cache them for future use
-          if (gamePredictions.gamesCache) {
-            gamePredictions.gamesCache['nba'] = { games: games, timestamp: Date.now() };
-          }
-          console.log('[Discord] Fetched ' + games.length + ' NBA games directly from Odds API');
-          return { games: games };
+        if (gamePredictions && gamePredictions.gamesCache) {
+          var nbaGames = gamePredictions.gamesCache['nba'];
+          if (nbaGames && nbaGames.games && nbaGames.games.length > 0) return { games: nbaGames.games };
+          var nhlGames = gamePredictions.gamesCache['nhl'];
+          if (nhlGames && nhlGames.games && nhlGames.games.length > 0) return { games: nhlGames.games };
         }
         return { games: [] };
-      } catch(e) { console.warn('[Discord] Games fetch error:', e.message); return { games: [] }; }
+      } catch(e) { return { games: [] }; }
     },
+    // Get POTD — direct from potd cache
     async () => {
       try {
-        var potdData = null;
-        // Try cache first (populated by startRefresh at 90sec)
         if (potd && potd.cache && potd.cache.picks && potd.cache.picks.pickOfTheDay) {
-          potdData = potd.cache.picks.pickOfTheDay;
-        }
-        // Fallback: generate fresh
-        if (!potdData && potd && potd.generatePickOfTheDay) {
-          var potdResult = await potd.generatePickOfTheDay();
-          potdData = potdResult ? potdResult.pickOfTheDay : null;
-        }
-        if (potdData) {
-          return { pick: {
-            player: potdData.player,
-            market: potdData.market,
-            game: potdData.game,
-            line: potdData.line,
-            pick: potdData.pick,
-            grade: 'A+',
-            confidence: potdData.convergence || 0,
-            projection: potdData.analytics ? potdData.analytics.seasonAvg : null,
-            hitRate: potdData.analytics ? potdData.analytics.hitRate : null,
-            bestBook: potdData.bestBook ? potdData.bestBook.book : null,
-            reasoning: potdData.reasoning,
-          }};
+          var p = potd.cache.picks.pickOfTheDay;
+          return { pick: { player: p.player, market: p.market, game: p.game, line: p.line, pick: p.pick, grade: 'A+', confidence: p.convergence || 0, reasoning: p.reasoning }};
         }
         return {};
-      } catch(e) { console.warn('[Discord] POTD fetch error:', e.message); return {}; }
+      } catch(e) { return {}; }
     },
+    // Get history — direct from parlayBuilder
     async () => {
       try {
-        const { getHistoricalStats } = require("./services/parlay-builder");
-        if (getHistoricalStats) return getHistoricalStats();
-        const posterAxios = require("axios");
-        const r = await posterAxios.get(`http://localhost:${PORT}/api/parlay/history`, { timeout: 10000 });
-        return r.data;
+        if (parlayBuilder && parlayBuilder.getHistoricalStats) return parlayBuilder.getHistoricalStats();
+        return {};
       } catch(e) { return {}; }
     }
   );
 } catch(e) {
-  console.log("Discord poster not loaded:", e.message, e.stack?.split('\n')[1]);
+  console.log("Discord poster not loaded:", e.message);
 }
 
 // === PWA Manifest ===
