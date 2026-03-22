@@ -629,9 +629,47 @@ app.get("/api/providers", (req, res) => {
 });
 
 // CDL props
+// CDL props — transform worker's match-based format into flat props array
 app.get("/api/cdl/props", async (req, res) => {
-  const data = await redisCache.get("oracle:cdl_props");
-  res.json(data || { props: [], count: 0 });
+  try {
+    var data = await redisCache.get("oracle:cdl_props");
+    // If worker stored match-based format: { matches: [...] }
+    if (data && data.matches && data.matches.length > 0) {
+      var props = [];
+      data.matches.forEach(function(match) {
+        var teams = [match.team1, match.team2].filter(Boolean);
+        teams.forEach(function(team) {
+          if (!team || !team.players) return;
+          team.players.forEach(function(playerData) {
+            if (!playerData.props || playerData.props.length === 0) return;
+            playerData.props.forEach(function(prop) {
+              props.push({
+                player: playerData.player, playerId: playerData.playerId,
+                team: playerData.team, teamName: playerData.teamName,
+                headshot: playerData.headshot, kd: playerData.kd,
+                market: prop.market, marketLabel: prop.label,
+                line: prop.line, consensusLine: prop.line,
+                avg: prop.avg, games: prop.games,
+                edge: prop.edge,
+                suggestion: prop.suggestion || (prop.edge ? prop.edge.direction : null),
+                confidence: prop.edge ? prop.edge.confidence : 50,
+                game: (match.team1?.name || '?') + ' vs ' + (match.team2?.name || '?'),
+                matchId: match.matchId, scheduledAt: match.scheduledAt, status: match.status,
+                bookCount: prop.games || 1,
+                lineType: prop.edge && prop.edge.confidence >= 65 ? 'demon' : 'standard',
+                hasEdge: prop.edge && prop.edge.confidence >= 55,
+                sport: 'cdl',
+              });
+            });
+          });
+        });
+      });
+      return res.json({ props: props, count: props.length, source: "breakingpoint", lastUpdated: data.lastUpdated });
+    }
+    // If worker stored flat format
+    if (data && data.props && data.props.length > 0) return res.json(data);
+    res.json({ props: [], count: 0 });
+  } catch(e) { trackError("/api/cdl/props", e); res.json({ props: [], count: 0 }); }
 });
 
 // CDL matches
@@ -696,6 +734,41 @@ app.get("/api/trending/:sport", async (req, res) => {
       return res.json({ picks: data.trending, count: data.trending.length, source: "redis-trending" });
     }
     // Fallback: build trending from props + movement data
+    // For CDL, use CDL props data (different format)
+    if (req.params.sport === 'cdl') {
+      var cdlData = await redisCache.get("oracle:cdl_props");
+      var cdlPicks = [];
+      if (cdlData && cdlData.matches) {
+        cdlData.matches.forEach(function(match) {
+          var teams = [match.team1, match.team2].filter(Boolean);
+          teams.forEach(function(team) {
+            if (!team || !team.players) return;
+            team.players.forEach(function(pl) {
+              if (!pl.props || pl.props.length === 0) return;
+              pl.props.forEach(function(prop) {
+                if (!prop.edge || prop.edge.confidence < 50) return;
+                var signals = [];
+                if (prop.edge.confidence >= 65) signals.push({ type: 'demon', label: 'High Confidence (' + prop.edge.confidence + '%)' });
+                if (prop.edge.confidence >= 55) signals.push({ type: 'edge', label: 'Edge: ' + prop.edge.direction });
+                if (prop.games >= 5) signals.push({ type: 'books', label: prop.games + ' games sample' });
+                cdlPicks.push({
+                  player: pl.player, team: pl.team, market: prop.market, marketLabel: prop.label,
+                  consensusLine: prop.line, line: prop.line,
+                  bookCount: prop.games || 1, lineType: prop.edge.confidence >= 65 ? 'demon' : 'standard',
+                  hasEdge: prop.edge.confidence >= 55,
+                  game: (match.team1?.name || '?') + ' vs ' + (match.team2?.name || '?'),
+                  trendingScore: Math.min(100, prop.edge.confidence + (prop.games || 0) * 2),
+                  signals: signals,
+                  kd: pl.kd, avg: prop.avg,
+                });
+              });
+            });
+          });
+        });
+      }
+      cdlPicks.sort(function(a, b) { return b.trendingScore - a.trendingScore; });
+      return res.json({ picks: cdlPicks.slice(0, 30), count: cdlPicks.length, source: "cdl-props-derived" });
+    }
     var propsData = await cachedRedisGet("props:" + req.params.sport, function() { return redisCache.getProps(req.params.sport); });
     var mvData = await redisCache.getMovement(req.params.sport);
     var movements = mvData && mvData.movements ? mvData.movements : [];

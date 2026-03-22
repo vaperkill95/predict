@@ -831,7 +831,7 @@ try {
           var pdata = '';
           var preq = http.get("http://localhost:" + PORT + "/api/cdl/props", { timeout: 10000 }, function(resp) {
             resp.on('data', function(chunk) { pdata += chunk; });
-            resp.on('end', function() { try { var p = JSON.parse(pdata); if (p && p.props && p.props.length > 0) { redisCache.set("oracle:cdl_props", p, 1800); synced++; } } catch(e) {} pdata = null; resolve(); });
+            resp.on('end', function() { try { var p = JSON.parse(pdata); if (p && ((p.props && p.props.length > 0) || (p.matches && p.matches.length > 0))) { redisCache.set("oracle:cdl_props", p, 1800); synced++; } } catch(e) {} pdata = null; resolve(); });
           });
           preq.on('error', function() { resolve(); });
           preq.on('timeout', function() { preq.destroy(); resolve(); });
