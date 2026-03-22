@@ -650,6 +650,40 @@ app.get("/api/cdl-predictions/:matchId", async (req, res) => {
   res.json(data || { available: false });
 });
 
+// CDL Standings — read from Redis (worker syncs from PandaScore)
+app.get("/api/cdl/standings", async (req, res) => {
+  try {
+    var cached = await redisCache.get("oracle:cdl_standings");
+    if (cached) {
+      // Handle different response formats from worker
+      if (cached.standings && cached.standings.length > 0) return res.json({ available: true, standings: cached.standings });
+      if (cached.groups && cached.groups.length > 0) return res.json({ available: true, standings: cached.groups[0].teams || [] });
+      if (Array.isArray(cached) && cached.length > 0) return res.json({ available: true, standings: cached });
+    }
+    // Fallback: build from CDL matches (win/loss from completed matches)
+    var matchData = await redisCache.get("oracle:cdl_matches");
+    if (matchData && matchData.matches) {
+      var teamStats = {};
+      matchData.matches.forEach(function(m) {
+        if (m.status !== 'completed' && m.status !== 'finished') return;
+        var t1 = m.team1 || m.opponents?.[0]?.opponent || {};
+        var t2 = m.team2 || m.opponents?.[1]?.opponent || {};
+        if (t1.name) { if (!teamStats[t1.name]) teamStats[t1.name] = { team: { id: t1.id, name: t1.name, logo: t1.logo, acronym: t1.acronym }, wins: 0, losses: 0 }; }
+        if (t2.name) { if (!teamStats[t2.name]) teamStats[t2.name] = { team: { id: t2.id, name: t2.name, logo: t2.logo, acronym: t2.acronym }, wins: 0, losses: 0 }; }
+        if (m.winner === t1.name && t1.name) { teamStats[t1.name].wins++; if (t2.name) teamStats[t2.name].losses++; }
+        else if (m.winner === t2.name && t2.name) { teamStats[t2.name].wins++; if (t1.name) teamStats[t1.name].losses++; }
+      });
+      var standings = Object.values(teamStats).sort(function(a, b) {
+        var wr1 = a.wins + a.losses > 0 ? a.wins / (a.wins + a.losses) : 0;
+        var wr2 = b.wins + b.losses > 0 ? b.wins / (b.wins + b.losses) : 0;
+        return wr2 - wr1 || b.wins - a.wins;
+      });
+      if (standings.length > 0) return res.json({ available: true, standings: standings });
+    }
+    res.json({ available: false, standings: [], message: "CDL standings not available right now" });
+  } catch(e) { trackError("/api/cdl/standings", e); res.json({ available: false, standings: [] }); }
+});
+
 // Trending
 app.get("/api/trending/:sport", async (req, res) => {
   try {

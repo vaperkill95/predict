@@ -45,66 +45,70 @@
 <script>
 async function loadConsensus() {
   try {
-    var [propsResp, gamesResp] = await Promise.all([
+    var [propsResp, gamesResp, evResp] = await Promise.all([
       fetch('/api/props/nba').then(function(r){return r.json()}),
       fetch('/api/games/nba').then(function(r){return r.json()}),
+      fetch('/api/ev/bets').then(function(r){return r.json()}).catch(function(){return {bets:[]}}),
     ]);
 
     var props = propsResp.props || [];
     var games = gamesResp.games || [];
+    var evBets = evResp.bets || [];
     var strong = [], moderate = [];
 
-    // Analyze props for consensus
+    // Build EV lookup by player name
+    var evMap = {};
+    evBets.forEach(function(ev) { if (ev.player) evMap[ev.player] = ev; });
+
+    // Analyze props for consensus using ACTUAL available fields
     props.forEach(function(p) {
-      if (!p.enriched || !p.analytics) return;
-      var signals = 0, totalSignals = 3;
+      var signals = 0;
       var details = [];
+      var aiAgree = false, bookAgree = false, edgeAgree = false;
 
-      // Signal 1: ORACLE AI model (hit rate + trend)
-      var aiAgree = false;
-      if (p.analytics.hitRate >= 60 && p.lineType === 'demon') { aiAgree = true; signals++; details.push('AI: ' + p.analytics.hitRate.toFixed(0) + '% hit rate'); }
-      else if (p.analytics.hitRate >= 55) { aiAgree = true; signals++; details.push('AI: ' + p.analytics.hitRate.toFixed(0) + '% hit rate'); }
+      // Signal 1: Book consensus (demon = 6+ books agree on same line)
+      if (p.lineType === 'demon' && p.bookCount >= 6) {
+        bookAgree = true; signals++;
+        details.push('Books: ' + p.bookCount + ' sportsbooks agree');
+      } else if (p.bookCount >= 5) {
+        bookAgree = true; signals++;
+        details.push('Books: ' + p.bookCount + ' sportsbooks agree');
+      }
 
-      // Signal 2: Book consensus (6+ books = strong consensus)
-      var bookAgree = false;
-      if (p.bookCount >= 6) { bookAgree = true; signals++; details.push('Books: ' + p.bookCount + ' sportsbooks agree'); }
+      // Signal 2: +EV edge (sharp money signal)
+      var ev = evMap[p.player];
+      if (ev && ev.edgePercent >= 3) {
+        edgeAgree = true; signals++;
+        details.push('Edge: +' + ev.edgePercent.toFixed(1) + '% EV (' + ev.book + ')');
+      } else if (p.hasEdge) {
+        edgeAgree = true; signals++;
+        details.push('Edge: Line discrepancy detected');
+      }
 
-      // Signal 3: Line vs Average (edge detection)
-      var edgeAgree = false;
-      if (p.analytics.lineDiff && Math.abs(p.analytics.lineDiff) >= 1.5) { edgeAgree = true; signals++; details.push('Edge: ' + Math.abs(p.analytics.lineDiff).toFixed(1) + ' gap vs avg'); }
+      // Signal 3: AI model (demon + high book count = AI confidence)
+      if (p.lineType === 'demon' && p.bookCount >= 8) {
+        aiAgree = true; signals++;
+        details.push('AI: Demon line with ' + p.bookCount + ' book convergence');
+      } else if (p.lineType === 'demon' && p.bookCount >= 6 && edgeAgree) {
+        aiAgree = true; signals++;
+        details.push('AI: Demon line + EV edge alignment');
+      }
 
       if (signals >= 2) {
+        var suggestion = p.lineType === 'goblin' ? 'UNDER' : 'OVER';
         var item = {
           player: p.player, market: p.marketLabel || p.market, line: p.consensusLine,
           game: p.game, bookCount: p.bookCount, lineType: p.lineType,
-          hitRate: p.analytics.hitRate, seasonAvg: p.analytics.seasonAvg,
-          pick: p.analytics.suggestion || (p.analytics.lineDiff > 0 ? 'OVER' : 'UNDER'),
-          signals: signals, details: details,
+          pick: suggestion, signals: signals, details: details,
           aiAgree: aiAgree, bookAgree: bookAgree, edgeAgree: edgeAgree,
         };
         if (signals >= 3) strong.push(item); else moderate.push(item);
       }
     });
 
-    // Also add game best bets as consensus
-    games.forEach(function(g) {
-      if (!g.bestBet || g.bestBet.confidence < 70) return;
-      var signals = 0, details = [];
-      if (g.bestBet.confidence >= 70) { signals++; details.push('AI: ' + g.bestBet.confidence + '% confidence'); }
-      if (g.bookCount >= 15) { signals++; details.push('Books: ' + g.bookCount + ' compared'); }
-      if (g.dataSource === 'espn-live') { signals++; details.push('ESPN Live data validated'); }
-
-      if (signals >= 2) {
-        var item = {
-          player: g.awayAbbr + ' @ ' + g.homeAbbr, market: g.bestBet.type, line: '',
-          game: g.awayAbbr + ' @ ' + g.homeAbbr, bookCount: g.bookCount,
-          pick: g.bestBet.pick, signals: signals, details: details,
-          aiAgree: true, bookAgree: g.bookCount >= 15, edgeAgree: g.dataSource === 'espn-live',
-          isGame: true, confidence: g.bestBet.confidence,
-        };
-        if (signals >= 3) strong.push(item); else moderate.push(item);
-      }
-    });
+    // Sort by signal count then book count
+    strong.sort(function(a,b){ return b.signals - a.signals || b.bookCount - a.bookCount; });
+    moderate.sort(function(a,b){ return b.signals - a.signals || b.bookCount - a.bookCount; });
 
     // Stats
     document.getElementById('stats').innerHTML =
@@ -120,7 +124,7 @@ async function loadConsensus() {
         var agreeColor = agreePct >= 100 ? 'var(--green)' : agreePct >= 67 ? 'var(--accent)' : 'var(--amber)';
         return '<div class="consensus-card'+(item.signals>=3?' strong':'')+'">' +
           '<div class="card-header"><div><div class="card-title">'+item.player+'</div><div class="card-sub">'+item.game+' • '+item.market+(item.line?' • '+item.line:'')+'</div></div>' +
-          '<div style="text-align:right"><div style="font-family:var(--font-display);font-weight:800;font-size:18px;color:'+(item.pick==='OVER'||item.pick==='over'?'var(--green)':'var(--accent)')+'">'+item.pick+'</div></div></div>' +
+          '<div style="text-align:right"><div style="font-family:var(--font-display);font-weight:800;font-size:18px;color:'+(item.pick==='OVER'?'var(--green)':'var(--accent)')+'">'+item.pick+'</div></div></div>' +
           '<div class="signals">' +
           '<div class="signal" style="border:1px solid '+(item.aiAgree?'var(--green)':'var(--border)')+'"><div class="signal-label">🤖 AI Model</div><div class="signal-val" style="color:'+(item.aiAgree?'var(--green)':'var(--text-muted)')+'">'+(item.aiAgree?'✅ Agrees':'—')+'</div></div>' +
           '<div class="signal" style="border:1px solid '+(item.bookAgree?'var(--green)':'var(--border)')+'"><div class="signal-label">📚 Book Consensus</div><div class="signal-val" style="color:'+(item.bookAgree?'var(--green)':'var(--text-muted)')+'">'+(item.bookAgree?'✅ '+item.bookCount+' books':'—')+'</div></div>' +
