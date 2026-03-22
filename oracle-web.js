@@ -286,13 +286,124 @@ app.get("/api/ev/bets", async (req, res) => {
   } catch(e) { trackError("/api/ev/bets", e); res.json({ bets: [], found: 0 }); }
 });
 
-// POTD
+// POTD — returns top picks of the day ranked by convergence score
 app.get("/api/potd", async (req, res) => {
-  const data = await redisCache.getPOTD();
-  if (data && data.pickOfTheDay) {
-    res.json({ available: true, pickOfTheDay: data.pickOfTheDay });
-  } else {
-    res.json({ available: false });
+  try {
+    var data = await redisCache.getPOTD();
+    var mainPick = data && data.pickOfTheDay ? data.pickOfTheDay : null;
+
+    // Build multiple top picks from props + EV data
+    var topPicks = [];
+    var now = Date.now();
+
+    // Get all sports props
+    var sports = ['nba', 'nhl', 'mlb'];
+    for (var si = 0; si < sports.length; si++) {
+      var sport = sports[si];
+      var propsData = await redisCache.getProps(sport);
+      var evData = await redisCache.get("oracle:ev:" + sport);
+      var props = propsData && propsData.props ? propsData.props : [];
+      var evBets = evData && evData.bets ? evData.bets : [];
+
+      // Build EV lookup
+      var evMap = {};
+      evBets.forEach(function(ev) { if (ev.player) evMap[ev.player + '_' + (ev.market || '')] = ev; });
+
+      props.forEach(function(p) {
+        // Filter: only demons/edges with 5+ books
+        if (p.bookCount < 5) return;
+        if (p.lineType !== 'demon' && !p.hasEdge) return;
+
+        // Filter out games that already started
+        if (p.commenceTime) {
+          var gameStart = new Date(p.commenceTime).getTime();
+          if (gameStart < now) return; // Game already started
+        }
+
+        // Calculate convergence score (how many signals agree)
+        var signals = [];
+        var score = 0;
+
+        // Signal 1: Demon line (6+ books agree)
+        if (p.lineType === 'demon' && p.bookCount >= 6) {
+          signals.push({ name: 'Demon Line', score: 15, max: 15, value: '🔥 DEMON', detail: p.bookCount + ' sportsbooks agree on this line' });
+          score += 15;
+        }
+
+        // Signal 2: Book count
+        if (p.bookCount >= 8) {
+          signals.push({ name: 'Book Count', score: 10, max: 10, value: p.bookCount + ' books', detail: p.bookCount + ' sportsbooks offering this prop' });
+          score += 10;
+        } else if (p.bookCount >= 5) {
+          signals.push({ name: 'Book Count', score: 5, max: 10, value: p.bookCount + ' books', detail: p.bookCount + ' sportsbooks offering this prop' });
+          score += 5;
+        }
+
+        // Signal 3: +EV edge
+        var evKey = p.player + '_' + (p.market || '');
+        var ev = evMap[evKey] || evMap[p.player + '_'] || null;
+        if (ev && ev.edgePercent >= 3) {
+          signals.push({ name: '+EV Edge', score: 15, max: 15, value: '+' + ev.edgePercent.toFixed(2) + '%', detail: ev.edgePercent.toFixed(2) + '% mathematical edge at ' + (ev.book || 'best book') });
+          score += 15;
+        } else if (p.hasEdge) {
+          signals.push({ name: 'Edge', score: 8, max: 15, value: 'Edge detected', detail: 'Line discrepancy found across books' });
+          score += 8;
+        }
+
+        // Signal 4: High book agreement (10+ books)
+        if (p.bookCount >= 10) {
+          signals.push({ name: 'Consensus', score: 5, max: 10, value: 'Strong', detail: p.bookCount + ' books converge on this line' });
+          score += 5;
+        }
+
+        var totalMax = 50;
+        var convergence = Math.round((score / totalMax) * 100);
+        if (convergence < 30) return; // Skip low-convergence props
+
+        var suggestion = p.lineType === 'goblin' ? 'UNDER' : 'OVER';
+        topPicks.push({
+          player: p.player,
+          market: p.marketLabel || p.market,
+          game: p.game,
+          commenceTime: p.commenceTime,
+          line: p.consensusLine || p.line,
+          bookCount: p.bookCount,
+          lineType: p.lineType,
+          pick: suggestion,
+          convergence: convergence,
+          signalCount: signals.length,
+          totalSignals: 4,
+          signals: signals,
+          sport: sport.toUpperCase(),
+          evEdge: ev ? ev.edgePercent : null,
+        });
+      });
+    }
+
+    // Sort by convergence (highest first), then book count
+    topPicks.sort(function(a, b) { return b.convergence - a.convergence || b.bookCount - a.bookCount; });
+
+    // Take top 10
+    var top10 = topPicks.slice(0, 10);
+
+    // Generate reasoning for the #1 pick
+    var bestPick = top10[0] || mainPick;
+    if (bestPick && !bestPick.reasoning) {
+      bestPick.reasoning = bestPick.player + ' ' + bestPick.pick + ' ' + bestPick.line + ' ' + bestPick.market + ' is ORACLE\'s top pick with a ' + bestPick.convergence + '% convergence score — ' + bestPick.signalCount + ' out of ' + bestPick.totalSignals + ' signals agree.';
+    }
+
+    res.json({
+      available: top10.length > 0 || !!mainPick,
+      pickOfTheDay: bestPick || mainPick,
+      topPicks: top10,
+      totalAnalyzed: topPicks.length,
+      timestamp: new Date().toISOString(),
+    });
+  } catch(e) {
+    trackError("/api/potd", e);
+    // Fallback to original single POTD
+    var data = await redisCache.getPOTD();
+    res.json({ available: !!(data && data.pickOfTheDay), pickOfTheDay: data ? data.pickOfTheDay : null, topPicks: [] });
   }
 });
 
