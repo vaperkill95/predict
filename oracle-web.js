@@ -463,12 +463,27 @@ app.get("/api/sports/scores/:sport", async (req, res) => {
   try {
     var raw = await cachedRedisGet("scores:" + req.params.sport, function() { return redisCache.get("oracle:scores:" + req.params.sport); });
     if (raw && raw.events) {
-      // Transform raw ESPN data into the format the React GameCard expects
+      // Transform raw ESPN data into the format the React GameCard AND game-predictions.html expect
       var games = raw.events.map(function(event) {
         var comp = event.competitions && event.competitions[0] ? event.competitions[0] : {};
         var competitors = comp.competitors || [];
         var home = competitors.find(function(c) { return c.homeAway === 'home'; });
         var away = competitors.find(function(c) { return c.homeAway === 'away'; });
+        var odds = comp.odds && comp.odds[0] ? comp.odds[0] : {};
+        var homeName = home ? home.team.displayName : 'TBD';
+        var awayName = away ? away.team.displayName : 'TBD';
+        var homeRecord = home && home.records && home.records[0] ? home.records[0].summary : '';
+        var awayRecord = away && away.records && away.records[0] ? away.records[0].summary : '';
+        // Parse spread
+        var spreadVal = 0;
+        if (odds.details) {
+          var parts = odds.details.match(/([-+]?\d+\.?\d*)/);
+          if (parts) spreadVal = parseFloat(parts[1]);
+        }
+        var homeWins = parseInt(homeRecord) || 0;
+        var awayWins = parseInt(awayRecord) || 0;
+        var favorite = homeWins > awayWins ? homeName : awayName;
+        var conf = Math.min(78, 55 + Math.abs(homeWins - awayWins));
         return {
           id: event.id,
           name: event.name,
@@ -481,16 +496,24 @@ app.get("/api/sports/scores/:sport", async (req, res) => {
             period: comp.status ? comp.status.period : 0,
             completed: comp.status && comp.status.type ? comp.status.type.completed : false,
           },
-          home: home ? { id: home.team.id, name: home.team.displayName, abbreviation: home.team.abbreviation, logo: home.team.logo, score: home.score ? parseInt(home.score) : null, record: home.records && home.records[0] ? home.records[0].summary : null, winner: home.winner } : { name: 'TBD', score: null },
-          away: away ? { id: away.team.id, name: away.team.displayName, abbreviation: away.team.abbreviation, logo: away.team.logo, score: away.score ? parseInt(away.score) : null, record: away.records && away.records[0] ? away.records[0].summary : null, winner: away.winner } : { name: 'TBD', score: null },
-          odds: comp.odds && comp.odds[0] ? { spread: comp.odds[0].details, overUnder: comp.odds[0].overUnder, provider: comp.odds[0].provider ? comp.odds[0].provider.name : null } : null,
+          home: home ? { id: home.team.id, name: homeName, abbreviation: home.team.abbreviation, logo: home.team.logo, score: home.score ? parseInt(home.score) : null, record: homeRecord || null, winner: home.winner } : { name: 'TBD', score: null },
+          away: away ? { id: away.team.id, name: awayName, abbreviation: away.team.abbreviation, logo: away.team.logo, score: away.score ? parseInt(away.score) : null, record: awayRecord || null, winner: away.winner } : { name: 'TBD', score: null },
+          odds: odds.details ? { spread: odds.details, overUnder: odds.overUnder, provider: odds.provider ? odds.provider.name : null } : null,
+          consensus: { spread: spreadVal || 0, total: odds.overUnder || 220, moneyline: favorite, provider: odds.provider ? odds.provider.name : null },
+          prediction: {
+            winner: favorite, confidence: conf,
+            spread: { pick: homeName, line: spreadVal, confidence: conf },
+            total: { side: 'OVER', line: odds.overUnder || 220, confidence: Math.max(50, conf - 5) },
+            moneyline: { pick: favorite, confidence: conf },
+          },
+          homeTeam: homeName, awayTeam: awayName,
+          homeAbbr: home ? home.team.abbreviation : '', awayAbbr: away ? away.team.abbreviation : '',
           venue: comp.venue ? comp.venue.fullName : null,
           broadcast: comp.broadcasts && comp.broadcasts[0] ? comp.broadcasts[0].names.join(', ') : null,
         };
       });
       res.json({ sport: req.params.sport, games: games, count: games.length, date: raw.day ? raw.day.date : null });
     } else if (raw && raw.games) {
-      // Already transformed
       res.json(raw);
     } else {
       res.json({ games: [], sport: req.params.sport, count: 0 });
