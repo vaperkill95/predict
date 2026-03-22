@@ -756,6 +756,63 @@ try {
         });
       } catch(e) {}
 
+      // CDL standings — sync from worker
+      try {
+        await new Promise(function(resolve) {
+          var sdata = '';
+          var sreq = http.get("http://localhost:" + PORT + "/api/cdl/standings", { timeout: 10000 }, function(resp) {
+            resp.on('data', function(chunk) { sdata += chunk; });
+            resp.on('end', function() { try { var p = JSON.parse(sdata); if (p && (p.standings || p.groups || p.length > 0)) { redisCache.set("oracle:cdl_standings", p, 3600); synced++; } } catch(e) {} sdata = null; resolve(); });
+          });
+          sreq.on('error', function() { resolve(); });
+          sreq.on('timeout', function() { sreq.destroy(); resolve(); });
+        });
+      } catch(e) {}
+
+      // CDL props — sync from worker
+      try {
+        await new Promise(function(resolve) {
+          var pdata = '';
+          var preq = http.get("http://localhost:" + PORT + "/api/cdl/props", { timeout: 10000 }, function(resp) {
+            resp.on('data', function(chunk) { pdata += chunk; });
+            resp.on('end', function() { try { var p = JSON.parse(pdata); if (p && p.props && p.props.length > 0) { redisCache.set("oracle:cdl_props", p, 1800); synced++; } } catch(e) {} pdata = null; resolve(); });
+          });
+          preq.on('error', function() { resolve(); });
+          preq.on('timeout', function() { preq.destroy(); resolve(); });
+        });
+      } catch(e) {}
+
+      // Parlay history / accuracy record — sync from parlayBuilder
+      try {
+        if (parlayBuilder && parlayBuilder.getHistoricalStats) {
+          var stats = parlayBuilder.getHistoricalStats();
+          if (stats && (stats.totalPicks > 0 || stats.overall.total > 0 || stats.overall.pending > 0)) {
+            await redisCache.setAccuracy(stats);
+            synced++;
+          }
+        }
+        if (parlayBuilder && parlayBuilder.getPickHistory) {
+          var history = parlayBuilder.getPickHistory();
+          if (history && history.length > 0) {
+            await redisCache.set("oracle:pick_history", history, 86400);
+            synced++;
+          }
+        }
+      } catch(e) {}
+
+      // Auto-grader grades — sync from auto-grader module
+      try {
+        var autoGrader = require("./services/auto-grader");
+        if (autoGrader && autoGrader.gradingStats) {
+          await redisCache.set("oracle:grading_stats_legacy", autoGrader.gradingStats, 86400);
+          synced++;
+        }
+        if (autoGrader && autoGrader.gradedPicks && autoGrader.gradedPicks.length > 0) {
+          await redisCache.set("oracle:graded_picks_legacy", autoGrader.gradedPicks, 86400);
+          synced++;
+        }
+      } catch(e) {}
+
       var mem = process.memoryUsage();
       var heapMB = Math.round(mem.heapUsed / 1024 / 1024);
       var rssMB = Math.round(mem.rss / 1024 / 1024);
