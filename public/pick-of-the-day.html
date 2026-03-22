@@ -107,7 +107,7 @@ a{color:var(--accent);text-decoration:none;}
   <div class="hero">
     <div class="hero-badge">🏆 Updated every 15 minutes</div>
     <h1>Pick of the <span>Day</span></h1>
-    <p>One pick. Every signal. ORACLE analyzed all props and found the single bet where the most data points converge.</p>
+    <p>ORACLE's top picks today — ranked by signal convergence across every data source. Only upcoming games shown.</p>
   </div>
 
   <div id="content">
@@ -153,21 +153,24 @@ async function loadPOTD() {
       </div>`;
     }
 
-    // Runners up
+    // Runners up — use topPicks from API (skip the #1 pick which is already shown above)
     let runnersHTML = '';
-    if (data.runnersUp && data.runnersUp.length > 0) {
-      runnersHTML = `<div class="runners"><div class="runners-title">Runners Up</div>`;
-      data.runnersUp.forEach((r, i) => {
+    var runners = data.topPicks ? data.topPicks.slice(1) : (data.runnersUp || []);
+    if (runners.length > 0) {
+      runnersHTML = `<div class="runners"><div class="runners-title">🏆 Today's Top Picks</div>`;
+      runners.forEach((r, i) => {
         const rDir = r.pick === 'OVER' ? 'var(--green)' : 'var(--red)';
         const rConv = r.convergence >= 70 ? 'rgba(16,185,129,.15)' : 'rgba(56,189,248,.15)';
         const rConvC = r.convergence >= 70 ? 'var(--green)' : 'var(--accent)';
+        const sportBadge = r.sport ? `<span style="font-size:10px;padding:2px 6px;border-radius:4px;background:var(--bg-elevated);color:var(--accent);font-family:var(--font-mono);margin-left:6px;">${r.sport}</span>` : '';
+        const evBadge = r.evEdge ? `<span style="font-size:10px;padding:2px 6px;border-radius:4px;background:rgba(16,185,129,.1);color:var(--green);font-family:var(--font-mono);margin-left:4px;">+${r.evEdge.toFixed(1)}% EV</span>` : '';
         runnersHTML += `<div class="runner-card">
           <div class="runner-left">
             <div class="runner-rank">#${i + 2}</div>
-            <div><div class="runner-player">${r.player}</div><div class="runner-market">${r.market} — ${r.game || ''}</div></div>
+            <div><div class="runner-player">${r.player}${sportBadge}${evBadge}</div><div class="runner-market">${r.market} ${r.line || ''} — ${r.game || ''}</div></div>
           </div>
           <div class="runner-right">
-            <div class="runner-pick" style="color:${rDir}">${r.pick} ${r.line}</div>
+            <div class="runner-pick" style="color:${rDir}">${r.pick} ${r.line || ''}</div>
             <div class="runner-convergence" style="background:${rConv};color:${rConvC}">${r.convergence}%</div>
           </div>
         </div>`;
