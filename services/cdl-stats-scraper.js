@@ -646,39 +646,157 @@ function computeTeamPace() {
 }
 
 // ============================================================
-// MAIN SCRAPE: Scrape all CDL player stats + match history
+// MAIN SCRAPE: Optimized — only 2 HTTP requests instead of 51
+// 1. Roster page → get player IDs + team mappings
+// 2. Any single player page → aggregatedStats has ALL players
 // ============================================================
 async function scrapeCDLStats() {
-  console.log('Starting CDL stats scrape...');
+  console.log('Starting CDL stats scrape (optimized: 2 requests)...');
+
+  // Step 1: Get roster for team ID mapping
   var roster = await scrapePlayerRoster();
-  console.log('Found ' + roster.length + ' active CDL players');
+  var cdlTeamIds = CDL_TEAMS.map(function(t) { return t.id; });
+  var cdlPlayers = roster.filter(function(p) { return cdlTeamIds.includes(p.current_team_id) && !p.retired; });
+  console.log('Found ' + cdlPlayers.length + ' active CDL players');
+
+  // Build player ID → team/info lookup from roster
+  var playerLookup = {};
+  cdlPlayers.forEach(function(p) {
+    playerLookup[p.id] = {
+      tag: p.tag,
+      teamId: p.current_team_id,
+      teamName: CDL_TEAM_MAP[p.current_team_id] ? CDL_TEAM_MAP[p.current_team_id].name : 'Unknown',
+      teamAbbr: CDL_TEAM_MAP[p.current_team_id] ? CDL_TEAM_MAP[p.current_team_id].abbr : '???',
+      headshot: p.headshot,
+    };
+  });
+
+  // Step 2: Scrape ONE player page to get ALL players' aggregated stats
+  // Any CDL player page works — aggregatedStats contains the full leaderboard
+  var firstPlayer = cdlPlayers[0];
+  if (!firstPlayer) { console.warn('[CDL] No CDL players found'); return { scraped: 0, total: 0 }; }
 
   var stats = {};
   var scraped = 0;
 
-  for (var i = 0; i < roster.length; i++) {
-    var player = roster[i];
-    var playerStats = await scrapePlayerStats(player.id, player.tag);
-    if (playerStats) {
-      stats[player.id] = Object.assign({}, playerStats, {
-        teamName: CDL_TEAM_MAP[player.current_team_id] ? CDL_TEAM_MAP[player.current_team_id].name : 'Unknown',
-        teamAbbr: CDL_TEAM_MAP[player.current_team_id] ? CDL_TEAM_MAP[player.current_team_id].abbr : '???',
-        headshot: player.headshot,
-      });
+  try {
+    var resp = await axios.get(
+      'https://www.breakingpoint.gg/players/' + firstPlayer.id + '/' + encodeURIComponent(firstPlayer.tag),
+      { headers: { 'User-Agent': 'ORACLE-CDL-Props/3.0' }, timeout: 20000 }
+    );
+    var data = extractNextData(resp.data);
+    resp.data = null; resp = null; // Free HTML immediately
+
+    var allStats = data.props.pageProps.aggregatedStats || [];
+    data = null; // Free the full parsed JSON
+
+    console.log('[CDL] Got ' + allStats.length + ' player stat entries from single page');
+
+    // Process each player's stats
+    for (var si = 0; si < allStats.length; si++) {
+      var ps = allStats[si];
+      if (!ps || ps.kills === 0) continue;
+      var pid = ps.player_id;
+      var lookup = playerLookup[pid];
+      if (!lookup) continue; // Not an active CDL player
+
+      var hpG = ps.hp_game_count || 0;
+      var sndG = ps.snd_game_count || 0;
+      var ctlG = ps.ctl_game_count || 0;
+      var ovlG = ps.ovl_game_count || 0;
+      var totalG = ps.game_count || 0;
+      var matchesPlayed = ps.matches_played || 0;
+
+      stats[pid] = {
+        playerId: pid,
+        tag: ps.player_tag || lookup.tag,
+        teamId: lookup.teamId,
+        teamName: lookup.teamName,
+        teamAbbr: lookup.teamAbbr,
+        headshot: lookup.headshot,
+
+        // Season totals
+        totalKills: ps.kills, totalDeaths: ps.deaths, totalGames: totalG, matchesPlayed: matchesPlayed,
+        damage: ps.damage || 0, firstBloods: ps.first_blood_count || 0, firstDeaths: ps.first_death_count || 0,
+
+        // Advanced stats
+        nonTradedKills: ps.non_traded_kills || 0, highestStreak: ps.highest_streak || 0,
+        clutch1v1: ps.one_v_one_win_count || 0, clutch1v2: ps.one_v_two_win_count || 0,
+        clutch1v3: ps.one_v_three_win_count || 0, clutch1v4: ps.one_v_four_win_count || 0,
+        hillTime: ps.hill_time || 0, contestedHillTime: ps.contested_hill_time || 0,
+        plants: ps.plant_count || 0, defuses: ps.defuse_count || 0,
+        zoneCaptures: ps.zone_capture_count || 0, overloads: ps.overloads || 0,
+
+        // BP Ratings
+        bpRating: {
+          hp: ps.hp_bp_rating ? +(ps.hp_bp_rating / Math.max(hpG, 1)).toFixed(3) : 0,
+          snd: ps.snd_bp_rating ? +(ps.snd_bp_rating / Math.max(sndG, 1)).toFixed(3) : 0,
+          ctl: ps.ctl_bp_rating ? +(ps.ctl_bp_rating / Math.max(ctlG, 1)).toFixed(3) : 0,
+          ovl: ps.ovl_bp_rating ? +(ps.ovl_bp_rating / Math.max(ovlG, 1)).toFixed(3) : 0,
+        },
+
+        // Max kills
+        maxKills: { hp: ps.max_hp_kills || 0, snd: ps.max_snd_kills || 0, ctl: ps.max_ctl_kills || 0, ovl: ps.max_ovl_kills || 0, series: ps.max_match_kills || 0 },
+
+        // Per-mode stats
+        hp: {
+          games: hpG, kills: ps.hp_kills || 0, deaths: ps.hp_deaths || 0, assists: ps.hp_assists || 0,
+          damage: ps.hp_damage || 0,
+          avg: hpG > 0 ? +(ps.hp_kills / hpG).toFixed(1) : 0,
+          kd: ps.hp_deaths > 0 ? +(ps.hp_kills / ps.hp_deaths).toFixed(3) : 0,
+          damagePerMap: hpG > 0 ? +((ps.hp_damage || 0) / hpG).toFixed(0) : 0,
+          mapWins: ps.hp_map_wins || 0,
+          mapWinPct: hpG > 0 ? +((ps.hp_map_wins || 0) / hpG * 100).toFixed(1) : 0,
+          killHistory: [], stddev: 0,
+        },
+        snd: {
+          games: sndG, kills: ps.snd_kills || 0, deaths: ps.snd_deaths || 0, assists: ps.snd_assists || 0,
+          avg: sndG > 0 ? +(ps.snd_kills / sndG).toFixed(1) : 0,
+          kd: ps.snd_deaths > 0 ? +(ps.snd_kills / ps.snd_deaths).toFixed(3) : 0,
+          rounds: ps.snd_rounds || 0,
+          avgPerRound: ps.snd_rounds > 0 ? +(ps.snd_kills / ps.snd_rounds).toFixed(3) : 0,
+          mapWins: ps.snd_map_wins || 0,
+          killHistory: [], stddev: 0,
+        },
+        ctl: {
+          games: ctlG, kills: ps.ctl_kills || 0, deaths: ps.ctl_deaths || 0,
+          avg: ctlG > 0 ? +(ps.ctl_kills / ctlG).toFixed(1) : 0,
+          kd: ps.ctl_deaths > 0 ? +(ps.ctl_kills / ps.ctl_deaths).toFixed(3) : 0,
+          mapWins: ps.ctl_map_wins || 0,
+        },
+        ovl: {
+          games: ovlG, kills: ps.ovl_kills || 0, deaths: ps.ovl_deaths || 0,
+          avg: ovlG > 0 ? +(ps.ovl_kills / ovlG).toFixed(1) : 0,
+          kd: ps.ovl_deaths > 0 ? +(ps.ovl_kills / ps.ovl_deaths).toFixed(3) : 0,
+          overloads: ps.overloads || 0, mapWins: ps.ovl_map_wins || 0,
+          killHistory: [], stddev: 0,
+        },
+
+        // Overall
+        kd: ps.deaths > 0 ? +(ps.kills / ps.deaths).toFixed(3) : 0,
+        avgKillsPerGame: totalG > 0 ? +(ps.kills / totalG).toFixed(1) : 0,
+
+        // Win rates
+        matchWins: ps.match_wins || 0,
+        matchWinPct: matchesPlayed > 0 ? +((ps.match_wins || 0) / matchesPlayed * 100).toFixed(1) : 0,
+        mapWins: ps.map_wins || 0,
+        mapWinPct: totalG > 0 ? +((ps.map_wins || 0) / totalG * 100).toFixed(1) : 0,
+
+        recentForm: { trend: 'neutral', recentAvg: 0, seasonAvg: totalG > 0 ? +(ps.kills / totalG).toFixed(1) : 0, momentum: 0 },
+        killHistoryAll: [],
+      };
       scraped++;
     }
-    // Rate limit: 1.5 seconds between requests
-    await new Promise(function(r) { setTimeout(r, 1500); });
-    // Free memory every 10 players
-    if (i > 0 && i % 10 === 0 && global.gc) { global.gc(); }
+
+    allStats = null; // Free the stats array
+
+  } catch(err) {
+    console.error('[CDL] Stats scrape failed:', err.message);
   }
 
   playerStatsCache = stats;
   lastScraped = new Date().toISOString();
-  console.log('Scraped stats for ' + scraped + '/' + roster.length + ' CDL players');
-
-  // Force GC after heavy scrape
-  if (global.gc) { global.gc(); console.log('[CDL] Post-scrape GC'); }
+  console.log('Scraped stats for ' + scraped + ' CDL players (2 requests, ~50MB)');
 
   // Compute team pace factors
   computeTeamPace();
@@ -687,10 +805,10 @@ async function scrapeCDLStats() {
   // Fetch match history for H2H data (non-blocking)
   scrapeMatchHistory().catch(function(e) { console.warn('[CDL] H2H fetch error:', e.message); });
 
-  // v3: Scrape per-match scoreboards for player-level H2H kills (non-blocking, runs after main scrape)
+  // v3: Scrape per-match scoreboards (non-blocking, delayed)
   setTimeout(function() {
     scrapeMatchScoreboards().catch(function(e) { console.warn('[CDL-v3] Scoreboard scrape error:', e.message); });
-  }, 5000); // Wait 5s after main scrape to avoid rate limits
+  }, 5000);
 
   return { scraped: scraped, total: roster.length, timestamp: lastScraped };
 }
