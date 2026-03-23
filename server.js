@@ -921,15 +921,19 @@ try {
   }, RESTART_INTERVAL);
   console.log("[SCHEDULER] Worker will auto-restart in 4 hours (at " + new Date(Date.now() + RESTART_INTERVAL).toISOString() + ")");
 
-  // === MEMORY WATCHDOG — emergency restart if memory exceeds 3GB before scheduled restart ===
+  // === MEMORY WATCHDOG — emergency restart if memory exceeds 6GB ===
+  // (User has 32GB Pro plan — 6GB is safe for the worker)
   setInterval(function() {
     var rss = process.memoryUsage().rss;
     var rssMB = Math.round(rss / 1024 / 1024);
-    if (rssMB > 3072) {
+    if (rssMB > 6144) {
       console.warn("[WATCHDOG] Memory at " + rssMB + "MB — emergency restart. All data safe in Redis.");
       process.exit(1);
-    } else if (rssMB > 2048) {
-      console.warn("[WATCHDOG] Memory at " + rssMB + "MB — approaching limit");
+    } else if (rssMB > 4096) {
+      console.warn("[Memory] WARNING: RSS at " + rssMB + "MB — running GC");
+      if (global.gc) global.gc();
+    } else if (rssMB > 2500) {
+      // Trigger GC proactively
       if (global.gc) global.gc();
     }
   }, 60000);

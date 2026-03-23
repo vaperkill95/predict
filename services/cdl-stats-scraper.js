@@ -109,7 +109,11 @@ async function scrapePlayerStats(playerId, playerTag) {
       { headers: { 'User-Agent': 'ORACLE-CDL-Props/2.0' }, timeout: 15000 }
     );
     var data = extractNextData(resp.data);
+    resp.data = null; // Free the raw HTML immediately
+    resp = null;
     var allStats = data.props.pageProps.aggregatedStats;
+    // Free everything except aggregatedStats
+    data.props.pageProps = { aggregatedStats: allStats, player: data.props.pageProps.player };
 
     // Find this player's season stats (the entry matching their player_id)
     var ps = allStats.find(function(s) { return s.player_id === playerId && s.kills > 0; })
@@ -372,8 +376,8 @@ async function scrapeMatchScoreboards() {
       }
     } catch(e) { /* matches page may fail */ }
 
-    // Limit to 10 matches per scrape cycle to avoid rate limits
-    var toScrape = bpMatchIds.slice(0, 10);
+    // Limit to 5 matches per scrape cycle to conserve memory
+    var toScrape = bpMatchIds.slice(0, 5);
     var totalNewKills = 0;
 
     for (var mi = 0; mi < toScrape.length; mi++) {
@@ -463,13 +467,16 @@ async function scrapeMatchScoreboards() {
         }
 
         recentMatchIds.push(matchId);
-        // Rate limit between match page scrapes
+        // Free parsed data and rate limit
+        mData = null; pp = null;
         await new Promise(function(r) { setTimeout(r, 2000); });
       } catch(e) {
         // Individual match scrape failures are OK
       }
     }
 
+    // Free memory after match scraping
+    if (global.gc) global.gc();
     console.log('[CDL-v3] Scraped ' + toScrape.length + ' match scoreboards, ' + totalNewKills + ' kill entries, ' + Object.keys(teamMapWinRates).length + ' team map stats, ' + Object.keys(mapPickHistory).length + ' team pick histories');
   } catch(err) {
     console.warn('[CDL-v3] Match scoreboard scrape failed:', err.message);
@@ -662,11 +669,16 @@ async function scrapeCDLStats() {
     }
     // Rate limit: 1.5 seconds between requests
     await new Promise(function(r) { setTimeout(r, 1500); });
+    // Free memory every 10 players
+    if (i > 0 && i % 10 === 0 && global.gc) { global.gc(); }
   }
 
   playerStatsCache = stats;
   lastScraped = new Date().toISOString();
   console.log('Scraped stats for ' + scraped + '/' + roster.length + ' CDL players');
+
+  // Force GC after heavy scrape
+  if (global.gc) { global.gc(); console.log('[CDL] Post-scrape GC'); }
 
   // Compute team pace factors
   computeTeamPace();
