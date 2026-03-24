@@ -1065,18 +1065,66 @@ try {
 }
 
 // Shared props function — all services use this
+// IMPORTANT: This reads from a stable in-memory cache.
+// The cache is ONLY refreshed by the dedicated timer below.
+// This prevents multiple services from triggering simultaneous API calls.
+var _stablePropsCache = {}; // { sport: { props: [...], timestamp: Date.now() } }
+
 async function getCachedProps(sport) {
+  // Always return from stable cache first
+  if (_stablePropsCache[sport] && _stablePropsCache[sport].props && _stablePropsCache[sport].props.length > 0) {
+    return _stablePropsCache[sport];
+  }
+  // If stable cache is empty, try multi-api (which has its own cache)
   if (multiApi) {
-    return await multiApi.getProps(sport);
+    var data = await multiApi.getProps(sport);
+    if (data && data.props && data.props.length > 0) {
+      _stablePropsCache[sport] = data;
+    }
+    return data;
   }
-  // Fallback to direct Odds API call
-  try {
-    const { getPlayerProps } = require("./services/props");
-    return await getPlayerProps(sport);
-  } catch(e) {
-    return { props: [] };
-  }
+  return { props: [] };
 }
+
+// Dedicated props refresh — runs every 30 min, one sport at a time, with GC between each
+// This is the ONLY place that calls the Odds API for props
+(function startPropsRefresh() {
+  var PROPS_REFRESH_MS = 30 * 60 * 1000; // 30 min
+  var sports = ['nba', 'nhl', 'mlb'];
+
+  async function refreshAllProps() {
+    for (var i = 0; i < sports.length; i++) {
+      var sport = sports[i];
+      try {
+        if (multiApi) {
+          var data = await multiApi.getProps(sport);
+          if (data && data.props && data.props.length > 0) {
+            _stablePropsCache[sport] = data;
+            console.log('[PropsRefresh] ' + sport + ': ' + data.props.length + ' props cached');
+          }
+        }
+      } catch(e) {
+        console.warn('[PropsRefresh] ' + sport + ' failed: ' + e.message);
+      }
+      // GC between sports
+      if (global.gc) global.gc();
+      // Wait 5 seconds between sports to let memory settle
+      await new Promise(function(r) { setTimeout(r, 5000); });
+    }
+  }
+
+  // First refresh after 30 seconds (give Redis time to connect)
+  setTimeout(function() {
+    refreshAllProps().catch(function(e) { console.warn('[PropsRefresh] Initial error:', e.message); });
+  }, 30000);
+
+  // Then every 30 minutes
+  setInterval(function() {
+    refreshAllProps().catch(function(e) { console.warn('[PropsRefresh] Error:', e.message); });
+  }, PROPS_REFRESH_MS);
+
+  console.log('[PropsRefresh] Dedicated props refresh started (every 30 min, sequential, with GC)');
+})()
 
 // API status endpoint — shows health of all data sources
 app.get("/api/data-sources", (req, res) => {
