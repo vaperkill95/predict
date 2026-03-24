@@ -25,7 +25,7 @@ const axios = require('axios');
 
 const PORT = process.env.PORT || 3001;
 const ENRICHMENT_CACHE = {}; // { sport: { data, fetchedAt } }
-const ENRICHMENT_TTL = 5 * 60 * 1000; // 5 min cache
+const ENRICHMENT_TTL = 30 * 60 * 1000; // 30 min cache — aligned with props refresh
 
 /**
  * Get enrichment data for a sport (cached)

@@ -294,7 +294,7 @@ function fmtOdds(p) { return !p ? '' : p > 0 ? '+'+p : ''+p; }
 var gamesCache = {};
 function getCachedGames(sport) {
   var c = gamesCache[sport];
-  return (c && c.games && Date.now() - c.timestamp < 20*60*1000) ? c.games : null;
+  return (c && c.games && Date.now() - c.timestamp < 30*60*1000) ? c.games : null;
 }
 
 // ESPN uses different abbreviations than Odds API for some teams

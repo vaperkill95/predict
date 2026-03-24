@@ -1,7 +1,7 @@
 const axios = require("axios");
 const NodeCache = require("node-cache");
 
-const cache = new NodeCache({ stdTTL: 300 }); // 5 min cache
+const cache = new NodeCache({ stdTTL: 1800 }); // 30 min cache — saves API credits
 
 const ODDS_BASE = "https://api.the-odds-api.com/v4";
 
