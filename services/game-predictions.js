@@ -591,10 +591,9 @@ router.get('/:sport/:gameId', async function(req, res) {
   try {
     var cached = getCachedGames(sport);
     if(cached){var game=cached.find(function(g){return g.id===gameId});if(game)return res.json(game)}
-    var mainResp=await axios.get('http://localhost:'+PORT+'/api/games/'+sport,{timeout:20000});
-    var game2=(mainResp.data.games||[]).find(function(g){return g.id===gameId});
-    if(!game2)return res.json({error:'Game not found'});
-    res.json(game2);
+    // Don't self-reference /api/games/:sport — if cache is empty, return not found
+    // The cache will be populated by the next regular refresh cycle
+    res.json({error:'Game not found — predictions refresh every 30 minutes'});
   } catch(err){res.json({error:err.message})}
 });
 

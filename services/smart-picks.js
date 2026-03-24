@@ -54,16 +54,21 @@ async function fetchGameContext(sport) {
   const ctx = { games: {}, injuries: {} };
 
   try {
-    const odds = await axios.get(`http://localhost:${PORT}/api/odds/${sport}`, { timeout: 10000 });
-    for (const game of (odds.data?.games || [])) {
-      const bk = game.bookmakers?.[0];
-      if (!bk) continue;
-      const spreads = bk.markets?.find(m => m.key === 'spreads');
-      const totals = bk.markets?.find(m => m.key === 'totals');
-      const homeSpread = spreads?.outcomes?.find(o => o.name === game.homeTeam)?.point || 0;
-      const total = totals?.outcomes?.[0]?.point || 220;
-      ctx.games[game.homeTeam] = { homeTeam: game.homeTeam, awayTeam: game.awayTeam, spread: homeSpread, total };
-      ctx.games[game.awayTeam] = ctx.games[game.homeTeam];
+    // Read game data from Redis instead of calling Odds API
+    let redisCache = null;
+    try { redisCache = require('./redis-cache'); } catch(e) {}
+    
+    if (redisCache && redisCache.isConnected()) {
+      const gamesData = await redisCache.getGames(sport);
+      if (gamesData && gamesData.games) {
+        for (const game of gamesData.games) {
+          if (!game.homeTeam) continue;
+          const spread = game.consensus?.spread || 0;
+          const total = game.consensus?.total || 220;
+          ctx.games[game.homeTeam] = { homeTeam: game.homeTeam, awayTeam: game.awayTeam, spread, total };
+          if (game.awayTeam) ctx.games[game.awayTeam] = ctx.games[game.homeTeam];
+        }
+      }
     }
   } catch (e) {}
 
@@ -88,11 +93,19 @@ async function generateSmartPicks(sport, limit = 8) {
 
   let props = [];
   try {
-    const baseUrl = process.env.RAILWAY_PUBLIC_DOMAIN
-      ? `https://${process.env.RAILWAY_PUBLIC_DOMAIN}`
-      : `http://localhost:${PORT}`;
-    const resp = await axios.get(`${baseUrl}/api/props/${sport}`, { timeout: 20000 });
-    props = resp.data?.props || [];
+    // Read from Redis directly — never trigger a fresh Odds API call
+    let redisCache = null;
+    try { redisCache = require('./redis-cache'); } catch(e) {}
+    
+    if (redisCache && redisCache.isConnected()) {
+      const data = await redisCache.getProps(sport);
+      props = data ? (data.props || data.picks || []) : [];
+    }
+    
+    if (props.length === 0) {
+      console.log(`[SmartPicks-v3] No props in Redis for ${sport}`);
+      return [];
+    }
   } catch (e) {
     console.warn(`[SmartPicks-v3] Props fetch failed: ${e.message}`);
     return [];

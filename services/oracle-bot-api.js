@@ -90,10 +90,13 @@ async function getOracleContext() {
     if (smartPicks && smartPicks.picksCache) {
       var pCached = smartPicks.picksCache['nba'];
       var allProps = pCached && pCached.picks ? pCached.picks : [];
-      // Fallback: fetch props directly if cache only has picks not full props
+      // Fallback: fetch props from Redis if cache only has picks not full props
       try {
-        var propResp = await axios.get('http://localhost:' + PORT + '/api/props/nba', { timeout: 5000 });
-        allProps = propResp.data && propResp.data.props ? propResp.data.props : allProps;
+        var redisCache = require('./redis-cache');
+        if (redisCache && redisCache.isConnected()) {
+          var rData = await redisCache.getProps('nba');
+          if (rData && rData.props && rData.props.length > 0) allProps = rData.props;
+        }
       } catch(e) {}
       ctx.propsCount = allProps.length;
       ctx.demons = allProps.filter(function(p) { return p.lineType === 'demon'; }).length;
