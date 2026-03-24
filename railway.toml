@@ -8,5 +8,5 @@ nixPkgs = ["nodejs_20"]
 startCommand = "node --max-old-space-size=8192 --expose-gc start.js"
 healthcheckPath = "/api/health"
 healthcheckTimeout = 300
-restartPolicyType = "ON_FAILURE"
+restartPolicyType = "ALWAYS"
 restartPolicyMaxRetries = 10
