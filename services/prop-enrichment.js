@@ -224,8 +224,18 @@ function enrichProp(prop, games) {
 router.get('/props/:sport', async (req, res) => {
   const { sport } = req.params;
   try {
-    const propsResp = await axios.get(`http://localhost:${PORT}/api/props/${sport}`, { timeout: 15000 });
-    const propsData = propsResp.data;
+    // Read from Redis directly — never trigger a fresh Odds API call
+    let redisCache = null;
+    try { redisCache = require('./redis-cache'); } catch(e) {}
+    
+    let propsData = { props: [], count: 0 };
+    if (redisCache && redisCache.isConnected()) {
+      const data = await redisCache.getProps(sport);
+      if (data) {
+        const p = data.props || data.picks || [];
+        propsData = { props: p, count: p.length, available: true };
+      }
+    }
     const props = propsData.props || [];
     if (props.length === 0) return res.json({ ...propsData, enriched: false });
 
@@ -256,8 +266,13 @@ router.get('/props/:sport', async (req, res) => {
     res.json({ ...propsData, props: enrichedProps, enriched: true, playersEnriched: Object.keys(gameLogs).length, totalPlayers: uniquePlayers.length });
   } catch (err) {
     try {
-      const fallback = await axios.get(`http://localhost:${PORT}/api/props/${sport}`);
-      res.json({ ...fallback.data, enriched: false, error: err.message });
+      // Fallback: return unenriched props from Redis
+      let fallbackProps = { props: [], count: 0, enriched: false, error: err.message };
+      if (redisCache && redisCache.isConnected()) {
+        const data = await redisCache.getProps(sport);
+        if (data) { const p = data.props || data.picks || []; fallbackProps = { props: p, count: p.length, enriched: false, error: err.message }; }
+      }
+      res.json(fallbackProps);
     } catch (e) { res.status(500).json({ error: err.message }); }
   }
 });

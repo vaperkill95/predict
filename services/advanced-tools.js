@@ -277,12 +277,20 @@ function findAltLineValue(props) {
 
 async function scanAll(sport = 'nba') {
   try {
-    const baseUrl = process.env.RAILWAY_PUBLIC_DOMAIN
-      ? `https://${process.env.RAILWAY_PUBLIC_DOMAIN}`
-      : `http://localhost:${PORT}`;
-
-    const resp = await axios.get(`${baseUrl}/api/props/${sport}`, { timeout: 20000 });
-    const props = resp.data?.props || [];
+    // Read from Redis directly — never trigger a fresh Odds API call
+    let redisCache = null;
+    try { redisCache = require('./redis-cache'); } catch(e) {}
+    
+    let props = [];
+    if (redisCache && redisCache.isConnected()) {
+      const data = await redisCache.getProps(sport);
+      props = data ? (data.props || data.picks || []) : [];
+    }
+    
+    if (props.length === 0) {
+      console.log(`[Advanced] No props in Redis for ${sport}, skipping scan`);
+      return;
+    }
 
     cache.middles = detectMiddles(props);
     cache.arbs = findArbitrages(props);

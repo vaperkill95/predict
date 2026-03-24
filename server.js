@@ -1160,8 +1160,17 @@ async function fetchPropsInternal(sport) {
 
 async function fetchPicksInternal(sport) {
   try {
-    const resp = await fetch(`http://localhost:${PORT}/api/props/${sport}/picks`);
-    return await resp.json();
+    // Read from Redis directly to avoid triggering AI picks generation
+    if (redisCache && redisCache.isConnected()) {
+      var data = await redisCache.getPicks(sport);
+      if (data && data.picks && data.picks.length > 0) return data;
+    }
+    // Fallback: use smartPicks cache
+    if (smartPicks && smartPicks.picksCache && smartPicks.picksCache[sport]) {
+      var cached = smartPicks.picksCache[sport];
+      if (cached && cached.picks && cached.picks.length > 0) return { picks: cached.picks };
+    }
+    return { picks: [] };
   } catch (err) {
     console.error(`fetchPicksInternal failed for ${sport}:`, err.message);
     return { picks: [] };
@@ -1170,8 +1179,12 @@ async function fetchPicksInternal(sport) {
 
 async function getMovementInternal(sport) {
   try {
-    const resp = await fetch(`http://localhost:${PORT}/api/movement/${sport}`);
-    return await resp.json();
+    // Read from Redis directly
+    if (redisCache && redisCache.isConnected()) {
+      var data = await redisCache.getMovement(sport);
+      if (data) return data;
+    }
+    return { props: [], movements: [] };
   } catch (err) {
     console.error(`getMovementInternal failed for ${sport}:`, err.message);
     return { props: [] };

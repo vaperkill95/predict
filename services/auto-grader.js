@@ -438,6 +438,8 @@ async function gradePicksRound() {
           game: pick.game || game.name,
           sport: gradeSport,
         });
+        // Cap in-memory array to prevent unbounded growth
+        if (gradedPicks.length > 500) gradedPicks = gradedPicks.slice(-500);
         newGrades++;
 
         if (hit && !push) gradingStats.hits++;

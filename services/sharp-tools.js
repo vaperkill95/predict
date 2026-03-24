@@ -91,8 +91,20 @@ function saveCLVData() {
  */
 async function snapshotLines(sport = 'nba') {
   try {
-    const resp = await axios.get(`http://localhost:${PORT}/api/props/${sport}`, { timeout: 15000 });
-    const props = resp.data?.props || [];
+    // Read from Redis directly — never trigger a fresh Odds API call
+    let redisCache = null;
+    try { redisCache = require('./redis-cache'); } catch(e) {}
+    
+    let props = [];
+    if (redisCache && redisCache.isConnected()) {
+      const data = await redisCache.getProps(sport);
+      props = data ? (data.props || data.picks || []) : [];
+    }
+    
+    if (props.length === 0) {
+      console.log(`[Sharp] No props in Redis for ${sport}, skipping snapshot`);
+      return;
+    }
     const now = Date.now();
 
     for (const prop of props) {
@@ -128,6 +140,21 @@ async function snapshotLines(sport = 'nba') {
     }
 
     saveCLVData();
+    
+    // Cap total snapshot keys to prevent unbounded memory growth
+    var snapKeys = Object.keys(lineSnapshots);
+    if (snapKeys.length > 2000) {
+      // Remove oldest keys (those with oldest last snapshot)
+      var sorted = snapKeys.sort(function(a, b) {
+        var aLast = lineSnapshots[a] && lineSnapshots[a].length > 0 ? lineSnapshots[a][lineSnapshots[a].length - 1].time : 0;
+        var bLast = lineSnapshots[b] && lineSnapshots[b].length > 0 ? lineSnapshots[b][lineSnapshots[b].length - 1].time : 0;
+        return aLast - bLast;
+      });
+      var toRemove = sorted.slice(0, sorted.length - 1500);
+      toRemove.forEach(function(k) { delete lineSnapshots[k]; });
+      console.log('[Sharp] Trimmed lineSnapshots from ' + snapKeys.length + ' to 1500 keys');
+    }
+    
     return props.length;
   } catch (e) {
     console.warn('[Sharp] Snapshot failed:', e.message);
