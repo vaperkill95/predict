@@ -416,6 +416,10 @@ async function scrapeMatchScoreboards() {
                 ? e.matches.team_1_score + '-' + e.matches.team_2_score
                 : e.matches.team_2_score + '-' + e.matches.team_1_score,
             });
+            // Cap per-player kill history to prevent memory bloat
+            if (playerMatchKills[pid].length > 30) {
+              playerMatchKills[pid] = playerMatchKills[pid].slice(-30);
+            }
             totalNewKills++;
           });
         }
@@ -440,6 +444,10 @@ async function scrapeMatchScoreboards() {
                     mapNumber: p.map_number,
                     order: p.order,
                   });
+                  // Cap per-team pick history
+                  if (mapPickHistory[tid].length > 50) {
+                    mapPickHistory[tid] = mapPickHistory[tid].slice(-50);
+                  }
                 });
               }
             }
@@ -467,6 +475,10 @@ async function scrapeMatchScoreboards() {
         }
 
         recentMatchIds.push(matchId);
+        // Cap recentMatchIds to prevent unbounded memory growth
+        if (recentMatchIds.length > 100) {
+          recentMatchIds = recentMatchIds.slice(-100);
+        }
         // Free parsed data and rate limit
         mData = null; pp = null;
         await new Promise(function(r) { setTimeout(r, 2000); });

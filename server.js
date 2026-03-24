@@ -622,6 +622,11 @@ try {
     }
   });
 
+  // Circuit breakers for endpoints that keep failing
+  var _cdlStandingsFailCount = 0;
+  var _cdlStandingsLastSuccess = 0;
+  var CDL_STANDINGS_MAX_FAILS = 5; // After 5 consecutive failures, stop trying for 30 min
+
   // Sync loop — direct memory access (no HTTP self-calls that timeout)
   setInterval(async function() {
     try {
@@ -704,10 +709,10 @@ try {
           for (var mp of mvProps) {
             if (!mp.player || !mp.market || !mp.consensusLine) continue;
             var snapKey = mp.player + '__' + mp.market + '__' + mvSport;
-            _currentSnapshots[snapKey] = { line: mp.consensusLine, player: mp.player, market: mp.market, sport: mvSport, game: mp.game };
+            _currentSnapshots[snapKey] = mp.consensusLine;
             // Compare to previous snapshot
-            if (_prevLineSnapshots[snapKey] && _prevLineSnapshots[snapKey].line !== mp.consensusLine) {
-              var oldLine = _prevLineSnapshots[snapKey].line;
+            if (_prevLineSnapshots[snapKey] !== undefined && _prevLineSnapshots[snapKey] !== mp.consensusLine) {
+              var oldLine = _prevLineSnapshots[snapKey];
               var newLine = mp.consensusLine;
               var change = Math.abs(newLine - oldLine);
               if (change > 0) {
@@ -812,18 +817,20 @@ try {
         });
       } catch(e) {}
 
-      // CDL standings — sync from worker
-      try {
-        await new Promise(function(resolve) {
-          var sdata = '';
-          var sreq = http.get("http://localhost:" + PORT + "/api/cdl/standings", { timeout: 10000 }, function(resp) {
-            resp.on('data', function(chunk) { sdata += chunk; });
-            resp.on('end', function() { try { var p = JSON.parse(sdata); if (p && (p.standings || p.groups || p.length > 0)) { redisCache.set("oracle:cdl_standings", p, 3600); synced++; } } catch(e) {} sdata = null; resolve(); });
+      // CDL standings — sync from worker (with circuit breaker)
+      if (_cdlStandingsFailCount < CDL_STANDINGS_MAX_FAILS || (Date.now() - _cdlStandingsLastSuccess > 30 * 60 * 1000)) {
+        try {
+          await new Promise(function(resolve) {
+            var sdata = '';
+            var sreq = http.get("http://localhost:" + PORT + "/api/cdl/standings", { timeout: 10000 }, function(resp) {
+              resp.on('data', function(chunk) { sdata += chunk; });
+              resp.on('end', function() { try { var p = JSON.parse(sdata); if (p && (p.standings || p.groups || p.length > 0)) { redisCache.set("oracle:cdl_standings", p, 3600); synced++; _cdlStandingsFailCount = 0; _cdlStandingsLastSuccess = Date.now(); } else { _cdlStandingsFailCount++; } } catch(e) { _cdlStandingsFailCount++; } sdata = null; resolve(); });
+            });
+            sreq.on('error', function() { _cdlStandingsFailCount++; resolve(); });
+            sreq.on('timeout', function() { _cdlStandingsFailCount++; sreq.destroy(); resolve(); });
           });
-          sreq.on('error', function() { resolve(); });
-          sreq.on('timeout', function() { sreq.destroy(); resolve(); });
-        });
-      } catch(e) {}
+        } catch(e) { _cdlStandingsFailCount++; }
+      }
 
       // CDL props — sync from worker
       try {
@@ -876,6 +883,13 @@ try {
       var rssMB = Math.round(mem.rss / 1024 / 1024);
       console.log("[Redis] Synced " + synced + " entries | Heap: " + heapMB + "MB | RSS: " + rssMB + "MB");
       if (rssMB > 2048) console.warn("[Memory] WARNING: RSS at " + rssMB + "MB");
+      
+      // Free the sync data to help GC
+      d = null;
+      allMovements = null;
+      _currentSnapshots = null;
+      sharpData = null;
+      sharpMovements = null;
     } catch(e) {
       console.warn("[Redis] Sync error:", e.message);
     }
@@ -921,17 +935,32 @@ try {
   }, RESTART_INTERVAL);
   console.log("[SCHEDULER] Worker will auto-restart in 4 hours (at " + new Date(Date.now() + RESTART_INTERVAL).toISOString() + ")");
 
-  // === MEMORY WATCHDOG — emergency restart if memory exceeds 6GB ===
-  // (User has 32GB Pro plan — 6GB is safe for the worker)
+  // === MEMORY WATCHDOG — emergency restart if memory exceeds 5GB ===
+  // Lowered from 6GB: baseline sits at 3.5-4.5GB, need earlier intervention
   setInterval(function() {
     var rss = process.memoryUsage().rss;
     var rssMB = Math.round(rss / 1024 / 1024);
-    if (rssMB > 6144) {
+    if (rssMB > 5120) {
       console.warn("[WATCHDOG] Memory at " + rssMB + "MB — emergency restart. All data safe in Redis.");
       process.exit(1);
     } else if (rssMB > 4096) {
       console.warn("[Memory] WARNING: RSS at " + rssMB + "MB — running GC");
       if (global.gc) global.gc();
+    } else if (rssMB > 3500) {
+      // Yellow zone — proactively clear non-essential caches
+      if (global.gc) global.gc();
+      // Trim line movement snapshots to reduce memory
+      if (_prevLineSnapshots && Object.keys(_prevLineSnapshots).length > 2000) {
+        var keys = Object.keys(_prevLineSnapshots);
+        var toRemove = keys.slice(0, keys.length - 1000);
+        toRemove.forEach(function(k) { delete _prevLineSnapshots[k]; });
+        console.log("[Memory] Trimmed _prevLineSnapshots from " + keys.length + " to 1000 entries");
+      }
+      // Trim CDL match kill history
+      try {
+        var cdlScraper = require("./services/cdl-stats-scraper");
+        // recentMatchIds is not directly accessible, but we can trigger GC
+      } catch(e) {}
     } else if (rssMB > 2500) {
       // Trigger GC proactively
       if (global.gc) global.gc();
@@ -957,42 +986,58 @@ try {
   console.log("[Redis] Not available:", e.message, "— using memory-only mode");
 }
 
+// === STAGGERED SERVICE STARTUP ===
+// Spread service starts over 2 minutes to prevent concurrent memory spikes
 dvp.startRefresh();
 analytics.startRefresh();
 predictionModel.startRefresh();
 if (enrichment && enrichment.startCache) {
   enrichment.startCache();
 }
-if (smartPicks && smartPicks.startRefresh) {
-  smartPicks.startRefresh();
-}
-if (autoGrader && autoGrader.startGrading) {
-  autoGrader.startGrading();
-}
-if (refData && refData.startRefresh) {
-  refData.startRefresh();
-}
-if (evEngine && evEngine.startScanning) {
-  // Give EV engine direct access to shared props cache (saves API credits)
-  if (evEngine.setDirectFetcher) {
-    evEngine.setDirectFetcher(async (sport) => {
-      return await getCachedProps(sport);
-    });
+
+// Wave 2: 15 seconds after startup
+setTimeout(function() {
+  if (smartPicks && smartPicks.startRefresh) {
+    smartPicks.startRefresh();
   }
-  evEngine.startScanning();
-}
-if (sharpTools && sharpTools.startTracking) {
-  sharpTools.startTracking();
-}
-if (potd && potd.startRefresh) {
-  potd.startRefresh();
-}
-if (advancedTools && advancedTools.startScanning) {
-  advancedTools.startScanning();
-}
-if (accuracyBoost && accuracyBoost.startMonitoring) {
-  accuracyBoost.startMonitoring();
-}
+  if (autoGrader && autoGrader.startGrading) {
+    autoGrader.startGrading();
+  }
+  if (refData && refData.startRefresh) {
+    refData.startRefresh();
+  }
+  console.log("[Startup] Wave 2 services started (smartPicks, autoGrader, refData)");
+}, 15000);
+
+// Wave 3: 30 seconds after startup
+setTimeout(function() {
+  if (evEngine && evEngine.startScanning) {
+    if (evEngine.setDirectFetcher) {
+      evEngine.setDirectFetcher(async (sport) => {
+        return await getCachedProps(sport);
+      });
+    }
+    evEngine.startScanning();
+  }
+  if (sharpTools && sharpTools.startTracking) {
+    sharpTools.startTracking();
+  }
+  console.log("[Startup] Wave 3 services started (evEngine, sharpTools)");
+}, 30000);
+
+// Wave 4: 60 seconds after startup
+setTimeout(function() {
+  if (potd && potd.startRefresh) {
+    potd.startRefresh();
+  }
+  if (advancedTools && advancedTools.startScanning) {
+    advancedTools.startScanning();
+  }
+  if (accuracyBoost && accuracyBoost.startMonitoring) {
+    accuracyBoost.startMonitoring();
+  }
+  console.log("[Startup] Wave 4 services started (potd, advancedTools, accuracyBoost)");
+}, 60000);
 
 // Start game prediction grader (grades ML/spread/total against ESPN final scores)
 try {

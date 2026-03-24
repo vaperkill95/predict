@@ -112,9 +112,9 @@ async function buildTrending(sport, fetchProps, fetchPicks, getMovement) {
       getMovement(sport).catch(() => ({ props: [] })),
     ]);
 
-    const props = propsData.props || propsData || [];
-    const picks = picksData.picks || picksData || [];
-    const movements = movementData.props || [];
+    const props = Array.isArray(propsData.props) ? propsData.props : (Array.isArray(propsData) ? propsData : []);
+    const picks = Array.isArray(picksData.picks) ? picksData.picks : (Array.isArray(picksData) ? picksData : []);
+    const movements = Array.isArray(movementData.props) ? movementData.props : [];
 
     // Index picks and movement by player+market for fast lookup
     const pickMap = {};

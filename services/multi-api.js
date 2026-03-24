@@ -59,6 +59,18 @@ function getCached(key, ttl) {
 
 function setCache(key, data) {
   cache[key] = { data, time: Date.now() };
+  
+  // Evict stale entries if cache grows too large (>50 keys)
+  var keys = Object.keys(cache);
+  if (keys.length > 50) {
+    var now = Date.now();
+    var maxAge = 60 * 60 * 1000; // 1 hour max age for any cache entry
+    keys.forEach(function(k) {
+      if (now - cache[k].time > maxAge) {
+        delete cache[k];
+      }
+    });
+  }
 }
 
 // ============================================================
