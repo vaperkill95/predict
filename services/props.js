@@ -4,7 +4,7 @@ const { buildPredictionContext } = require("./playerdata");
 
 // SPEED: Cache props for 5min, picks for 10min
 const propsCache = new NodeCache({ stdTTL: 300 });
-const picksCache = new NodeCache({ stdTTL: 600 });
+const picksCache = new NodeCache({ stdTTL: 7200 });
 const ODDS_BASE = "https://api.the-odds-api.com/v4";
 
 const PROP_SPORTS = {
@@ -146,7 +146,7 @@ async function getDailyPicks(sportKey, props) {
 
   try {
     const { data } = await axios.post("https://api.anthropic.com/v1/messages", {
-      model: "claude-sonnet-4-20250514", max_tokens: 2000,
+      model: "claude-haiku-4-5-20251001", max_tokens: 2000,
       system: `You are an elite sports betting analyst with REAL player data. Analyze props using:
 1. Season averages + recent form (last 5 games)
 2. Home/away splits — note significant differences

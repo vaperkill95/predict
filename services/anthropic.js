@@ -6,10 +6,8 @@ const ANTHROPIC_URL = "https://api.anthropic.com/v1/messages";
  * Generate AI prediction for a game
  */
 async function predictGame(gameData, oddsData = null) {
-  const apiKey = process.env.ANTHROPIC_API_KEY;
-  if (!apiKey) {
-    return generateFallbackPrediction(gameData);
-  }
+  // API disabled to conserve credits — using statistical fallback model instead
+  return generateFallbackPrediction(gameData);
 
   const systemPrompt = `You are an elite sports analyst AI. You provide sharp, data-driven predictions for sports games. 
 You ALWAYS respond in valid JSON format with no markdown or extra text.
@@ -90,15 +88,13 @@ Respond ONLY with this JSON structure:
  * Generate AI player stat projection
  */
 async function predictPlayer(playerName, sport, context = {}) {
-  const apiKey = process.env.ANTHROPIC_API_KEY;
-  if (!apiKey) {
-    return {
-      player: playerName,
-      sport,
-      available: false,
-      message: "AI predictions require an Anthropic API key",
-    };
-  }
+  // API disabled to conserve credits — using fallback response
+  return {
+    player: playerName,
+    sport,
+    available: false,
+    message: "Player predictions are powered by ORACLE's statistical model. Visit /props for AI-analyzed picks.",
+  };
 
   const systemPrompt = `You are an elite sports analytics AI specializing in player performance projections.
 You provide detailed stat line predictions based on player history, matchup context, and trends.
