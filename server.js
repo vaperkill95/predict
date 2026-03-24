@@ -644,6 +644,8 @@ try {
               if (p && p.props && p.props.length > 0) d['props_' + sport] = p;
             }
           } catch(e) {}
+          // Run GC between sports to prevent memory accumulation
+          if (global.gc) global.gc();
         }
         if (smartPicks && smartPicks.picksCache) {
           for (var sp of Object.keys(smartPicks.picksCache)) {

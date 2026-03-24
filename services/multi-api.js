@@ -25,7 +25,7 @@ const ODDS_API_KEY = process.env.ODDS_API_KEY;
 const SHARP_API_KEY = process.env.SHARP_API_KEY;
 
 const CACHE_TTL = {
-  props: 15 * 60 * 1000,      // 15 min — player props (Odds API)
+  props: 30 * 60 * 1000,      // 30 min — player props (Odds API)
   gameOdds: 15 * 60 * 1000,   // 15 min — game odds (Odds API)
   events: 30 * 60 * 1000,     // 30 min — event schedules (SharpAPI/ESPN)
   scores: 30 * 1000,          // 30 sec — live scores (ESPN only, free)

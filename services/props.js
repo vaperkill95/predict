@@ -3,7 +3,7 @@ const NodeCache = require("node-cache");
 const { buildPredictionContext } = require("./playerdata");
 
 // SPEED: Cache props for 5min, picks for 10min
-const propsCache = new NodeCache({ stdTTL: 300 });
+const propsCache = new NodeCache({ stdTTL: 1800 });
 const picksCache = new NodeCache({ stdTTL: 7200 });
 const ODDS_BASE = "https://api.the-odds-api.com/v4";
 
@@ -35,25 +35,25 @@ async function getPlayerProps(sportKey, marketFilter = null) {
     const { data: events } = await axios.get(`${ODDS_BASE}/sports/${oddsSport}/events`, { params: { apiKey }, timeout: 10000 });
     if (!events?.length) { const r = { available: true, sport: sportKey, props: [], count: 0, markets }; propsCache.set(ck, r); return r; }
 
-    // SPEED: Fetch all events in parallel (not sequential)
+    // MEMORY FIX: Fetch events SEQUENTIALLY (not all at once) to prevent memory spikes
     const marketsStr = markets.join(",");
-    const eventResults = await Promise.all(
-      events.slice(0, 5).map(event =>
-        axios.get(`${ODDS_BASE}/sports/${oddsSport}/events/${event.id}/odds`, {
+    const allProps = [];
+    const eventsToFetch = events.slice(0, 5);
+    for (let i = 0; i < eventsToFetch.length; i++) {
+      const event = eventsToFetch[i];
+      try {
+        const res = await axios.get(`${ODDS_BASE}/sports/${oddsSport}/events/${event.id}/odds`, {
           params: { apiKey, regions: "us,us2", markets: marketsStr, oddsFormat: "american", bookmakers: "draftkings,fanduel,betmgm,bovada,caesars,betrivers,fanatics,espnbet,hardrockbet,bet365,mybookieag,betonlineag,lowvig,betus,wynnbet,pointsbetus,prizepicks,underdog,fliff,sleeper" },
           timeout: 10000,
-        }).then(res => ({ event, data: res.data })).catch(() => null)
-      )
-    );
-
-    const allProps = [];
-    for (const result of eventResults) {
-      if (!result) continue;
-      const { event, data: od } = result;
-      for (const bk of od.bookmakers || []) for (const m of bk.markets || []) for (const o of m.outcomes || []) {
-        if (!o.description) continue;
-        allProps.push({ player: o.description, market: m.key, marketLabel: fmtMkt(m.key), game: `${event.away_team} @ ${event.home_team}`, gameId: event.id, commenceTime: event.commence_time, homeTeam: event.home_team, awayTeam: event.away_team, book: bk.title, bookKey: bk.key, side: o.name, point: o.point, price: o.price });
-      }
+        });
+        const od = res.data;
+        for (const bk of od.bookmakers || []) for (const m of bk.markets || []) for (const o of m.outcomes || []) {
+          if (!o.description) continue;
+          allProps.push({ player: o.description, market: m.key, marketLabel: fmtMkt(m.key), game: `${event.away_team} @ ${event.home_team}`, gameId: event.id, commenceTime: event.commence_time, homeTeam: event.home_team, awayTeam: event.away_team, book: bk.title, bookKey: bk.key, side: o.name, point: o.point, price: o.price });
+        }
+        // Free response data immediately
+        res.data = null;
+      } catch(e) { /* skip failed event */ }
     }
 
     const consolidated = consolidate(allProps);
